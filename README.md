@@ -327,7 +327,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Open Truth. Verified Data.**
 
 *Project Mirador - Powered by Stelthar API*
-
-Built and designed by Rado Kyselak
-
 </div>
