@@ -147,30 +147,39 @@ See the [API Documentation](#api-documentation) section below for detailed endpo
 
 ## 🏗 Architecture
 
+Stelthar is evolving from an API-only verifier into a **hybrid evidence pipeline** with extension-first UX:
+
+- **Primary path:** Official government APIs for structured, high-reliability data.
+- **Fallback path:** Retrieval from trusted public sources when APIs are stale/unavailable.
+- **Synthesis path:** LLM reasoning constrained by evidence provenance and confidence scoring.
+- **UX path:** Chrome extension supports both highlighted claims and direct pasted/manual claims.
+
 ```
 ┌─────────────────┐
 │  User Browser   │
 │  (Chrome Ext)   │
 └────────┬────────┘
          │
-         │ Highlighted Claim
+         │ Highlighted OR Pasted Claim
          ▼
-┌─────────────────┐
-│  Stelthar API   │
-│   (Python)      │
-└────────┬────────┘
+┌──────────────────────────┐
+│  Stelthar Orchestration  │
+│     API (Python)         │
+└────────┬─────────────────┘
          │
-         ├──────────┐
-         │          │
-         ▼          ▼
-┌──────────┐  ┌──────────┐
-│ Gov Data │  │ Gemini   │
-│ Sources  │  │ AI       │
-└──────────┘  └──────────┘
-         │          │
-         └────┬─────┘
-              │
+   ┌─────┴─────────────┐
+   ▼                   ▼
+┌──────────┐     ┌──────────────┐
+│ Gov APIs │     │ Trusted Web  │
+│ (Primary)│     │ Fallback RAG │
+└────┬─────┘     └──────┬───────┘
+     └────────┬─────────┘
               ▼
+      ┌──────────────┐
+      │ LLM + Scoring│
+      │ + Provenance │
+      └──────┬───────┘
+             ▼
       ┌──────────────┐
       │   Verdict    │
       │ + Confidence │
