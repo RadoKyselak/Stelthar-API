@@ -4,245 +4,58 @@
     <title>Stelthar Verification</title>
     <meta charset="UTF-8">
     <style>
-        body {
-            width: 350px;
-            font-family:'Courier New', Courier, monospace;
-            padding: 15px;
-            background-color: #fdfaf3;
-            color: #1a1a1a;
-        }
-
-        #main-title {
-            font-size: 22px;
-            font-weight: bold;
-            text-align: center;
-            color: #333;
-            margin-bottom: 15px;
-            border-bottom: 2px solid #e0e0e0;
-            padding-bottom: 10px;
-        }
-
-        .section {
-            margin-bottom: 15px;
-            border: 1px solid #e0e0e0;
-            padding: 10px;
-            border-radius: 5px;
-            background-color: #fffaf0;
-        }
-        .section-title {
-            font-weight: bold;
-            margin-bottom: 8px;
-            font-size: 14px;
-            color: #333;
-        }
-        #claim-text {
-            color: #555;
-            font-size: 14px;
-        }
-        /* Button styling taken from the existing popup (highlighted-text style) */
-        #verifyBtn {
-            margin-bottom: 15px;
-            padding: 8px 12px;
-            cursor: pointer;
-            font-family: 'Courier New', Courier, monospace;
-            background-color: #f0eadd;
-            border: 2px solid #1a1a1a;
-            color: #1a1a1a;
-            width: 100%;
-            font-size: 16px;
-            font-weight: bold;
-        }
+        body { width: 350px; font-family:'Courier New', Courier, monospace; padding: 15px; background-color: #fdfaf3; color: #1a1a1a; }
+        #main-title { font-size: 22px; font-weight: bold; text-align: center; color: #333; margin-bottom: 15px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
+        .section { margin-bottom: 15px; border: 1px solid #e0e0e0; padding: 10px; border-radius: 5px; background-color: #fffaf0; }
+        .section-title { font-weight: bold; margin-bottom: 8px; font-size: 14px; color: #333; }
+        #claim-text { color: #555; font-size: 14px; margin-bottom: 10px; }
+        #manual-claim-input { width: 100%; min-height: 90px; box-sizing: border-box; resize: vertical; border: 1px solid #ccc; border-radius: 4px; padding: 8px; font-family: 'Courier New', Courier, monospace; font-size: 13px; }
+        #verifyBtn { margin-bottom: 15px; padding: 8px 12px; cursor: pointer; font-family: 'Courier New', Courier, monospace; background-color: #f0eadd; border: 2px solid #1a1a1a; color: #1a1a1a; width: 100%; font-size: 16px; font-weight: bold; }
         #verifyBtn:hover:not(:disabled) { background-color: #e6e0cf; }
-        #verifyBtn:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        #results-area {
-            display: none;
-        }
-        #verdict-text {
-            font-weight: bold;
-            font-size: 18px;
-            margin-bottom: 5px;
-        }
-
+        #verifyBtn:disabled { background-color: #ccc; cursor: not-allowed; }
+        #results-area { display: none; }
+        #verdict-text { font-weight: bold; font-size: 18px; margin-bottom: 5px; }
         #verdict-text.supported { color: #008000; }
         #verdict-text.contradicted { color: #CC0000; }
         #verdict-text.inconclusive { color: #FFA500; }
         #verdict-text.error { color: #CC0000; }
-
-        #confidence-text {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 10px;
-        }
-        #summary-text {
-            font-size: 14px;
-            line-height: 1.5;
-        }
-        #evidence-links-list {
-            list-style: none;
-            padding-left: 0;
-            margin-top: 10px;
-        }
-        #evidence-links-list li {
-            margin-bottom: 5px;
-        }
-        #evidence-links-list a {
-            color: #0000EE;
-            text-decoration: none;
-            font-size: 12px;
-        }
+        #confidence-text { font-size: 14px; color: #666; margin-bottom: 10px; }
+        #summary-text { font-size: 14px; line-height: 1.5; }
+        #evidence-links-list { list-style: none; padding-left: 0; margin-top: 10px; }
+        #evidence-links-list li { margin-bottom: 5px; }
+        #evidence-links-list a { color: #0000EE; text-decoration: none; font-size: 12px; }
         #evidence-links-list a:hover { text-decoration: underline; }
-
-        details#sources-dropdown {
-            margin-top: 15px;
-            border: 1px dashed #888;
-            border-radius: 4px;
-            background-color: #f9f5ed;
-        }
-        details#sources-dropdown summary {
-            padding: 8px 10px;
-            font-weight: bold;
-            cursor: pointer;
-            outline: none;
-            font-size: 13px;
-        }
-        details#sources-dropdown summary::marker {
-           color: #1a1a1a;
-        }
-        #sources-list {
-            list-style: none;
-            padding: 0 10px 10px 25px;
-            margin: 0;
-            font-size: 12px;
-            max-height: 200px;
-            overflow-y: auto;
-            border-top: 1px dashed #aaa;
-        }
-        #sources-list li {
-            margin-bottom: 10px;
-            border-bottom: 1px dotted #ccc;
-            padding-bottom: 8px;
-        }
-         #sources-list li span.source-title {
-            display: block;
-            font-weight: bold;
-            color: #1a1a1a;
-         }
-        #sources-list li span.source-snippet {
-            display: block;
-            color: #555;
-            margin-top: 3px;
-            font-style: italic;
-        }
-        #sources-list a {
-            color: #0000EE;
-            text-decoration: none;
-            display: block;
-            margin-top: 3px;
-            word-break: break-all;
-        }
+        details#sources-dropdown { margin-top: 15px; border: 1px dashed #888; border-radius: 4px; background-color: #f9f5ed; }
+        details#sources-dropdown summary { padding: 8px 10px; font-weight: bold; cursor: pointer; outline: none; font-size: 13px; }
+        details#sources-dropdown summary::marker { color: #1a1a1a; }
+        #sources-list { list-style: none; padding: 0 10px 10px 25px; margin: 0; font-size: 12px; max-height: 200px; overflow-y: auto; border-top: 1px dashed #aaa; }
+        #sources-list li { margin-bottom: 10px; border-bottom: 1px dotted #ccc; padding-bottom: 8px; }
+        #sources-list li span.source-title { display: block; font-weight: bold; color: #1a1a1a; }
+        #sources-list li span.source-snippet { display: block; color: #555; margin-top: 3px; font-style: italic; }
+        #sources-list a { color: #0000EE; text-decoration: none; display: block; margin-top: 3px; word-break: break-all; }
         #sources-list a:hover { text-decoration: underline; }
-        
-        #loading-indicator {
-            margin: 20px 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 40px;
-            /* display: none;  -- handled inline in HTML */
-        }
-        /* --- Beacon Loader Styles --- */
-        .beacon-loader {
-            position: relative;
-            width: 40px;
-            height: 40px;
-        }
-
-        .beacon-ring {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border: 2px solid #007aff;
-            border-radius: 50%;
-            opacity: 0;
-            animation: beacon-pulse 1.5s cubic-bezier(0.0, 0.0, 0.2, 1) infinite;
-        }
+        #loading-indicator { margin: 20px 0; display: flex; justify-content: center; align-items: center; height: 40px; }
+        .beacon-loader { position: relative; width: 40px; height: 40px; }
+        .beacon-ring { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 2px solid #007aff; border-radius: 50%; opacity: 0; animation: beacon-pulse 1.5s cubic-bezier(0.0, 0.0, 0.2, 1) infinite; }
         .beacon-ring:nth-child(1) { animation-delay: 0s; }
         .beacon-ring:nth-child(2) { animation-delay: 0.3s; }
         .beacon-ring:nth-child(3) { animation-delay: 0.6s; }
         .beacon-ring:nth-child(4) { animation-delay: 0.9s; }
-
-        @keyframes beacon-pulse {
-            0% {
-                transform: scale(0.1);
-                opacity: 0;
-            }
-            50% {
-                opacity: 1;
-            }
-            100% {
-                transform: scale(1);
-                opacity: 0;
-            }
-        }
-
-        #error-message {
-            color: #CC0000;
-            margin-top: 10px;
-            font-weight: bold;
-            border: 1px solid #CC0000;
-            background-color: #ffeeee;
-            padding: 8px;
-            display: none;
-            border-radius: 4px;
-        }
+        @keyframes beacon-pulse { 0% { transform: scale(0.1); opacity: 0; } 50% { opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+        #error-message { color: #CC0000; margin-top: 10px; font-weight: bold; border: 1px solid #CC0000; background-color: #ffeeee; padding: 8px; display: none; border-radius: 4px; }
     </style>
 </head>
 <body>
     <div id="main-title">Project Mirador</div>
-    
     <div class="section">
         <div class="section-title">Claim</div>
         <div id="claim-text">Loading claim...</div>
+        <textarea id="manual-claim-input" placeholder="Paste or type a claim here to verify without highlighting text."></textarea>
     </div>
-
     <button id="verifyBtn">Verify Claim</button>
-
-    <div id="loading-indicator" style="display: none;">
-        <div class="beacon-loader">
-            <div class="beacon-ring"></div>
-            <div class="beacon-ring"></div>
-            <div class="beacon-ring"></div>
-            <div class="beacon-ring"></div>
-        </div>
-    </div>
-
-    <div id="results-area" style="display: none;">
-        <div class="section">
-            <div id="verdict-text">VERDICT: ...</div>
-            <div id="confidence-text">CONFIDENCE: ...</div>
-            <div id="summary-text">Loading summary...</div>
-        </div>
-
-        <div class="section">
-            <div class="section-title">Evidence Links</div>
-            <ul id="evidence-links-list">
-                </ul>
-        </div>
-
-        <details id="sources-dropdown" style="display: none;">
-            <summary>View All Sources Consulted</summary>
-            <ul id="sources-list">
-                </ul>
-        </details>
-    </div>
-
-     <div id="error-message"></div>
-
+    <div id="loading-indicator" style="display: none;"><div class="beacon-loader"><div class="beacon-ring"></div><div class="beacon-ring"></div><div class="beacon-ring"></div><div class="beacon-ring"></div></div></div>
+    <div id="results-area" style="display: none;"><div class="section"><div id="verdict-text">VERDICT: ...</div><div id="confidence-text">CONFIDENCE: ...</div><div id="summary-text">Loading summary...</div></div><div class="section"><div class="section-title">Evidence Links</div><ul id="evidence-links-list"></ul></div><details id="sources-dropdown" style="display: none;"><summary>View All Sources Consulted</summary><ul id="sources-list"></ul></details></div>
+    <div id="error-message"></div>
     <script src="popup.js"></script>
 </body>
 </html>
