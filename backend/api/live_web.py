@@ -1,5 +1,5 @@
 from typing import Dict, List, Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote_plus
 import html
 import re
 import httpx
@@ -42,6 +42,46 @@ def _keyword_overlap_score(query: str, title: str, snippet: str) -> int:
     return len(query_tokens & haystack_tokens)
 
 
+
+
+async def _fallback_trusted_search(keyword_query: str, timeout: float) -> List[Dict[str, str]]:
+    """Fallback web search when LIVE_WEB_SEARCH_URL is not configured.
+    Uses DuckDuckGo HTML endpoint and keeps only trusted-domain links.
+    """
+    encoded = quote_plus(keyword_query)
+    url = f"https://duckduckgo.com/html/?q={encoded}"
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            response.raise_for_status()
+            html_doc = response.text
+
+        matches = re.findall(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html_doc, flags=re.IGNORECASE)
+        ranked = []
+        for href, raw_title in matches:
+            title = _clean_text(raw_title)
+            if not href.startswith("http"):
+                continue
+            if not _is_trusted_url(href):
+                continue
+            score = _keyword_overlap_score(keyword_query, title, "") + 3
+            ranked.append((score, {"title": f"Live Web: {title}", "url": href, "snippet": "Trusted web result"}))
+
+        ranked.sort(key=lambda x: x[0], reverse=True)
+        seen = set()
+        out = []
+        for _, item in ranked:
+            if item["url"] in seen:
+                continue
+            seen.add(item["url"])
+            out.append(item)
+            if len(out) >= 5:
+                break
+        return out
+    except Exception as e:
+        logger.error("Fallback trusted search failed: %s", str(e))
+        return []
+
 def _extract_results(data: Any) -> List[Dict[str, Any]]:
     if not isinstance(data, dict):
         return []
@@ -61,7 +101,10 @@ async def query_live_web(keyword_query: str, base_url: str | None = None) -> Lis
 
     service_url = (base_url or "").strip()
     if not service_url:
-        return [{"error": "LIVE_WEB base URL not configured", "source": "LIVE_WEB", "status": "failed"}]
+        fallback = await _fallback_trusted_search(keyword_query, API_TIMEOUTS.DATA_GOV)
+        if fallback:
+            return fallback
+        return [{"error": "LIVE_WEB search unavailable (no endpoint configured and fallback failed)", "source": "LIVE_WEB", "status": "failed"}]
 
     await _live_web_limiter.acquire()
 
