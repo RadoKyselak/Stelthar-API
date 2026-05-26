@@ -16,6 +16,7 @@ class SourceReliabilityWeights:
     BLS: float = 1.0
     CONGRESS: float = 0.8
     DATA_GOV: float = 0.7
+    LIVE_WEB: float = 0.6
     DEFAULT: float = 0.6
     
     def get_weight_for_url(self, url: str) -> float:
@@ -30,6 +31,8 @@ class SourceReliabilityWeights:
             return self.CONGRESS
         elif "catalog.data.gov" in url_lower:
             return self.DATA_GOV
+        elif "live_web" in url_lower:
+            return self.LIVE_WEB
         else:
             return self.DEFAULT
 

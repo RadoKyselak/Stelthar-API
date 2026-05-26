@@ -1,6 +1,6 @@
 from typing import TypedDict, Literal, Optional, Union
 
-SourceType = Literal["BEA", "BLS", "CENSUS", "CONGRESS", "DATA.GOV", "internal"]
+SourceType = Literal["BEA", "BLS", "CENSUS", "CONGRESS", "DATA.GOV", "LIVE_WEB", "internal"]
 ErrorStatus = Literal["failed", "missing_data"]
 
 class APIErrorResponse(TypedDict):
