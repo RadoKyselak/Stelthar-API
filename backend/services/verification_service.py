@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from typing import Dict, Any, List
 from fastapi import HTTPException
 from config import logger
@@ -41,6 +42,7 @@ class VerificationService:
 
             sources_results = [r for r in all_results if isinstance(r, dict) and "error" not in r]
             debug_errors = [r for r in all_results if isinstance(r, dict) and "error" in r]
+            debug_errors = self._dedupe_errors(debug_errors)
 
             logger.info(
                 f"Retrieved {len(sources_results)} sources, encountered {len(debug_errors)} errors."
@@ -61,6 +63,13 @@ class VerificationService:
             )
             confidence_val = confidence_breakdown["confidence"]
             
+            claim_year = self._extract_claim_year(claim_norm)
+            source_years = self._extract_source_years(sources_results)
+            if claim_year and source_years and claim_year not in source_years:
+                confidence_val = min(confidence_val, 0.55)
+                confidence_breakdown["E"] = min(confidence_breakdown.get("E", 0.0), 0.5)
+                logger.info("Applied temporal coverage cap: claim year %s not present in source years %s", claim_year, sorted(source_years))
+
             confidence_tier = self.confidence_scorer.get_confidence_tier(confidence_val)
 
             end_time = asyncio.get_event_loop().time()
@@ -88,6 +97,36 @@ class VerificationService:
             logger.exception("Unexpected error during verification.")
             return self._build_error_response(claim, analysis, all_results, e)
     
+
+
+    def _extract_claim_year(self, text: str) -> int | None:
+        m = re.search(r"\b(19\d{2}|20\d{2})\b", text or "")
+        return int(m.group(1)) if m else None
+
+    def _extract_source_years(self, sources: List[Dict[str, Any]]) -> set[int]:
+        years = set()
+        for s in sources:
+            y = s.get("raw_year")
+            if isinstance(y, str) and y.isdigit():
+                years.add(int(y))
+                continue
+            snip = s.get("snippet", "")
+            m = re.search(r"\b(19\d{2}|20\d{2})\b", snip)
+            if m:
+                years.add(int(m.group(1)))
+        return years
+
+    def _dedupe_errors(self, errors: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        seen = set()
+        deduped = []
+        for err in errors:
+            key = (err.get("source"), err.get("status"), err.get("error"))
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(err)
+        return deduped
+
     def _build_success_response(
         self,
         claim: str,

@@ -1,8 +1,8 @@
 import asyncio
 import re
 from typing import Dict, Any, List
-from config import BEA_VALID_TABLES, logger
-from api import query_bea, query_census_acs, query_bls, query_congress, query_datagov
+from config import BEA_VALID_TABLES, LIVE_WEB_SEARCH_URL, logger
+from api import query_bea, query_census_acs, query_bls, query_congress, query_datagov, query_live_web
 
 async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict[str, Any]]:
     """
@@ -34,6 +34,14 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
                         params_copy = bea_params.copy()
                         params_copy["LineCode"] = code
                         tasks.append(query_bea(params_copy))
+
+                        year_str = str(params_copy.get("Year", "")).strip()
+                        if year_str.isdigit():
+                            y = int(year_str)
+                            for backoff in (1, 2):
+                                fallback = params_copy.copy()
+                                fallback["Year"] = str(y - backoff)
+                                tasks.append(query_bea(fallback))
                     else:
                         logger.warning("Skipping invalid BEA LineCode format in plan: %s", code)
             elif table:
@@ -57,7 +65,9 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
 
     for kw in unique_kws:
         tasks.append(query_datagov(kw))
-        if "bill" in kw.lower() or "act" in kw.lower() or "law" in kw.lower() or "congress" in kw.lower() or claim_type == "legislative":
+        if LIVE_WEB_SEARCH_URL:
+            tasks.append(query_live_web(kw, base_url=LIVE_WEB_SEARCH_URL))
+        if claim_type == "legislative" or any(token in kw.lower() for token in [" bill", "act", " law", "h.r.", "s."]):
             tasks.append(query_congress(keyword_query=kw))
 
     if not tasks:
