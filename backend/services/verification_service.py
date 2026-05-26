@@ -98,24 +98,6 @@ class VerificationService:
             return self._build_error_response(claim, analysis, all_results, e)
     
 
-
-    def _extract_claim_year(self, text: str) -> int | None:
-        m = re.search(r"\b(19\d{2}|20\d{2})\b", text or "")
-        return int(m.group(1)) if m else None
-
-    def _extract_source_years(self, sources: List[Dict[str, Any]]) -> set[int]:
-        years = set()
-        for s in sources:
-            y = s.get("raw_year")
-            if isinstance(y, str) and y.isdigit():
-                years.add(int(y))
-                continue
-            snip = s.get("snippet", "")
-            m = re.search(r"\b(19\d{2}|20\d{2})\b", snip)
-            if m:
-                years.add(int(m.group(1)))
-        return years
-
     def _dedupe_errors(self, errors: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         seen = set()
         deduped = []

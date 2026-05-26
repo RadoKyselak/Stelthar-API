@@ -5,8 +5,6 @@ from typing import Dict, Any, List
 from config import BEA_VALID_TABLES, LIVE_WEB_SEARCH_URL, logger
 from api import query_bea, query_census_acs, query_bls, query_congress, query_datagov, query_live_web
 
-ORCHESTRATION_TIMEOUT_SECONDS = float(os.getenv("ORCHESTRATION_TIMEOUT_SECONDS", "25"))
-
 async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict[str, Any]]:
     """
     Execute an API query plan by calling appropriate APIs.
@@ -36,7 +34,7 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
                     if re.match(r"^[A-Z]?\d+[A-Z]?\d*$", code) or code.isdigit():
                         params_copy = bea_params.copy()
                         params_copy["LineCode"] = code
-                        tasks.append(asyncio.create_task(query_bea(params_copy)))
+                        tasks.append(query_bea(params_copy))
 
                         year_str = str(params_copy.get("Year", "")).strip()
                         if year_str.isdigit():
@@ -44,7 +42,7 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
                             for backoff in (1, 2):
                                 fallback = params_copy.copy()
                                 fallback["Year"] = str(y - backoff)
-                                tasks.append(asyncio.create_task(query_bea(fallback)))
+                                tasks.append(query_bea(fallback))
                     else:
                         logger.warning("Skipping invalid BEA LineCode format in plan: %s", code)
             elif table:
@@ -67,11 +65,10 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
     unique_kws = sorted(list(set(kw for kw in tier2_kws if isinstance(kw, str) and kw.strip())))
 
     for kw in unique_kws:
-        tasks.append(asyncio.create_task(query_datagov(kw)))
-        if LIVE_WEB_SEARCH_URL:
-            tasks.append(asyncio.create_task(query_live_web(kw, base_url=LIVE_WEB_SEARCH_URL)))
+        tasks.append(query_datagov(kw))
+        tasks.append(query_live_web(kw, base_url=LIVE_WEB_SEARCH_URL))
         if claim_type == "legislative" or any(token in kw.lower() for token in [" bill", "act", " law", "h.r.", "s."]):
-            tasks.append(asyncio.create_task(query_congress(keyword_query=kw)))
+            tasks.append(query_congress(keyword_query=kw))
 
     if not tasks:
         logger.warning("No API calls generated for the plan.")

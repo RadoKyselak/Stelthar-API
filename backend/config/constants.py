@@ -31,8 +31,6 @@ class SourceReliabilityWeights:
             return self.CONGRESS
         elif "catalog.data.gov" in url_lower:
             return self.DATA_GOV
-        elif any(t in url_lower for t in [".gov", ".edu", "reuters.com", "apnews.com", "worldbank.org", "imf.org", "oecd.org"]):
-            return self.LIVE_WEB
         elif "live_web" in url_lower:
             return self.LIVE_WEB
         else:
