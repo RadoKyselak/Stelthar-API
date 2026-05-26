@@ -1,9 +1,51 @@
 from typing import Dict, Any
+import re
 from fastapi import HTTPException
 
 from config import logger
 from utils.parsing import extract_json_block
 from .llm import call_gemini
+
+
+def _extract_year(text: str) -> str | None:
+    match = re.search(r"\b(19\d{2}|20\d{2})\b", text or "")
+    return match.group(1) if match else None
+
+
+def _apply_spending_plan_guardrails(claim: str, parsed: Dict[str, Any]) -> Dict[str, Any]:
+    claim_l = (claim or "").lower()
+    looks_like_federal_spending = any(k in claim_l for k in ["federal", "government", "spending", "budget"])
+    has_defense = "defense" in claim_l or "national defense" in claim_l
+    has_education = "education" in claim_l
+
+    if not (looks_like_federal_spending and has_defense and has_education):
+        return parsed
+
+    api_plan = parsed.setdefault("api_plan", {})
+    tier1 = api_plan.setdefault("tier1_params", {})
+
+    year = _extract_year(claim) or "2024"
+    tier1["bea"] = {
+        "DataSetName": "NIPA",
+        "TableName": "T31600",
+        "Frequency": "A",
+        "Year": year,
+        "LineCode": ["2", "14"]
+    }
+
+    kws = api_plan.get("tier2_keywords")
+    if not isinstance(kws, list):
+        kws = []
+    required = [
+        f"federal spending by function defense education {year}",
+        f"BEA T31600 defense education {year}"
+    ]
+    api_plan["tier2_keywords"] = list(dict.fromkeys([*(kw for kw in kws if isinstance(kw, str) and kw.strip()), *required]))
+
+    if parsed.get("claim_type") not in {"quantitative_comparison", "quantitative_value"}:
+        parsed["claim_type"] = "quantitative_comparison"
+
+    return parsed
 
 async def analyze_claim_for_api_plan(claim: str) -> Dict[str, Any]:
     """
@@ -115,6 +157,7 @@ async def analyze_claim_for_api_plan(claim: str) -> Dict[str, Any]:
         parsed["api_plan"]["tier1_params"].setdefault("bls", None)
         kw = parsed["api_plan"].get("tier2_keywords")
         parsed["api_plan"]["tier2_keywords"] = kw if isinstance(kw, list) and kw else [claim]
+        parsed = _apply_spending_plan_guardrails(claim, parsed)
 
         return parsed
         

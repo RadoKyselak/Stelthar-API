@@ -41,6 +41,7 @@ class VerificationService:
 
             sources_results = [r for r in all_results if isinstance(r, dict) and "error" not in r]
             debug_errors = [r for r in all_results if isinstance(r, dict) and "error" in r]
+            debug_errors = self._dedupe_errors(debug_errors)
 
             logger.info(
                 f"Retrieved {len(sources_results)} sources, encountered {len(debug_errors)} errors."
@@ -88,6 +89,18 @@ class VerificationService:
             logger.exception("Unexpected error during verification.")
             return self._build_error_response(claim, analysis, all_results, e)
     
+
+    def _dedupe_errors(self, errors: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        seen = set()
+        deduped = []
+        for err in errors:
+            key = (err.get("source"), err.get("status"), err.get("error"))
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(err)
+        return deduped
+
     def _build_success_response(
         self,
         claim: str,
