@@ -34,6 +34,14 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
                         params_copy = bea_params.copy()
                         params_copy["LineCode"] = code
                         tasks.append(query_bea(params_copy))
+
+                        year_str = str(params_copy.get("Year", "")).strip()
+                        if year_str.isdigit():
+                            y = int(year_str)
+                            for backoff in (1, 2):
+                                fallback = params_copy.copy()
+                                fallback["Year"] = str(y - backoff)
+                                tasks.append(query_bea(fallback))
                     else:
                         logger.warning("Skipping invalid BEA LineCode format in plan: %s", code)
             elif table:
