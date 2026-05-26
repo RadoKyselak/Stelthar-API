@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 from typing import Dict, Any, List
 from config import BEA_VALID_TABLES, LIVE_WEB_SEARCH_URL, logger
@@ -51,13 +52,13 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
 
     if census_params := tier1.get("census_acs"):
         if isinstance(census_params, dict) and all(k in census_params for k in ["year", "dataset", "get", "for"]):
-            tasks.append(query_census_acs(params=census_params))
+            tasks.append(asyncio.create_task(query_census_acs(params=census_params)))
         elif isinstance(census_params, dict):
             logger.warning("Census ACS plan missing required parameters: %s", census_params)
 
     if bls_params := tier1.get("bls"):
         if isinstance(bls_params, dict) and all(k in bls_params for k in ["metric", "year"]):
-            tasks.append(query_bls(params=bls_params))
+            tasks.append(asyncio.create_task(query_bls(params=bls_params)))
         elif isinstance(bls_params, dict):
             logger.warning("BLS plan missing required parameters: %s", bls_params)
 
@@ -73,9 +74,27 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
         logger.warning("No API calls generated for the plan.")
         return []
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    done, pending = await asyncio.wait(tasks, timeout=ORCHESTRATION_TIMEOUT_SECONDS)
+
+    results = []
+    for task in done:
+        try:
+            results.append(task.result())
+        except Exception as e:
+            results.append(e)
+
+    for task in pending:
+        task.cancel()
 
     processed_results = []
+    if pending:
+        logger.warning("Orchestration timeout reached (%.1fs). Completed %d/%d tasks.", ORCHESTRATION_TIMEOUT_SECONDS, len(done), len(tasks))
+        processed_results.append({
+            "error": f"Orchestration timeout after {ORCHESTRATION_TIMEOUT_SECONDS:.1f}s",
+            "source": "internal",
+            "status": "failed"
+        })
+
     for i, res in enumerate(results):
         if isinstance(res, Exception):
             logger.error(f"Error during API call task index {i}: {res}", exc_info=True)
