@@ -65,8 +65,7 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
 
     for kw in unique_kws:
         tasks.append(query_datagov(kw))
-        if LIVE_WEB_SEARCH_URL:
-            tasks.append(query_live_web(kw, base_url=LIVE_WEB_SEARCH_URL))
+        tasks.append(query_live_web(kw, base_url=LIVE_WEB_SEARCH_URL))
         if claim_type == "legislative" or any(token in kw.lower() for token in [" bill", "act", " law", "h.r.", "s."]):
             tasks.append(query_congress(keyword_query=kw))
 
