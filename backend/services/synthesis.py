@@ -135,6 +135,13 @@ async def synthesize_finding_with_llm(
                         corrected_links.append(link)
                 parsed["evidence_links"] = corrected_links
 
+            if not parsed.get("evidence_links"):
+                parsed["evidence_links"] = [
+                    {"finding": s.get("snippet", s.get("title", "Evidence"))[:120], "source_url": s.get("url", "")}
+                    for s in valid_sources[:2]
+                    if s.get("url")
+                ]
+
             return parsed
         else:
             logger.error("Failed to parse valid synthesis JSON from LLM response: %s", res.get("text", ""))

@@ -1,8 +1,11 @@
 import asyncio
+import os
 import re
 from typing import Dict, Any, List
-from config import BEA_VALID_TABLES, logger
-from api import query_bea, query_census_acs, query_bls, query_congress, query_datagov
+from config import BEA_VALID_TABLES, LIVE_WEB_SEARCH_URL, logger
+from api import query_bea, query_census_acs, query_bls, query_congress, query_datagov, query_live_web
+
+ORCHESTRATION_TIMEOUT_SECONDS = float(os.getenv("ORCHESTRATION_TIMEOUT_SECONDS", "25"))
 
 async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict[str, Any]]:
     """
@@ -33,7 +36,15 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
                     if re.match(r"^[A-Z]?\d+[A-Z]?\d*$", code) or code.isdigit():
                         params_copy = bea_params.copy()
                         params_copy["LineCode"] = code
-                        tasks.append(query_bea(params_copy))
+                        tasks.append(asyncio.create_task(query_bea(params_copy)))
+
+                        year_str = str(params_copy.get("Year", "")).strip()
+                        if year_str.isdigit():
+                            y = int(year_str)
+                            for backoff in (1, 2):
+                                fallback = params_copy.copy()
+                                fallback["Year"] = str(y - backoff)
+                                tasks.append(asyncio.create_task(query_bea(fallback)))
                     else:
                         logger.warning("Skipping invalid BEA LineCode format in plan: %s", code)
             elif table:
@@ -43,30 +54,50 @@ async def execute_query_plan(plan: Dict[str, Any], claim_type: str) -> List[Dict
 
     if census_params := tier1.get("census_acs"):
         if isinstance(census_params, dict) and all(k in census_params for k in ["year", "dataset", "get", "for"]):
-            tasks.append(query_census_acs(params=census_params))
+            tasks.append(asyncio.create_task(query_census_acs(params=census_params)))
         elif isinstance(census_params, dict):
             logger.warning("Census ACS plan missing required parameters: %s", census_params)
 
     if bls_params := tier1.get("bls"):
         if isinstance(bls_params, dict) and all(k in bls_params for k in ["metric", "year"]):
-            tasks.append(query_bls(params=bls_params))
+            tasks.append(asyncio.create_task(query_bls(params=bls_params)))
         elif isinstance(bls_params, dict):
             logger.warning("BLS plan missing required parameters: %s", bls_params)
 
     unique_kws = sorted(list(set(kw for kw in tier2_kws if isinstance(kw, str) and kw.strip())))
 
     for kw in unique_kws:
-        tasks.append(query_datagov(kw))
-        if "bill" in kw.lower() or "act" in kw.lower() or "law" in kw.lower() or "congress" in kw.lower() or claim_type == "legislative":
-            tasks.append(query_congress(keyword_query=kw))
+        tasks.append(asyncio.create_task(query_datagov(kw)))
+        if LIVE_WEB_SEARCH_URL:
+            tasks.append(asyncio.create_task(query_live_web(kw, base_url=LIVE_WEB_SEARCH_URL)))
+        if claim_type == "legislative" or any(token in kw.lower() for token in [" bill", "act", " law", "h.r.", "s."]):
+            tasks.append(asyncio.create_task(query_congress(keyword_query=kw)))
 
     if not tasks:
         logger.warning("No API calls generated for the plan.")
         return []
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    done, pending = await asyncio.wait(tasks, timeout=ORCHESTRATION_TIMEOUT_SECONDS)
+
+    results = []
+    for task in done:
+        try:
+            results.append(task.result())
+        except Exception as e:
+            results.append(e)
+
+    for task in pending:
+        task.cancel()
 
     processed_results = []
+    if pending:
+        logger.warning("Orchestration timeout reached (%.1fs). Completed %d/%d tasks.", ORCHESTRATION_TIMEOUT_SECONDS, len(done), len(tasks))
+        processed_results.append({
+            "error": f"Orchestration timeout after {ORCHESTRATION_TIMEOUT_SECONDS:.1f}s",
+            "source": "internal",
+            "status": "failed"
+        })
+
     for i, res in enumerate(results):
         if isinstance(res, Exception):
             logger.error(f"Error during API call task index {i}: {res}", exc_info=True)

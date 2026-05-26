@@ -14,6 +14,7 @@ CENSUS_API_KEY = os.getenv("CENSUS_API_KEY")
 CONGRESS_API_KEY = os.getenv("CONGRESS_API_KEY")
 DATA_GOV_API_KEY = os.getenv("DATA_GOV_API_KEY")
 BLS_API_KEY = os.getenv("BLS_API_KEY")
+LIVE_WEB_SEARCH_URL = os.getenv("LIVE_WEB_SEARCH_URL")
 
 # Gemini Config
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
