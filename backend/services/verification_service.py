@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from typing import Dict, Any, List
 from fastapi import HTTPException
 from config import logger
@@ -62,6 +63,13 @@ class VerificationService:
             )
             confidence_val = confidence_breakdown["confidence"]
             
+            claim_year = self._extract_claim_year(claim_norm)
+            source_years = self._extract_source_years(sources_results)
+            if claim_year and source_years and claim_year not in source_years:
+                confidence_val = min(confidence_val, 0.55)
+                confidence_breakdown["E"] = min(confidence_breakdown.get("E", 0.0), 0.5)
+                logger.info("Applied temporal coverage cap: claim year %s not present in source years %s", claim_year, sorted(source_years))
+
             confidence_tier = self.confidence_scorer.get_confidence_tier(confidence_val)
 
             end_time = asyncio.get_event_loop().time()
