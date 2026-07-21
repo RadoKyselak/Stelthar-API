@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Project Mirador",
-  "version": "1.6.2",
-  "description": "Highlight text and verify claims using official government APIs.",
-  "permissions": ["scripting", "activeTab", "storage"],
-  "host_permissions": ["<all_urls>"],
+  "version": "1.7.0",
+  "description": "Highlight text and verify claims against official U.S. government data (BLS, BEA, Census, Congress.gov, Data.gov).",
+  "permissions": ["scripting", "activeTab", "storage", "contextMenus"],
+  "host_permissions": ["https://stelthar-api.vercel.app/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -12,10 +12,20 @@
     "default_popup": "popup.html",
     "default_title": "Project Mirador"
   },
+  "commands": {
+    "verify-selection": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Verify the highlighted text"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "run_at": "document_idle"
     }
   ],
   "icons": {
@@ -24,4 +34,3 @@
     "128": "icons/icon128.png"
   }
 }
-
