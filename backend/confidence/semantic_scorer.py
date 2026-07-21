@@ -3,8 +3,14 @@ from config import logger
 from config.constants import CONFIDENCE_CONFIG
 from models.api_responses import SourceData
 from models.verdicts import VerdictType
-from services.llm import get_embeddings_batch_api
 from utils.similarity import cosine_similarity
+
+# NOTE: services.llm is imported lazily inside _calculate_semantic_similarity.
+# Importing it at module scope creates a cycle:
+#   confidence/__init__ -> semantic_scorer -> services.llm -> services/__init__
+#   -> services.confidence -> confidence.confidence_scorer -> (partially
+#   initialised confidence package)
+# which made `import confidence` fail depending on import order.
 
 
 class SemanticAlignmentScorer:
@@ -44,9 +50,11 @@ class SemanticAlignmentScorer:
         sources: List[SourceData],
         claim: str
     ) -> float:
+        from services.llm import get_embeddings_batch_api  # lazy: see module note
+
         try:
             texts_to_embed = self._prepare_texts_for_embedding(claim, sources)
-            
+
             if len(texts_to_embed) <= 1:
                 return self.config.DEFAULT_S_SEMANTIC
 

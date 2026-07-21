@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from fastapi import HTTPException
+from exceptions import LLMException
 
 
 @pytest.mark.asyncio
@@ -9,10 +9,9 @@ class TestCallGemini:
     
     async def test_successful_call(self, sample_gemini_response):
         """Test successful Gemini API call."""
-        import main
-        
-        with patch("main.GEMINI_API_KEY", "test_gemini_key"):
-            with patch("main.httpx.AsyncClient") as mock_client_class:
+        import services.llm as mod        
+        with patch("services.llm.GEMINI_API_KEY", "test_gemini_key"):
+            with patch("services.llm.httpx.AsyncClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_response = MagicMock()
                 mock_response.status_code = 200
@@ -25,29 +24,27 @@ class TestCallGemini:
                 
                 mock_client_class.return_value = mock_client
                 
-                result = await main.call_gemini("test prompt")
+                result = await mod.call_gemini("test prompt")
                 
                 assert "raw" in result
                 assert "text" in result
                 assert "claim_normalized" in result["text"]
     
     async def test_missing_api_key(self):
-        """Test call_gemini with missing API key."""
-        import main
-        
-        with patch("main.GEMINI_API_KEY", None):
-            with pytest.raises(HTTPException) as exc_info:
-                await main.call_gemini("test")
-            
-            assert exc_info.value.status_code == 500
-            assert "not configured" in exc_info.value.detail
+        """A missing key raises LLMException (mapped to 500 by main's handler)."""
+        import services.llm as mod
+        with patch("services.llm.GEMINI_API_KEY", None):
+            with pytest.raises(LLMException) as exc_info:
+                await mod.call_gemini("test")
+
+            assert "not configured" in str(exc_info.value)
+            assert exc_info.value.details["recoverable"] is False
     
     async def test_http_error(self):
         """Test call_gemini with HTTP error."""
-        import main
-        
-        with patch("main.GEMINI_API_KEY", "test_key"):
-            with patch("main.httpx.AsyncClient") as mock_client_class:
+        import services.llm as mod        
+        with patch("services.llm.GEMINI_API_KEY", "test_key"):
+            with patch("services.llm.httpx.AsyncClient") as mock_client_class:
                 mock_client = MagicMock()
                 
                 from httpx import HTTPStatusError, Request, Response
@@ -58,14 +55,16 @@ class TestCallGemini:
                     side_effect=HTTPStatusError("Error", request=mock_request, response=mock_http_response)
                 )
                 mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-                mock_client.__aexit__ = AsyncMock()
-                
+                # Must return False: a truthy __aexit__ suppresses the exception
+                # inside `async with`, which is not how httpx behaves.
+                mock_client.__aexit__ = AsyncMock(return_value=False)
+
                 mock_client_class.return_value = mock_client
-                
-                with pytest.raises(HTTPException) as exc_info:
-                    await main.call_gemini("test")
-                
-                assert exc_info.value.status_code == 500
+
+                with pytest.raises(LLMException) as exc_info:
+                    await mod.call_gemini("test")
+
+                assert "HTTP 500" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -74,8 +73,7 @@ class TestGetEmbeddingsBatchApi:
     
     async def test_successful_embedding(self):
         """Test successful embedding generation."""
-        import main
-        
+        import services.llm as mod        
         mock_embedding_response = {
             "embeddings": [
                 {"values": [0.1, 0.2, 0.3]},
@@ -83,8 +81,8 @@ class TestGetEmbeddingsBatchApi:
             ]
         }
         
-        with patch("main.GEMINI_API_KEY", "test_gemini_key"):
-            with patch("main.httpx.AsyncClient") as mock_client_class:
+        with patch("services.llm.GEMINI_API_KEY", "test_gemini_key"):
+            with patch("services.llm.httpx.AsyncClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_response = MagicMock()
                 mock_response.status_code = 200
@@ -97,7 +95,7 @@ class TestGetEmbeddingsBatchApi:
                 
                 mock_client_class.return_value = mock_client
                 
-                result = await main.get_embeddings_batch_api(["text1", "text2"])
+                result = await mod.get_embeddings_batch_api(["text1", "text2"])
                 
                 assert len(result) == 2
                 assert result[0] == [0.1, 0.2, 0.3]
@@ -105,23 +103,20 @@ class TestGetEmbeddingsBatchApi:
     
     async def test_empty_input(self):
         """Test with empty input list."""
-        import main
-        
-        result = await main.get_embeddings_batch_api([])
+        import services.llm as mod        
+        result = await mod.get_embeddings_batch_api([])
         assert result == []
     
     async def test_missing_api_key(self):
         """Test with missing API key."""
-        import main
-        
-        with patch("main.GEMINI_API_KEY", None):
-            result = await main.get_embeddings_batch_api(["text1", "text2"])
+        import services.llm as mod        
+        with patch("services.llm.GEMINI_API_KEY", None):
+            result = await mod.get_embeddings_batch_api(["text1", "text2"])
             assert result == [None, None]
     
     async def test_batch_size_limit(self):
         """Test that batching respects MAX_BATCH_SIZE."""
-        import main
-        
+        import services.llm as mod        
         texts = [f"text{i}" for i in range(150)]
         
         call_count = 0
@@ -138,8 +133,8 @@ class TestGetEmbeddingsBatchApi:
             mock_response.raise_for_status = MagicMock()
             return mock_response
         
-        with patch("main.GEMINI_API_KEY", "test_gemini_key"):
-            with patch("main.httpx.AsyncClient") as mock_client_class:
+        with patch("services.llm.GEMINI_API_KEY", "test_gemini_key"):
+            with patch("services.llm.httpx.AsyncClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.post = mock_post
                 mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -147,7 +142,7 @@ class TestGetEmbeddingsBatchApi:
                 
                 mock_client_class.return_value = mock_client
                 
-                result = await main.get_embeddings_batch_api(texts)
+                result = await mod.get_embeddings_batch_api(texts)
                 
                 assert len(result) == 150
                 assert call_count == 2  # Should make 2 API calls

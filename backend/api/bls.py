@@ -1,13 +1,13 @@
 import json
 from typing import Dict, Any, List
 import httpx
-from config.constants import API_TIMEOUTS, RATE_LIMITS_PER_SECOND
+from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS, BLS_SERIES_CATALOG
 from config import BLS_API_KEY, logger
 from utils.parsing import parse_numeric_value
 from utils.retry import async_retry
-from utils.rate_limiter import get_rate_limiter
+from utils.rate_limiter import get_quota_limiter
 
-_bls_limiter = get_rate_limiter("BLS", RATE_LIMITS_PER_SECOND.BLS)
+_bls_limiter = get_quota_limiter("BLS", *RATE_LIMIT_QUOTAS.BLS)
 
 @async_retry(max_attempts=3, exceptions=(httpx.HTTPError, httpx.TimeoutException))
 async def query_bls(params: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -27,16 +27,22 @@ async def query_bls(params: Dict[str, Any]) -> List[Dict[str, Any]]:
     except ValueError:
         return [{"error": "BLS query invalid year", "source": "BLS", "status": "failed"}]
 
-    series_map = {
-        "CPI": "CUSR0000SA0",
-        "unemployment": "LNS14000000"
-    }
+    # Expanded well beyond the original 2 series (national CPI + unemployment).
+    # Lookup is case-insensitive so "CPI" and "cpi" both resolve.
+    spec = BLS_SERIES_CATALOG.get(str(metric).strip().lower())
+    if not spec:
+        return [{
+            "error": f"BLS metric '{metric}' not supported. Available: {', '.join(sorted(BLS_SERIES_CATALOG))}",
+            "source": "BLS",
+            "status": "failed",
+        }]
 
-    series_id = series_map.get(metric)
-    if not series_id:
-        return [{"error": f"BLS metric '{metric}' not supported", "source": "BLS", "status": "failed"}]
+    series_id = spec["series_id"]
+    metric_kind = spec["kind"]
+    metric_label = spec["label"]
 
-    start_year = str(year_int - 1) if metric == "CPI" else year_str
+    # Index metrics need the prior year to compute a year-over-year change.
+    start_year = str(year_int - 1) if metric_kind == "cpi" else year_str
     end_year = year_str
 
     url = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
@@ -76,62 +82,106 @@ async def query_bls(params: Dict[str, Any]) -> List[Dict[str, Any]]:
             return [{"error": "BLS returned no data for series", "source": "BLS", "status": "failed"}]
         
         annual_data = series_data[0].get("data", [])
+        series_url = f"https://data.bls.gov/timeseries/{series_id}"
         results = []
 
-        if metric == "CPI":
-            current_year_vals = [
-                d for d in annual_data
-                if d.get("year") == year_str and d.get("period") == "M13"
-            ]
-            prev_year_vals = [
-                d for d in annual_data
-                if d.get("year") == start_year and d.get("period") == "M13"
-            ]
+        def _annual(y: str):
+            """Annual average (period M13) for a year, else the latest monthly point."""
+            m13 = [d for d in annual_data if d.get("year") == y and d.get("period") == "M13"]
+            if m13:
+                return m13[0], True
+            monthly = [d for d in annual_data if d.get("year") == y and str(d.get("period", "")).startswith("M")]
+            if monthly:
+                # BLS returns newest-first; take the most recent month available.
+                return monthly[0], False
+            return None, False
 
-            if current_year_vals and prev_year_vals:
-                current_cpi = parse_numeric_value(current_year_vals[0].get("value"))
-                prev_cpi = parse_numeric_value(prev_year_vals[0].get("value"))
+        if metric_kind == "cpi":
+            cur, cur_is_annual = _annual(year_str)
+            prev, _ = _annual(start_year)
 
-                if current_cpi is not None and prev_cpi is not None and prev_cpi != 0:
-                    inflation_rate = ((current_cpi - prev_cpi) / prev_cpi) * 100
-                    snippet = (
-                        f"CPI in {year_str}: {current_cpi:.1f}, "
-                        f"CPI in {start_year}: {prev_cpi:.1f}. "
-                        f"Inflation rate: {inflation_rate:.2f}%"
-                    )
-                    results.append({
-                        "title": f"BLS CPI Data {year_str}",
-                        "url": f"https://data.bls.gov/timeseries/{series_id}",
-                        "snippet": snippet,
-                        "data_value": inflation_rate,
-                        "raw_data_value": f"{inflation_rate:.2f}",
-                        "raw_cpi_current": current_cpi,
-                        "raw_cpi_prev": prev_cpi,
-                        "year": year_str
-                    })
-            else:
-                logger.warning("BLS CPI data incomplete for %s", year_str)
-                return [{"error": f"BLS CPI data incomplete for {year_str}", "source": "BLS", "status": "failed"}]
+            if not cur or not prev:
+                logger.warning("BLS %s data incomplete for %s", metric, year_str)
+                return [{
+                    "error": f"BLS {metric_label} data incomplete for {year_str}",
+                    "source": "BLS",
+                    "status": "failed",
+                }]
 
-        elif metric == "unemployment":
-            annual_avg = [
-                d for d in annual_data
-                if d.get("year") == year_str and d.get("period") == "M13"
-            ]
-            if annual_avg:
-                unemp_rate = parse_numeric_value(annual_avg[0].get("value"))
-                snippet = f"Unemployment rate in {year_str}: {unemp_rate}%"
-                results.append({
-                    "title": f"BLS Unemployment Rate {year_str}",
-                    "url": f"https://data.bls.gov/timeseries/{series_id}",
-                    "snippet": snippet,
-                    "data_value": unemp_rate,
-                    "raw_data_value": str(unemp_rate),
-                    "year": year_str
-                })
-            else:
-                logger.warning("BLS unemployment data not found for %s", year_str)
-                return [{"error": f"BLS unemployment data not found for {year_str}", "source": "BLS", "status": "failed"}]
+            current_val = parse_numeric_value(cur.get("value"))
+            prev_val = parse_numeric_value(prev.get("value"))
+
+            if current_val is None or prev_val is None or prev_val == 0:
+                return [{
+                    "error": f"BLS {metric_label} values unusable for {year_str}",
+                    "source": "BLS",
+                    "status": "failed",
+                }]
+
+            change_pct = ((current_val - prev_val) / prev_val) * 100
+            basis = "annual average" if cur_is_annual else f"through {cur.get('periodName', 'latest month')}"
+            snippet = (
+                f"{metric_label} index {year_str} ({basis}): {current_val:.1f}; "
+                f"{start_year}: {prev_val:.1f}. Year-over-year change: {change_pct:.2f}%."
+            )
+            results.append({
+                "title": f"BLS {metric_label} {year_str}",
+                "url": series_url,
+                "snippet": snippet,
+                "data_value": change_pct,
+                "raw_data_value": f"{change_pct:.2f}",
+                "raw_index_current": current_val,
+                "raw_index_prev": prev_val,
+                "unit": "%",
+                "line_description": f"{metric_label} year-over-year change",
+                "year": year_str,
+                "is_annual_average": cur_is_annual,
+                "source": "BLS",
+            })
+
+        else:  # kind == "rate": read the level directly
+            point, is_annual = _annual(year_str)
+
+            # "Old data" guard: if the requested year has no data yet, fall back to
+            # the most recent available point and label the year explicitly rather
+            # than returning nothing (which used to end the whole verification).
+            fallback_used = False
+            if not point and annual_data:
+                point = annual_data[0]
+                is_annual = point.get("period") == "M13"
+                fallback_used = True
+
+            if not point:
+                logger.warning("BLS %s data not found for %s", metric, year_str)
+                return [{
+                    "error": f"BLS {metric_label} data not found for {year_str}",
+                    "source": "BLS",
+                    "status": "failed",
+                }]
+
+            value = parse_numeric_value(point.get("value"))
+            actual_year = point.get("year", year_str)
+            basis = "annual average" if is_annual else point.get("periodName", "monthly")
+            note = (
+                f" (requested {year_str}; latest available is {actual_year})"
+                if fallback_used and actual_year != year_str else ""
+            )
+            snippet = (
+                f"{metric_label} in {actual_year} ({basis}): {value}{spec.get('unit', '')}{note}."
+            )
+            results.append({
+                "title": f"BLS {metric_label} {actual_year}",
+                "url": series_url,
+                "snippet": snippet,
+                "data_value": value,
+                "raw_data_value": str(value),
+                "unit": spec.get("unit", ""),
+                "line_description": metric_label,
+                "year": str(actual_year),
+                "is_annual_average": is_annual,
+                "year_fallback": fallback_used,
+                "source": "BLS",
+            })
 
         return results
 

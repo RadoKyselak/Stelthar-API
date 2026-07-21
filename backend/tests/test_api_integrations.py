@@ -8,8 +8,7 @@ class TestQueryBea:
     
     async def test_successful_query(self, sample_bea_response):
         """Test successful BEA API query."""
-        import main
-        
+        import api.bea as mod        
         params = {
             "DataSetName": "NIPA",
             "TableName": "T31600",
@@ -18,8 +17,8 @@ class TestQueryBea:
             "LineCode": "2"
         }
         
-        with patch("main.BEA_API_KEY", "test_bea_key"):
-            with patch("main.httpx.AsyncClient") as mock_client_class:
+        with patch("api.bea.BEA_API_KEY", "test_bea_key"):
+            with patch("api.bea.httpx.AsyncClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_response = MagicMock()
                 mock_response.status_code = 200
@@ -33,7 +32,7 @@ class TestQueryBea:
                 
                 mock_client_class.return_value = mock_client
                 
-                result = await main.query_bea(params)
+                result = await mod.query_bea(params)
                 
                 assert len(result) == 1
                 assert result[0]["title"] == "BEA: NIPA/T31600"
@@ -42,18 +41,16 @@ class TestQueryBea:
     
     async def test_missing_api_key(self):
         """Test query_bea with missing API key."""
-        import main
-        
-        with patch("main.BEA_API_KEY", None):
-            result = await main.query_bea({"LineCode": "2"})
+        import api.bea as mod        
+        with patch("api.bea.BEA_API_KEY", None):
+            result = await mod.query_bea({"LineCode": "2"})
             assert result[0]["error"] == "BEA_API_KEY missing"
     
     async def test_missing_line_code(self):
         """Test query_bea without LineCode."""
-        import main
-        
-        with patch("main.BEA_API_KEY", "test_key"):
-            result = await main.query_bea({})
+        import api.bea as mod        
+        with patch("api.bea.BEA_API_KEY", "test_key"):
+            result = await mod.query_bea({})
             assert "error" in result[0]
             assert "missing LineCode" in result[0]["error"]
 
@@ -64,8 +61,7 @@ class TestQueryCensusAcs:
     
     async def test_successful_query(self, sample_census_response):
         """Test successful Census ACS query."""
-        import main
-        
+        import api.census as mod        
         params = {
             "year": "2021",
             "dataset": "acs/acs1/profile",
@@ -73,8 +69,8 @@ class TestQueryCensusAcs:
             "for": "state:01"
         }
         
-        with patch("main.CENSUS_API_KEY", "test_census_key"):
-            with patch("main.httpx.AsyncClient") as mock_client_class:
+        with patch("api.census.CENSUS_API_KEY", "test_census_key"):
+            with patch("api.census.httpx.AsyncClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_response = MagicMock()
                 mock_response.status_code = 200
@@ -89,7 +85,7 @@ class TestQueryCensusAcs:
                 
                 mock_client_class.return_value = mock_client
                 
-                result = await main.query_census_acs(params)
+                result = await mod.query_census_acs(params)
                 
                 assert len(result) == 1
                 assert "Alabama" in result[0]["title"]
@@ -97,10 +93,9 @@ class TestQueryCensusAcs:
     
     async def test_missing_required_params(self):
         """Test query_census_acs with missing required parameters."""
-        import main
-        
-        with patch("main.CENSUS_API_KEY", "test_key"):
-            result = await main.query_census_acs({"year": "2021"})
+        import api.census as mod        
+        with patch("api.census.CENSUS_API_KEY", "test_key"):
+            result = await mod.query_census_acs({"year": "2021"})
             assert result == []
 
 
@@ -110,12 +105,11 @@ class TestQueryBls:
     
     async def test_successful_cpi_query(self, sample_bls_response):
         """Test successful BLS CPI query."""
-        import main
-        
+        import api.bls as mod        
         params = {"metric": "CPI", "year": "2023"}
         
-        with patch("main.BLS_API_KEY", "test_bls_key"):
-            with patch("main.httpx.AsyncClient") as mock_client_class:
+        with patch("api.bls.BLS_API_KEY", "test_bls_key"):
+            with patch("api.bls.httpx.AsyncClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_response = MagicMock()
                 mock_response.status_code = 200
@@ -128,7 +122,7 @@ class TestQueryBls:
                 
                 mock_client_class.return_value = mock_client
                 
-                result = await main.query_bls(params)
+                result = await mod.query_bls(params)
                 
                 assert len(result) == 1
                 assert "CPI" in result[0]["title"]
@@ -137,19 +131,17 @@ class TestQueryBls:
     
     async def test_missing_metric(self):
         """Test query_bls with missing metric."""
-        import main
-        
-        with patch("main.BLS_API_KEY", "test_key"):
-            result = await main.query_bls({"year": "2023"})
+        import api.bls as mod        
+        with patch("api.bls.BLS_API_KEY", "test_key"):
+            result = await mod.query_bls({"year": "2023"})
             assert "error" in result[0]
             assert "missing metric" in result[0]["error"]
     
     async def test_unsupported_metric(self):
         """Test query_bls with unsupported metric."""
-        import main
-        
-        with patch("main.BLS_API_KEY", "test_key"):
-            result = await main.query_bls({"metric": "INVALID", "year": "2023"})
+        import api.bls as mod        
+        with patch("api.bls.BLS_API_KEY", "test_key"):
+            result = await mod.query_bls({"metric": "INVALID", "year": "2023"})
             assert "error" in result[0]
             assert "not supported" in result[0]["error"]
 
@@ -160,8 +152,7 @@ class TestQueryCongress:
     
     async def test_successful_query(self):
         """Test successful Congress API query."""
-        import main
-        
+        import api.congress as mod        
         mock_response_data = {
             "bills": [
                 {
@@ -174,8 +165,8 @@ class TestQueryCongress:
             ]
         }
         
-        with patch("main.CONGRESS_API_KEY", "test_congress_key"):
-            with patch("main.httpx.AsyncClient") as mock_client_class:
+        with patch("api.congress.CONGRESS_API_KEY", "test_congress_key"):
+            with patch("api.congress.httpx.AsyncClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_response = MagicMock()
                 mock_response.status_code = 200
@@ -188,7 +179,7 @@ class TestQueryCongress:
                 
                 mock_client_class.return_value = mock_client
                 
-                result = await main.query_congress("CHIPS Act")
+                result = await mod.query_congress("CHIPS Act")
                 
                 assert len(result) == 1
                 assert "CHIPS Act" in result[0]["title"]
@@ -196,10 +187,9 @@ class TestQueryCongress:
     
     async def test_empty_query(self):
         """Test query_congress with empty query."""
-        import main
-        
-        with patch("main.CONGRESS_API_KEY", "test_key"):
-            result = await main.query_congress("")
+        import api.congress as mod        
+        with patch("api.congress.CONGRESS_API_KEY", "test_key"):
+            result = await mod.query_congress("")
             assert result == []
 
 
@@ -209,8 +199,7 @@ class TestQueryDatagov:
     
     async def test_successful_query(self):
         """Test successful Data.gov API query."""
-        import main
-        
+        import api.datagov as mod        
         mock_response_data = {
             "result": {
                 "results": [
@@ -226,7 +215,7 @@ class TestQueryDatagov:
             }
         }
         
-        with patch("main.httpx.AsyncClient") as mock_client_class:
+        with patch("api.datagov.httpx.AsyncClient") as mock_client_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
             mock_response.status_code = 200
@@ -239,7 +228,7 @@ class TestQueryDatagov:
             
             mock_client_class.return_value = mock_client
             
-            result = await main.query_datagov("federal budget")
+            result = await mod.query_datagov("federal budget")
             
             assert len(result) == 1
             assert "Federal Budget Dataset" in result[0]["title"]
@@ -247,7 +236,6 @@ class TestQueryDatagov:
     
     async def test_empty_query(self):
         """Test query_datagov with empty query."""
-        import main
-        
-        result = await main.query_datagov("")
+        import api.datagov as mod        
+        result = await mod.query_datagov("")
         assert result == []

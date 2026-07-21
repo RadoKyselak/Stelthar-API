@@ -1,6 +1,10 @@
-from typing import TypedDict, Literal, Optional, Union
+from typing import Literal, Optional, Union
+from typing_extensions import TypedDict
 
-SourceType = Literal["BEA", "BLS", "CENSUS", "CONGRESS", "DATA.GOV", "LIVE_WEB", "internal"]
+SourceType = Literal[
+    "BEA", "BLS", "CENSUS", "CONGRESS", "DATA_GOV", "SEARCH_GOV",
+    "TREASURY", "USASPENDING", "internal",
+]
 ErrorStatus = Literal["failed", "missing_data"]
 
 class APIErrorResponse(TypedDict):
@@ -40,12 +44,31 @@ class DataGovSourceData(BaseSourceData):
     """Data.gov-specific response data."""
     pass
 
+class TreasurySourceData(BaseSourceData):
+    """Treasury Fiscal Data-specific response data."""
+    unit: str
+    unit_multiplier: int
+    record_date: str
+
+class USASpendingSourceData(BaseSourceData):
+    """USAspending.gov-specific response data."""
+    unit: str
+    unit_multiplier: int
+    line_description: str
+
+class SearchGovSourceData(BaseSourceData):
+    """search.gov research harness response data."""
+    content_excerpt: Optional[str]
+
 SourceData = Union[
     BEASourceData,
     CensusSourceData,
     BLSSourceData,
     CongressSourceData,
     DataGovSourceData,
+    TreasurySourceData,
+    USASpendingSourceData,
+    SearchGovSourceData,
     BaseSourceData
 ]
 

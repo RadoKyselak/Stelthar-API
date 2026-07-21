@@ -1,13 +1,13 @@
 import json
 from typing import Dict, Any, List
 import httpx
-from config.constants import API_TIMEOUTS, BEA_CONFIG, RATE_LIMITS_PER_SECOND
+from config.constants import API_TIMEOUTS, BEA_CONFIG, RATE_LIMIT_QUOTAS
 from config import BEA_API_KEY, logger
 from utils.parsing import parse_numeric_value
 from utils.retry import async_retry
-from utils.rate_limiter import get_rate_limiter
+from utils.rate_limiter import get_quota_limiter
 
-_bea_limiter = get_rate_limiter("BEA", RATE_LIMITS_PER_SECOND.BEA)
+_bea_limiter = get_quota_limiter("BEA", *RATE_LIMIT_QUOTAS.BEA)
 
 @async_retry(max_attempts=3, exceptions=(httpx.HTTPError, httpx.TimeoutException))
 async def query_bea(params: Dict[str, Any]) -> List[Dict[str, Any]]:

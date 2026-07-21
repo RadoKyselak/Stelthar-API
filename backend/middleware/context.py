@@ -1,3 +1,4 @@
+import re
 import uuid
 import time
 from contextvars import ContextVar
@@ -9,9 +10,23 @@ from config import logger
 request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 request_start_time_var: ContextVar[Optional[float]] = ContextVar("request_start_time", default=None)
 
+# Client-supplied request IDs are logged and echoed back in a response header.
+# Restrict to a safe charset/length so a malicious value can't inject fake log
+# lines or oversized header content; well-behaved clients doing distributed
+# tracing still get their ID correlated.
+_SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def _resolve_request_id(request: Request) -> str:
+    client_id = request.headers.get("X-Request-ID")
+    if client_id and _SAFE_REQUEST_ID.match(client_id):
+        return client_id
+    return str(uuid.uuid4())
+
+
 class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        request_id = _resolve_request_id(request)
         request_id_var.set(request_id)
         
         start_time = time.time()

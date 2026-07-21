@@ -17,11 +17,21 @@ class TestVerifyEndpoint:
     """Tests for the /verify endpoint."""
     
     def test_verify_empty_claim(self, test_client):
-        """Test /verify with empty claim returns 400."""
+        """Empty claims are rejected by request validation.
+
+        VerifyRequest declares ``claim: str = Field(..., min_length=3)``, so an
+        empty claim fails schema validation and returns 422 before reaching the
+        handler. (The handler's own empty-string check is therefore unreachable.)
+        """
         response = test_client.post("/verify", json={"claim": ""})
-        
-        assert response.status_code == 400
-        assert "cannot be empty" in response.json()["detail"]
+
+        assert response.status_code == 422
+
+    def test_verify_too_short_claim(self, test_client):
+        """Claims below the 3-character minimum are rejected."""
+        response = test_client.post("/verify", json={"claim": "ab"})
+
+        assert response.status_code == 422
     
     def test_verify_missing_claim(self, test_client):
         """Test /verify without claim field returns 422."""
@@ -29,61 +39,61 @@ class TestVerifyEndpoint:
         
         assert response.status_code == 422
     
-    @patch("main.analyze_claim_for_api_plan")
-    @patch("main.execute_query_plan")
-    @patch("main.synthesize_finding_with_llm")
-    @patch("main.compute_confidence")
-    async def test_verify_successful(
-        self,
-        mock_compute_confidence,
-        mock_synthesize,
-        mock_execute,
-        mock_analyze,
-        test_client
-    ):
-        """Test successful /verify request."""
-        mock_analyze.return_value = {
+    def test_verify_successful(self, test_client):
+        """Test successful /verify request.
+
+        The pipeline now lives in VerificationService (plan -> retrieve ->
+        critique -> synthesize), so this patches the service's collaborators
+        rather than module-level functions on ``main``.
+        """
+        analysis = {
             "claim_normalized": "Test claim normalized",
             "claim_type": "quantitative_value",
             "entities": ["Test"],
             "relationship": "equals",
             "api_plan": {
-                "tier1_params": {"bea": None, "census_acs": None, "bls": None},
-                "tier2_keywords": ["test"]
-            }
+                "tier1_params": {"bea": None, "census": None, "bls": None,
+                                 "usaspending": None, "treasury": None},
+                "tier2_keywords": ["test"],
+            },
         }
-        
-        mock_execute.return_value = [
-            {
-                "title": "Test Source",
-                "url": "https://example.com",
-                "snippet": "Test data",
-                "data_value": 100
-            }
-        ]
-        
-        mock_synthesize.return_value = {
+        sources = [{
+            "title": "Test Source",
+            "url": "https://example.com",
+            "snippet": "Test data",
+            "data_value": 100,
+            "year": "2023",
+        }]
+        synthesis = {
             "verdict": "Supported",
             "summary": "The claim is supported by data.",
             "justification": "Test data shows value of 100.",
-            "evidence_links": [
-                {"finding": "Value = 100", "source_url": "https://example.com"}
-            ]
+            "evidence_links": [{"finding": "Value = 100", "source_url": "https://example.com"}],
         }
-        
-        mock_compute_confidence.return_value = {
-            "confidence": 0.85,
-            "R": 0.9,
-            "E": 0.8,
-            "S": 0.85,
-            "S_semantic_sim": 0.75
+        critique = {
+            "sufficient": True, "relevance_score": 0.9, "gap": "",
+            "relevant_urls": ["https://example.com"], "followup_plan": {},
+            "gate": {}, "stopped_reason": None,
         }
-        
-        response = test_client.post("/verify", json={"claim": "Test claim"})
-        
+        confidence = {"confidence": 0.85, "R": 0.9, "E": 0.8, "S": 0.85, "S_semantic_sim": 0.75}
+
+        with patch("services.verification_service.analyze_claim_for_api_plan",
+                   AsyncMock(return_value=analysis)), \
+             patch("services.verification_service.execute_query_plan",
+                   AsyncMock(return_value=sources)), \
+             patch("services.verification_service.critique_evidence",
+                   AsyncMock(return_value=critique)), \
+             patch("services.verification_service.synthesize_finding_with_llm",
+                   AsyncMock(return_value=synthesis)), \
+             patch("confidence.confidence_scorer.ConfidenceScorer.compute_confidence",
+                   AsyncMock(return_value=confidence)):
+            response = test_client.post("/verify", json={"claim": "Test claim"})
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["claim_original"] == "Test claim"
-        assert "verdict" in data
-        assert "confidence" in data
+        assert data["verdict"] == "Supported"
+        assert data["confidence"] == 0.85
+        # The loop's audit trail should be present on every response.
+        assert len(data["debug_iterations"]) == 1

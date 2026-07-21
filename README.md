@@ -130,11 +130,20 @@ See the [API Documentation](#api-documentation) section below for detailed endpo
 - **Platform**: Chrome Extension
 
 ### Data Sources
-- Data.gov
-- Bureau of Labor Statistics (BLS)
-- Bureau of Economic Analysis (BEA)
-- Congress.gov
-- U.S. Census Bureau
+
+**Structured (return actual numbers — always preferred):**
+- **USAspending.gov** — federal agency budgets & obligations by fiscal year *(no API key)*
+- **Treasury Fiscal Data** — national debt / public debt outstanding *(no API key)*
+- **Bureau of Economic Analysis (BEA)** — GDP, personal income, government receipts &
+  expenditures by function, trade (12 NIPA tables)
+- **Bureau of Labor Statistics (BLS)** — unemployment, CPI, core CPI, PPI, labor force
+  participation, employment level, average hourly earnings
+- **U.S. Census Bureau (ACS)** — population, income, poverty, age, home value, education,
+  insurance coverage, by state or nationally
+
+**Keyword search (return dataset descriptions, not values — supplement only):**
+- Data.gov catalog
+- Congress.gov (bills & legislation)
 
 ### AI & Intelligence
 - **Gemini API** (restrained for fact-checking purposes)
@@ -147,44 +156,59 @@ See the [API Documentation](#api-documentation) section below for detailed endpo
 
 ## 🏗 Architecture
 
-Stelthar is evolving from an API-only verifier into a **hybrid evidence pipeline** with extension-first UX:
+Stelthar runs an **agentic (multi-pass) evidence pipeline**. Rather than issuing one
+query plan and giving up when it misses, the engine critiques what it retrieved and
+re-plans against the specific gap.
 
-- **Primary path:** Official government APIs for structured, high-reliability data.
-- **Fallback path:** Retrieval from trusted public sources when APIs are stale/unavailable.
-- **Synthesis path:** LLM reasoning constrained by evidence provenance and confidence scoring.
-- **UX path:** Chrome extension supports both highlighted claims and direct pasted/manual claims.
+- **Plan:** An LLM routes the claim to the source that can actually answer it
+  (agency budget → USAspending, national debt → Treasury, GDP → BEA, inflation → BLS,
+  demographics → Census with server-side variable resolution).
+- **Retrieve:** All selected sources are queried in parallel, deduplicated across passes.
+- **Critique:** A dedicated critic checks whether the evidence contains a real datapoint
+  addressing the claim's entities *and* timeframe. Dataset catalog pages are explicitly
+  rejected as non-evidence.
+- **Re-plan:** If evidence is insufficient, the critic proposes a corrected plan and the
+  loop retries (bounded by `MAX_ITERATIONS`).
+- **Synthesize:** The LLM reasons only over ranked evidence, with valueless sources
+  labelled so they cannot be mistaken for proof.
+- **Score:** Confidence is capped when evidence doesn't earn it (no datapoint, low
+  relevance, or year mismatch).
 
 ```
 ┌─────────────────┐
 │  User Browser   │
 │  (Chrome Ext)   │
 └────────┬────────┘
-         │
          │ Highlighted OR Pasted Claim
          ▼
 ┌──────────────────────────┐
-│  Stelthar Orchestration  │
-│     API (Python)         │
+│   Claim Analysis (LLM)   │──► routes to the source that has the answer
 └────────┬─────────────────┘
+         ▼
+┌──────────────────────────────────────────────┐
+│              AGENTIC LOOP (≤3 passes)        │
+│                                              │
+│  ┌────────────┐      ┌───────────────────┐   │
+│  │  Retrieve  │─────►│  Critique         │   │
+│  │  (parallel)│      │  • real datapoint?│   │
+│  └─────▲──────┘      │  • right year?    │   │
+│        │             │  • on topic?      │   │
+│        │             └─────────┬─────────┘   │
+│        │   insufficient        │ sufficient  │
+│        └──── re-plan ◄─────────┤             │
+└──────────────────────────────────────────────┘
          │
-   ┌─────┴─────────────┐
-   ▼                   ▼
-┌──────────┐     ┌──────────────┐
-│ Gov APIs │     │ Trusted Web  │
-│ (Primary)│     │ Fallback RAG │
-└────┬─────┘     └──────┬───────┘
-     └────────┬─────────┘
-              ▼
-      ┌──────────────┐
-      │ LLM + Scoring│
-      │ + Provenance │
-      └──────┬───────┘
-             ▼
-      ┌──────────────┐
-      │   Verdict    │
-      │ + Confidence │
-      │ + Sources    │
-      └──────────────┘
+         ▼
+┌──────────────────────┐
+│ Rank evidence        │  numbers first, catalog pages last
+│ Synthesize (LLM)     │
+│ Score + cap          │
+└──────┬───────────────┘
+       ▼
+┌──────────────────────────────┐
+│ Verdict + Confidence         │
+│ + Sources + debug_iterations │
+└──────────────────────────────┘
 ```
 
 ---

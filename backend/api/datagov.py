@@ -1,11 +1,11 @@
 from typing import Dict, List
 import httpx
 from config import logger
-from config.constants import API_TIMEOUTS, RATE_LIMITS_PER_SECOND
+from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from utils.retry import async_retry
-from utils.rate_limiter import get_rate_limiter
+from utils.rate_limiter import get_quota_limiter
 
-_datagov_limiter = get_rate_limiter("DATA_GOV", RATE_LIMITS_PER_SECOND.DATA_GOV)
+_datagov_limiter = get_quota_limiter("DATA_GOV", *RATE_LIMIT_QUOTAS.DATA_GOV)
 
 @async_retry(max_attempts=3, exceptions=(httpx.HTTPError, httpx.TimeoutException))
 async def query_datagov(keyword_query: str) -> List[Dict[str, str]]:
@@ -62,14 +62,14 @@ async def query_datagov(keyword_query: str) -> List[Dict[str, str]]:
             
     except httpx.HTTPStatusError as e:
         logger.error("Data.gov API HTTP error %s: %s", e.response.status_code, e.response.text)
-        return [{"error": f"Data.gov API error: {e.response.status_code}", "source": "DATA.GOV", "status": "failed"}]
+        return [{"error": f"Data.gov API error: {e.response.status_code}", "source": "DATA_GOV", "status": "failed"}]
     except httpx.RequestError as e:
         logger.error("Data.gov API request error: %s", str(e))
-        return [{"error": str(e), "source": "DATA.GOV", "status": "failed"}]
+        return [{"error": str(e), "source": "DATA_GOV", "status": "failed"}]
     except Exception as e:
         logger.exception("Unexpected error during Data.gov query")
         return [{
             "error": f"Unexpected error processing Data.gov data: {str(e)}",
-            "source": "DATA.GOV",
+            "source": "DATA_GOV",
             "status": "failed"
         }]

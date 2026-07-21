@@ -1,11 +1,11 @@
 from typing import Dict, Any, List
 import httpx
-from config.constants import API_TIMEOUTS, RATE_LIMITS_PER_SECOND
+from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from config import CONGRESS_API_KEY, logger
 from utils.retry import async_retry
-from utils.rate_limiter import get_rate_limiter
+from utils.rate_limiter import get_quota_limiter
 
-_congress_limiter = get_rate_limiter("CONGRESS", RATE_LIMITS_PER_SECOND.CONGRESS)
+_congress_limiter = get_quota_limiter("CONGRESS", *RATE_LIMIT_QUOTAS.CONGRESS)
 
 @async_retry(max_attempts=3, exceptions=(httpx.HTTPError, httpx.TimeoutException))
 async def query_congress(keyword_query: str) -> List[Dict[str, Any]]:

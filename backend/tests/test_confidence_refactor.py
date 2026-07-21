@@ -1,11 +1,12 @@
 import pytest
-from domain.confidence import (
+from confidence import (
     ConfidenceScorer,
     ReliabilityScorer,
     EvidenceDensityScorer,
     SemanticAlignmentScorer
 )
 from models.api_responses import SourceData
+from config.constants import CONFIDENCE_CONFIG
 
 
 class TestReliabilityScorer:
@@ -42,7 +43,7 @@ class TestEvidenceDensityScorer:
         scorer = EvidenceDensityScorer()
         sources = [{"url": "test"}]
         result = scorer.score(sources)
-        assert result == 0.2
+        assert result == round(1 / CONFIDENCE_CONFIG.MAX_SOURCES_FOR_FULL_DENSITY, 2)
     
     def test_five_sources(self):
         scorer = EvidenceDensityScorer()
@@ -64,17 +65,19 @@ class TestSemanticAlignmentScorer:
     async def test_verdict_confidence_supported(self):
         scorer = SemanticAlignmentScorer()
         s_llm = scorer._get_verdict_confidence("Supported")
-        assert s_llm == 0.95
+        assert s_llm == CONFIDENCE_CONFIG.VERDICT_CONFIDENCE_SUPPORTED
     
     async def test_verdict_confidence_contradicted(self):
         scorer = SemanticAlignmentScorer()
         s_llm = scorer._get_verdict_confidence("Contradicted")
-        assert s_llm == 0.90
+        assert s_llm == CONFIDENCE_CONFIG.VERDICT_CONFIDENCE_CONTRADICTED
     
     async def test_verdict_confidence_inconclusive(self):
         scorer = SemanticAlignmentScorer()
         s_llm = scorer._get_verdict_confidence("Inconclusive")
-        assert s_llm == 0.50
+        assert s_llm == CONFIDENCE_CONFIG.VERDICT_CONFIDENCE_INCONCLUSIVE
+        # An unsupported verdict must not read as a confident one.
+        assert s_llm < CONFIDENCE_CONFIG.VERDICT_CONFIDENCE_SUPPORTED
 
 
 @pytest.mark.asyncio
@@ -84,9 +87,9 @@ class TestConfidenceScorer:
     async def test_no_sources(self):
         scorer = ConfidenceScorer()
         result = await scorer.compute_confidence([], "Inconclusive", "test claim")
-        assert result["confidence"] == 0.3
-        assert result["R"] == 0.5
-        assert result["E"] == 0.0
+        assert result["confidence"] == CONFIDENCE_CONFIG.DEFAULT_CONFIDENCE
+        assert result["R"] == CONFIDENCE_CONFIG.DEFAULT_R
+        assert result["E"] == CONFIDENCE_CONFIG.DEFAULT_E
     
     def test_confidence_tier_high(self):
         assert ConfidenceScorer.get_confidence_tier(0.8) == "High"

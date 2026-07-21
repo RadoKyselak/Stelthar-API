@@ -52,9 +52,31 @@ class SlidingWindowRateLimiter:
 
 
 _rate_limiters: Dict[str, RateLimiter] = {}
+_quota_limiters: Dict[str, SlidingWindowRateLimiter] = {}
 
 def get_rate_limiter(api_name: str, calls_per_second: float = 10.0) -> RateLimiter:
-  
+
     if api_name not in _rate_limiters:
         _rate_limiters[api_name] = RateLimiter(calls_per_second)
     return _rate_limiters[api_name]
+
+
+def get_quota_limiter(api_name: str, max_calls: int, window_seconds: float) -> SlidingWindowRateLimiter:
+    """Enforce a real call quota over a window.
+
+    Prefer this over ``get_rate_limiter`` for published API quotas. Passing a
+    daily quota to the interval-based ``RateLimiter`` converts it into a minimum
+    gap between consecutive calls (500/day became a 172-second sleep between
+    every call), which starved sources until they hit the orchestration timeout
+    and were dropped. A sliding window lets calls proceed at full speed until
+    the quota is genuinely exhausted.
+    """
+    if api_name not in _quota_limiters:
+        _quota_limiters[api_name] = SlidingWindowRateLimiter(max_calls, window_seconds)
+    return _quota_limiters[api_name]
+
+
+def reset_limiters() -> None:
+    """Clear cached limiters (test isolation)."""
+    _rate_limiters.clear()
+    _quota_limiters.clear()

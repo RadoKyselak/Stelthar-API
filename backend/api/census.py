@@ -1,13 +1,13 @@
 import json
 from typing import Dict, Any, List
 import httpx
-from config.constants import API_TIMEOUTS, RATE_LIMITS_PER_SECOND
+from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from config import CENSUS_API_KEY, logger
 from utils.parsing import parse_numeric_value
 from utils.retry import async_retry
-from utils.rate_limiter import get_rate_limiter
+from utils.rate_limiter import get_quota_limiter
 
-_census_limiter = get_rate_limiter("CENSUS", RATE_LIMITS_PER_SECOND.CENSUS)
+_census_limiter = get_quota_limiter("CENSUS", *RATE_LIMIT_QUOTAS.CENSUS)
 
 @async_retry(max_attempts=3, exceptions=(httpx.HTTPError, httpx.TimeoutException))
 async def query_census_acs(params: Dict[str, Any]) -> List[Dict[str, Any]]:

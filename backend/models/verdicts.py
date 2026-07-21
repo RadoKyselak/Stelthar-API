@@ -1,4 +1,5 @@
-from typing import TypedDict, Literal, List, Dict
+from typing import Literal, List, Dict
+from typing_extensions import TypedDict
 
 VerdictType = Literal["Supported", "Contradicted", "Inconclusive"]
 
@@ -28,3 +29,7 @@ class VerificationResponse(TypedDict):
     sources: List[Dict]
     debug_plan: Dict
     debug_log: List[Dict]
+    # Audit trail for the multi-pass verification loop: one entry per
+    # plan/retrieve/critique cycle, plus any confidence caps that were applied.
+    debug_iterations: List[Dict]
+    debug_notes: List[str]
