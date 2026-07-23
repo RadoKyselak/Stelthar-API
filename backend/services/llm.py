@@ -1,10 +1,10 @@
-from config.constants import LLM_CONFIG, RATE_LIMITS_PER_SECOND
+from config.constants import LLM_CONFIG, RATE_LIMIT_QUOTAS
 import json
 from typing import Dict, Any, List, Optional
 import httpx
 from fastapi import HTTPException
 from utils.retry import async_retry
-from utils.rate_limiter import get_rate_limiter
+from utils.rate_limiter import get_quota_limiter
 from utils.circuit_breaker import circuit_breaker
 from exceptions import LLMException
 
@@ -16,7 +16,7 @@ from config import (
     logger
 )
 
-_gemini_limiter = get_rate_limiter("GEMINI", RATE_LIMITS_PER_SECOND.GEMINI)
+_gemini_limiter = get_quota_limiter("GEMINI", *RATE_LIMIT_QUOTAS.GEMINI)
 
 @circuit_breaker(
     failure_threshold=5,
@@ -36,6 +36,10 @@ async def call_gemini(prompt: str) -> Dict[str, Any]:
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
     }
+    # Initialised up front: if the request path ever exits without assigning
+    # (e.g. a context manager suppresses the exception), fail with a clear
+    # LLMException instead of an opaque UnboundLocalError further down.
+    data = None
     try:
         async with httpx.AsyncClient(timeout=LLM_CONFIG.REQUEST_TIMEOUT) as client:
             response = await client.post(GEMINI_ENDPOINT, headers=headers, json=body)
@@ -50,7 +54,10 @@ async def call_gemini(prompt: str) -> Dict[str, Any]:
     except Exception as e:
         logger.exception("Unexpected error calling Gemini API.")
         raise LLMException(f"Unexpected error: {str(e)}", recoverable=False)
-    
+
+    if data is None:
+        raise LLMException("No response payload received from Gemini", recoverable=True)
+
     text = ""
     try:
         if isinstance(data, dict):

@@ -3,7 +3,9 @@ from .census import query_census_acs
 from .bls import query_bls
 from .congress import query_congress
 from .datagov import query_datagov
-from .live_web import query_live_web
+from .search_gov import query_search_gov
+from .usaspending import query_usaspending
+from .treasury import query_treasury
 
 __all__ = [
     "query_bea",
@@ -11,5 +13,7 @@ __all__ = [
     "query_bls",
     "query_congress",
     "query_datagov",
-    "query_live_web",
+    "query_search_gov",
+    "query_usaspending",
+    "query_treasury",
 ]

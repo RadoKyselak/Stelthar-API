@@ -1,5 +1,9 @@
 import pytest
-from main import extract_json_block, _parse_numeric_value, _apply_multiplier
+from utils.parsing import (
+    extract_json_block,
+    parse_numeric_value as _parse_numeric_value,
+    apply_multiplier as _apply_multiplier,
+)
 
 
 class TestExtractJsonBlock:

@@ -32,14 +32,15 @@ async def synthesize_finding_with_llm(
 
     for idx, s in enumerate(valid_sources):
         source_id = f"Source_{idx+1}"
-        url = s.get('url', 'N/A')
+        url = s.get('url', 'N/A') or 'N/A'
         title = s.get('title', 'N/A')
         part = f"<{source_id}>\nSource Title: {title}\nURL: {url}\n"
 
         data_point_text = None
-        snippet = s.get('snippet', 'N/A').strip()
+        snippet = (s.get('snippet') or 'N/A').strip()
+        has_value = s.get("data_value") is not None
 
-        if "apps.bea.gov" in url and s.get("data_value") is not None:
+        if "apps.bea.gov" in url and has_value:
             raw_val = s.get('raw_data_value', 'N/A')
             unit = s.get('unit', '')
             mult = s.get('unit_multiplier')
@@ -47,14 +48,28 @@ async def synthesize_finding_with_llm(
             line_code = s.get('line_code', '')
             data_point_text = f"{line_desc} ({line_code}) = {raw_val}{' '+unit if unit else ''}"
             part += f"Data Point: {data_point_text} (Multiplier: {mult})\n"
-        elif "api.census.gov" in url and s.get("data_value") is not None:
+        elif "api.census.gov" in url and has_value:
             raw_val = s.get('raw_data_value', 'N/A')
             data_point_text = f"{title} = {raw_val}"
             part += f"Data Point: {data_point_text}\n"
-        elif "bls.gov" in url and s.get("data_value") is not None:
-            raw_val = s.get('raw_data_value', 'N/A')
+        elif "bls.gov" in url and has_value:
             data_point_text = snippet
             part += f"Data Point: {data_point_text}\n"
+        elif has_value:
+            # USAspending / Treasury and any future numeric source.
+            raw_val = s.get('raw_data_value', 'N/A')
+            unit = s.get('unit', '')
+            line_desc = s.get('line_description', title)
+            data_point_text = f"{line_desc} = {raw_val}{' '+unit if unit else ''}"
+            part += f"Data Point: {data_point_text}\n"
+
+        # Mark valueless sources explicitly. Without this the model treats a
+        # dataset catalog blurb as if it were evidence for a number.
+        if not has_value:
+            part += "Data Point: NONE - this source contains no datapoint (descriptive/catalog only)\n"
+
+        if s.get("year"):
+            part += f"Data Year: {s['year']}\n"
 
         part += f"Snippet: {snippet}\n</{source_id}>\n"
         context_parts.append(part)
@@ -82,8 +97,16 @@ async def synthesize_finding_with_llm(
     {context}
 
     INSTRUCTIONS:
+    0.  **CRITICAL - evidence discipline:** A source whose "Data Point" is NONE is
+        descriptive metadata (e.g. a dataset catalog entry). It proves only that a
+        dataset exists — it is NOT evidence for or against any number. NEVER issue
+        "Supported" or "Contradicted" based on such sources alone; if no source
+        carries a real datapoint addressing the claim, the verdict is "Inconclusive".
+    0b. **Timeframe discipline:** If the claim specifies a year and the only relevant
+        datapoints carry a different "Data Year", say so explicitly in the summary and
+        prefer "Inconclusive" over asserting a verdict from the wrong period.
     1.  Carefully review the user's claim and its asserted relationship between entities.
-    2.  Examine ALL evidence provided within the <Source_N> tags. Focus on data points (BEA, Census, BLS) directly relevant to the claim's entities and timeframe.
+    2.  Examine ALL evidence provided within the <Source_N> tags. Focus on data points (BEA, Census, BLS, USAspending, Treasury) directly relevant to the claim's entities and timeframe.
     3.  **BEA Data:** Apply the 'Multiplier' if provided (e.g., a 'DataValue' of 1000 and 'Multiplier' of 1000000 means 1,000,000,000). Assume "Millions of dollars" (multiplier 1,000,000) for BEA NIPA tables like T31600 if multiplier is null/missing but units aren't specified.
     4.  **Census Data:** Use the provided 'Data Point' values directly.
     5.  **BLS Data:** Use the 'Data Point' which represents a calculated percentage (e.g., 3.5 for 3.5% or a raw index value). The Snippet/Title clarifies the metric.
@@ -136,9 +159,15 @@ async def synthesize_finding_with_llm(
                 parsed["evidence_links"] = corrected_links
 
             if not parsed.get("evidence_links"):
+                # Prefer sources that actually carry a datapoint over catalog blurbs.
+                fallback_pool = [s for s in valid_sources if s.get("data_value") is not None] \
+                    or valid_sources
                 parsed["evidence_links"] = [
-                    {"finding": s.get("snippet", s.get("title", "Evidence"))[:120], "source_url": s.get("url", "")}
-                    for s in valid_sources[:2]
+                    {
+                        "finding": (s.get("snippet") or s.get("title") or "Evidence")[:120],
+                        "source_url": s.get("url", ""),
+                    }
+                    for s in fallback_pool[:2]
                     if s.get("url")
                 ]
 

@@ -1,5 +1,5 @@
 import pytest
-from main import cosine_similarity
+from utils.similarity import cosine_similarity
 
 class TestCosineSimilarity:
     """Tests for cosine_similarity function."""
