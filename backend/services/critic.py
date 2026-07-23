@@ -239,11 +239,11 @@ AVAILABLE DATA SOURCES (all official, keyless unless noted):
   expenditures by function, trade). Params: {{"DataSetName":"NIPA","TableName":"<T#####>","Frequency":"A","Year":"<YYYY>","LineCode":["<n>"]}}
 - "bls": labor & prices. Params: {{"metric": "unemployment"|"cpi"|"cpi_core"|"ppi"|"labor_force_participation"|"employment_level"|"avg_hourly_earnings", "year": "<YYYY>"}}
 - "census": demographics. Use FRIENDLY form: {{"concept": "population"|"median_household_income"|"poverty_rate"|"median_age"|"median_home_value"|"unemployment_rate"|"bachelors_or_higher"|"uninsured_rate"|"per_capita_income"|"households", "geography": "<state name or US>", "year": "<YYYY>"}}
-- "tier2_keywords": research search across official U.S. government sites (search.gov)
-  and Congress.gov for bills. Fetches real page/report content, not just a snippet —
-  use this for qualitative or research questions (agency statements, GAO/CBO reports,
-  narrative context) that the structured sources above cannot answer, or when a claim
-  has no clean quantitative shape at all.
+- "tier2_keywords": web research (Tavily, ranked toward .gov/.mil and other official
+  sources) plus Congress.gov for bills. Fetches real page/report content, not just a
+  snippet — use this for qualitative or research questions (agency statements, GAO/CBO
+  reports, narrative context) that the structured sources above cannot answer, or when
+  a claim has no clean quantitative shape at all.
 
 Strategy hints:
 - If the claim is a specific number/statistic, prefer the structured sources above —

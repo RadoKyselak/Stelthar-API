@@ -18,7 +18,7 @@ class SourceReliabilityWeights:
     USASPENDING: float = 0.95
     CONGRESS: float = 0.8
     DATA_GOV: float = 0.7
-    SEARCH_GOV: float = 0.65  # official site, but the LLM extracted this — lower than structured data
+    TAVILY: float = 0.5  # general web search, less trusted than a dedicated .gov search; domain-trust re-ranking happens client-side
     DEFAULT: float = 0.6
 
     def get_weight_for_url(self, url: str) -> float:
@@ -39,10 +39,10 @@ class SourceReliabilityWeights:
             return self.DATA_GOV
         elif ".gov" in url_lower or ".mil" in url_lower:
             # Anything else on a federal domain — e.g. a GAO/CBO/agency report
-            # surfaced by the search.gov research harness. Official, but the
-            # value was LLM-extracted from prose rather than a structured API,
-            # so it's trusted less than the dedicated structured sources above.
-            return self.SEARCH_GOV
+            # surfaced by the Tavily research harness. Official, but the value
+            # was LLM-extracted from prose rather than a structured API, so
+            # it's trusted less than the dedicated structured sources above.
+            return self.TAVILY
         else:
             return self.DEFAULT
 
@@ -90,7 +90,7 @@ class APITimeouts:
     DATA_GOV: float = 20.0
     TREASURY: float = 25.0
     USASPENDING: float = 25.0
-    SEARCH_GOV: float = 20.0
+    TAVILY: float = 20.0
 
 @dataclass(frozen=True)
 class BEAConfig:
@@ -185,4 +185,4 @@ class RATE_LIMIT_QUOTAS:
     GEMINI = (60, 60)           # 60 per minute
     TREASURY = (120, 60)        # no published hard cap; stay courteous
     USASPENDING = (120, 60)     # no published hard cap; stay courteous
-    SEARCH_GOV = (60, 60)       # conservative default; raise once real limits are confirmed
+    TAVILY = (60, 60)          # conservative default; raise once real limits are confirmed

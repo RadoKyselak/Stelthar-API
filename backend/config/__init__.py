@@ -14,11 +14,10 @@ CONGRESS_API_KEY = os.getenv("CONGRESS_API_KEY")
 DATA_GOV_API_KEY = os.getenv("DATA_GOV_API_KEY")
 BLS_API_KEY = os.getenv("BLS_API_KEY")
 
-# search.gov (search.usa.gov) — free federal-site search, the research harness
-# for anything the structured sources below can't answer. Sign up at
-# https://search.gov/ to get these.
-SEARCH_GOV_AFFILIATE = os.getenv("SEARCH_GOV_AFFILIATE")
-SEARCH_GOV_API_KEY = os.getenv("SEARCH_GOV_API_KEY")
+# Tavily — the research harness for anything the structured sources below
+# can't answer. Chosen over search.gov after search.gov's affiliate signup
+# proved not to be self-service. Sign up at https://tavily.com/ to get this.
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
@@ -79,8 +78,7 @@ __all__ = [
     "GEMINI_BATCH_EMBED_ENDPOINT",
     "EMBEDDING_MODEL_NAME",
     "BEA_VALID_TABLES",
-    "SEARCH_GOV_AFFILIATE",
-    "SEARCH_GOV_API_KEY",
+    "TAVILY_API_KEY",
     "USASPENDING_BASE_URL",
     "TREASURY_FISCAL_BASE_URL",
     "check_api_keys_on_startup",

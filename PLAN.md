@@ -9,9 +9,18 @@
 > official number or report, not an arbiter of political truth. Concretely:
 > dropped the FBI/crime-data coverage race (nobody is actually fact-checking
 > crime stats with this tool); replaced the plan to hand-build one adapter per
-> agency with a **search.gov-backed research harness** that reaches any federal
-> site and fetches real report/page content, not just a snippet. This is
-> implemented — see §3, Phase 2.
+> agency with a general research harness that fetches real report/page
+> content, not just a snippet. This is implemented — see §3, Phase 2.
+>
+> **2026-07-20, later same day:** the research harness backend switched from
+> search.gov to **Tavily** — search.gov's affiliate registration turned out not
+> to be self-service (no instant API key from a dashboard), which was a real
+> onboarding blocker in practice. Tavily is purpose-built for agent web search,
+> has self-service signup, and a generous free tier. The tradeoff: search.gov
+> only ever returned federal sites; Tavily searches the open web, so the
+> harness now does its own domain-trust re-ranking (`.gov`/`.mil` and a short
+> list of official/nonpartisan sources rank above generic results) rather than
+> getting that scoping for free from the backend.
 
 ---
 
@@ -62,11 +71,11 @@ Structured, exact-number sources: BEA, BLS, Census, Treasury, USAspending. That
 covers macroeconomics, demographics, and the federal budget — narrow if the plan
 were to keep hand-building one bespoke adapter per agency (CDC WONDER, EIA,
 NCES, FEC, CMS, IRS SOI, …). That per-agency race is no longer the plan (see the
-pivot note above): instead, the **search.gov research harness** now reaches any
-federal domain and fetches real page/report content for qualitative and
-long-tail questions the 5 structured sources can't answer. Breadth is now a
-function of what's published on a `.gov` site, not of engineering time spent on
-one-off adapters.
+pivot note above): instead, the **Tavily-backed research harness** now reaches
+the web (ranked toward official/government sources) and fetches real
+page/report content for qualitative and long-tail questions the 5 structured
+sources can't answer. Breadth is now a function of what's findable and
+fetchable, not of engineering time spent on one-off adapters.
 
 What's still genuinely missing is an honest **"I don't have a good answer for
 this"** signal for questions the harness also can't resolve well (ambiguous,
@@ -97,7 +106,7 @@ authority does not work when the subject is contested.
 This is also why the tool doesn't need to win a coverage race against every
 federal agency one at a time. A research assistant's job is to *find the right
 document*, not to have pre-built a bespoke adapter for every possible domain —
-which is exactly what the search.gov harness (§3, Phase 2) does.
+which is exactly what the research harness (§3, Phase 2) does.
 
 This is the single most important decision in this document. The rationale:
 
@@ -217,16 +226,25 @@ it to be bad initially. That is the point.
 ### Phase 2 — Coverage via a research harness — **implemented, needs tuning**
 
 Instead of hand-building an adapter per agency, coverage now comes from a
-**search.gov-backed research harness** ([search_gov.py](backend/api/search_gov.py),
-[content_fetch.py](backend/utils/content_fetch.py)):
+**Tavily-backed research harness** ([tavily.py](backend/api/tavily.py),
+[content_fetch.py](backend/utils/content_fetch.py)). Originally built against
+search.gov, but its affiliate registration turned out not to be self-service —
+no instant API key from a dashboard — which was a real onboarding blocker, so
+the backend was swapped for Tavily (self-service signup, generous free tier,
+purpose-built for agent search):
 
-- search.gov is a free, public API purpose-built to search across federal
-  government sites — no domain-whitelist logic needed, no per-call cost.
-- Unlike the retired Data.gov catalog search, the harness **fetches and
-  extracts real page/PDF content** for the top few results (HTML stripped,
-  PDFs parsed via `pypdf`), not just a title and one-line snippet. That's what
-  makes it usable for actual research questions ("what has GAO said about
-  X") instead of returning dataset descriptions.
+- Unlike search.gov, Tavily searches the open web rather than only federal
+  sites, so domain trust is scored client-side: `.gov`/`.mil` domains and a
+  short list of official/nonpartisan sources (Reuters, AP, OECD, IMF, World
+  Bank, plus the common CRS-report mirror sgp.fas.org) rank above generic
+  results. Nothing is hard-filtered out, since useful material is sometimes
+  mirrored off government domains.
+- Unlike the retired Data.gov catalog search, the harness uses **real page/PDF
+  content** for the top few results — Tavily fetches and extracts this
+  server-side (`include_raw_content`), with this system's own HTML/PDF
+  extraction (`pypdf`) as a fallback when that's missing. That's what makes it
+  usable for actual research questions ("what has GAO said about X") instead
+  of returning dataset descriptions.
 - Cost control: fetched content is cached for 24h (reports don't change
   hour to hour), fetch is capped to the top 3 results per query, downloads are
   capped at 8MB, and everything is truncated before it reaches an LLM prompt.
@@ -235,19 +253,27 @@ Instead of hand-building an adapter per agency, coverage now comes from a
   and extracted. The harness is the fallback/supplement tier, not a
   replacement for it.
 
-**Status: built, not yet load-bearing.** It needs a `SEARCH_GOV_AFFILIATE` +
-`SEARCH_GOV_API_KEY` (free sign-up at search.gov) before it does anything live —
-until then `query_search_gov` returns a clean "not configured" error rather than
-silently failing. The exact request/response shape was implemented against
-search.gov's documented v2 API but **has not been smoke-tested against a live
-key** — do that before relying on it in production; search APIs occasionally
-rename fields between versions.
+**Status: built, not yet load-bearing.** It needs a `TAVILY_API_KEY` before it
+does anything live — until then `query_tavily` returns a clean "not
+configured" error rather than silently failing. The exact request/response
+shape was implemented against Tavily's documented REST API but **has not been
+smoke-tested against a live key** — do that before relying on it in
+production; search APIs occasionally rename fields or change how the key is
+passed (body vs. Authorization header) between versions.
+
+**A live production result already caught one real bug in this area**: a
+2026 border-policy claim mentioning "non-U.S. nationals" returned two
+irrelevant 2007-era House bills as its only evidence, with no Tavily results
+at all (Tavily wasn't configured yet). Root cause: the legislative-claim
+detector matched the bare substring `"s."` to catch Senate bill designators
+like "S. 1234" — but "U.S." also contains "s.", so nearly any claim mentioning
+"U.S." falsely triggered an unrelated Congress.gov search. Fixed with a proper
+bill-designator regex; see `_looks_legislative()` in orchestration.py.
 
 **Remaining work once the key is live:**
 - Smoke-test the real request/response shape; adjust field names if needed.
-- Tune result ranking (currently returns search.gov's default order) — may
-  want to prefer `.gov` reports over agency press releases for research
-  questions.
+- Tune the domain-trust list based on what actually shows up for real research
+  queries — the current list is a reasonable starting guess, not measured.
 - Feed Phase 0's eval set through this path specifically to measure whether
   fetched excerpts actually improve synthesis accuracy vs. snippet-only.
 
@@ -298,7 +324,7 @@ the trust problem entirely because the *data itself* makes the argument.
 - **Data.gov catalog keyword search as an evidence source. DONE.** It returned
   dataset descriptions, never values — the direct cause of the "surfaces old
   irrelevant data" complaint. Retired from the default query fan-out and
-  replaced by the search.gov harness (Phase 2); `query_datagov` still exists as
+  replaced by the Tavily research harness (Phase 2); `query_datagov` still exists as
   a module for a future *discovery* affordance ("here's a dataset you could
   explore"), clearly separated from evidence, but nothing calls it by default.
 - **`Inconclusive` as a user-facing output.** See Phase 1.

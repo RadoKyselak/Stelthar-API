@@ -3,7 +3,7 @@
 Two tiers:
   * Tier 1 — structured sources (BEA, Census, BLS, USAspending, Treasury) that
     return an exact, free, zero-hallucination-risk number. Always tried first.
-  * Tier 2 — the search.gov research harness, for anything structured sources
+  * Tier 2 — the Tavily research harness, for anything structured sources
     can't answer: qualitative claims, agency reports, GAO/CBO analysis. This
     replaced Data.gov catalog search as the default fallback, because catalog
     pages are dataset descriptions, not evidence — they were the direct cause
@@ -26,7 +26,7 @@ from api import (
     query_census_acs,
     query_bls,
     query_congress,
-    query_search_gov,
+    query_tavily,
     query_usaspending,
     query_treasury,
 )
@@ -187,7 +187,7 @@ def _build_tier2_tasks(
     claim_type: str,
     seen: Set[str],
 ) -> List[Tuple[str, Any]]:
-    """Research queries: the search.gov harness, plus Congress.gov for bills.
+    """Research queries: the Tavily harness, plus Congress.gov for bills.
 
     Unlike tier1, these return LLM-extracted excerpts rather than exact
     structured values — used when tier1 can't answer the claim at all, or as
@@ -199,10 +199,10 @@ def _build_tier2_tasks(
     # Cap breadth: fanning out every keyword to multiple APIs with no limit
     # floods the context with low-value hits and multiplies fetch cost.
     for kw in unique[:4]:
-        k = _key("search_gov", kw)
+        k = _key("tavily", kw)
         if k not in seen:
             seen.add(k)
-            tasks.append((k, query_search_gov(kw)))
+            tasks.append((k, query_tavily(kw)))
 
         if claim_type == "legislative" or _looks_legislative(kw):
             k = _key("congress", kw)

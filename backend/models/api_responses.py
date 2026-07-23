@@ -2,7 +2,7 @@ from typing import Literal, Optional, Union
 from typing_extensions import TypedDict
 
 SourceType = Literal[
-    "BEA", "BLS", "CENSUS", "CONGRESS", "DATA_GOV", "SEARCH_GOV",
+    "BEA", "BLS", "CENSUS", "CONGRESS", "DATA_GOV", "TAVILY",
     "TREASURY", "USASPENDING", "internal",
 ]
 ErrorStatus = Literal["failed", "missing_data"]
@@ -56,8 +56,8 @@ class USASpendingSourceData(BaseSourceData):
     unit_multiplier: int
     line_description: str
 
-class SearchGovSourceData(BaseSourceData):
-    """search.gov research harness response data."""
+class TavilySourceData(BaseSourceData):
+    """Tavily research harness response data."""
     content_excerpt: Optional[str]
 
 SourceData = Union[
@@ -68,7 +68,7 @@ SourceData = Union[
     DataGovSourceData,
     TreasurySourceData,
     USASpendingSourceData,
-    SearchGovSourceData,
+    TavilySourceData,
     BaseSourceData
 ]
 
