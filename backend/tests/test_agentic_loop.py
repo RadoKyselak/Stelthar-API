@@ -14,7 +14,7 @@ import pytest
 from services.critic import deterministic_gate, is_data_bearing, is_metadata_only
 from services.census_resolver import resolve_census, supported_concepts
 from services.verification_service import VerificationService
-from services.orchestration import _normalize_year, _build_tier1_tasks
+from services.orchestration import _normalize_year, _build_tier1_tasks, _looks_legislative
 
 
 # ---------------------------------------------------------------- critic gate
@@ -131,6 +131,24 @@ def test_invalid_bea_table_is_skipped():
     seen = set()
     tier1 = {"bea": {"TableName": "T99999", "Year": "2023", "LineCode": ["2"]}}
     assert _build_tier1_tasks(tier1, seen) == []
+
+
+def test_looks_legislative_does_not_false_positive_on_us():
+    """Regression: 'U.S.' contains the substring 's.', which used to falsely
+    trigger a Congress.gov bill search on almost any claim. Caught live —
+    a border-policy claim mentioning 'non-U.S. nationals' returned irrelevant
+    2007-era House bills as its only 'evidence'."""
+    assert _looks_legislative("Trump administration border releases non-U.S. nationals 2026") is False
+    assert _looks_legislative("U.S. Census population data") is False
+    assert _looks_legislative("U.S. federal spending 2023") is False
+
+
+def test_looks_legislative_still_detects_real_bill_designators():
+    assert _looks_legislative("S. 1234 immigration reform") is True
+    assert _looks_legislative("S.1234") is True
+    assert _looks_legislative("H.R. 5376 Inflation Reduction Act") is True
+    assert _looks_legislative("the bill passed the Senate") is True
+    assert _looks_legislative("CHIPS Act funding") is True
 
 
 def test_census_concept_query_also_backs_off_across_years():

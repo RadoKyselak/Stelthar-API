@@ -167,6 +167,21 @@ def _build_tier1_tasks(
     return tasks
 
 
+# Matches actual bill designators (S. 1234, H.R. 1234, H.Res. 12, S.Res. 12 —
+# always letters, a period, and a bill number). The previous check used a bare
+# substring test including "s.", which matches "U.S." — so any claim mentioning
+# "U.S." (nearly all of them) falsely triggered a Congress.gov bill search,
+# polluting evidence with irrelevant bills matched on unrelated keywords.
+_BILL_DESIGNATOR_RE = re.compile(r"\b(h\.\s?r\.|h\.\s?res\.|s\.\s?res\.|s\.)\s?\d+\b", re.IGNORECASE)
+
+
+def _looks_legislative(kw: str) -> bool:
+    kw_lower = kw.lower()
+    if any(t in kw_lower for t in (" bill", " act", " law")):
+        return True
+    return bool(_BILL_DESIGNATOR_RE.search(kw))
+
+
 def _build_tier2_tasks(
     keywords: List[str],
     claim_type: str,
@@ -189,9 +204,7 @@ def _build_tier2_tasks(
             seen.add(k)
             tasks.append((k, query_search_gov(kw)))
 
-        if claim_type == "legislative" or any(
-            t in kw.lower() for t in (" bill", " act", " law", "h.r.", "s.")
-        ):
+        if claim_type == "legislative" or _looks_legislative(kw):
             k = _key("congress", kw)
             if k not in seen:
                 seen.add(k)
