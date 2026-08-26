@@ -18,6 +18,7 @@ import httpx
 from config import USASPENDING_BASE_URL, logger
 from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from utils.parsing import parse_numeric_value
+from utils.urls import public_url
 from utils.retry import async_retry
 from utils.rate_limiter import get_quota_limiter
 
@@ -91,7 +92,7 @@ async def query_usaspending(params: Dict[str, Any]) -> List[Dict[str, Any]]:
             r = await client.get(url, params={"fiscal_year": year})
             r.raise_for_status()
             data = r.json()
-            request_url = str(r.url)
+            request_url = public_url(r.url)
     except httpx.HTTPStatusError as e:
         logger.error("USAspending HTTP error %s: %s", e.response.status_code, e.response.text[:200])
         return [{"error": f"USAspending API error: {e.response.status_code}", "source": "USASPENDING", "status": "failed"}]

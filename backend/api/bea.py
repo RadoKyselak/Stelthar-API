@@ -4,6 +4,7 @@ import httpx
 from config.constants import API_TIMEOUTS, BEA_CONFIG, RATE_LIMIT_QUOTAS
 from config import BEA_API_KEY, logger
 from utils.parsing import parse_numeric_value
+from utils.urls import public_url
 from utils.retry import async_retry
 from utils.rate_limiter import get_quota_limiter
 
@@ -42,7 +43,7 @@ async def query_bea(params: Dict[str, Any]) -> List[Dict[str, Any]]:
             r = await client.get(url, params=api_params)
             r.raise_for_status()
             payload = r.json()
-            request_url = str(r.url)
+            request_url = public_url(r.url)
     except httpx.HTTPStatusError as e:
         logger.error("BEA HTTP error %s: %s", e.response.status_code, e.response.text)
         return [{"error": f"BEA API error: {e.response.status_code}", "source": "BEA", "status": "failed"}]

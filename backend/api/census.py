@@ -4,6 +4,7 @@ import httpx
 from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from config import CENSUS_API_KEY, logger
 from utils.parsing import parse_numeric_value
+from utils.urls import public_url
 from utils.retry import async_retry
 from utils.rate_limiter import get_quota_limiter
 
@@ -88,7 +89,7 @@ async def query_census_acs(params: Dict[str, Any]) -> List[Dict[str, Any]]:
 
                 results.append({
                     "title": f"Census ACS: {primary_var} for {geo_name}",
-                    "url": str(r.url),
+                    "url": public_url(r.url),
                     "snippet": snippet,
                     "data_value": numeric_val,
                     "raw_data_value": data_value_raw,
