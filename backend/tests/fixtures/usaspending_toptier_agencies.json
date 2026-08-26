@@ -1,0 +1,64 @@
+{
+ "results": [
+  {
+   "agency_id": 1173,
+   "toptier_code": "097",
+   "abbreviation": "DOD",
+   "agency_name": "Department of Defense",
+   "congressional_justification_url": "https://www.defense.gov/cj",
+   "active_fy": "2026",
+   "active_fq": "3",
+   "outlay_amount": 1145176594768.8,
+   "obligated_amount": 1285021806246.13,
+   "budget_authority_amount": 2575166024522.84,
+   "current_total_budget_authority_amount": 16046843330623.99,
+   "percentage_of_total_budget_authority": 0.16047804365412865,
+   "agency_slug": "department-of-defense"
+  },
+  {
+   "agency_id": 806,
+   "toptier_code": "075",
+   "abbreviation": "HHS",
+   "agency_name": "Department of Health and Human Services",
+   "congressional_justification_url": "https://www.hhs.gov/cj",
+   "active_fy": "2026",
+   "active_fq": "3",
+   "outlay_amount": 2183919370120.56,
+   "obligated_amount": 2220752284024.05,
+   "budget_authority_amount": 3436168425359.96,
+   "current_total_budget_authority_amount": 16046843330623.99,
+   "percentage_of_total_budget_authority": 0.21413360587887928,
+   "agency_slug": "department-of-health-and-human-services"
+  },
+  {
+   "agency_id": 561,
+   "toptier_code": "036",
+   "abbreviation": "VA",
+   "agency_name": "Department of Veterans Affairs",
+   "congressional_justification_url": "https://www.va.gov/cj",
+   "active_fy": "2026",
+   "active_fq": "3",
+   "outlay_amount": 326248415091.18,
+   "obligated_amount": 333932040708.53,
+   "budget_authority_amount": 525429228986.12,
+   "current_total_budget_authority_amount": 16046843330623.99,
+   "percentage_of_total_budget_authority": 0.03274346350620776,
+   "agency_slug": "department-of-veterans-affairs"
+  },
+  {
+   "agency_id": 862,
+   "toptier_code": "080",
+   "abbreviation": "NASA",
+   "agency_name": "National Aeronautics and Space Administration",
+   "congressional_justification_url": "https://www.nasa.gov/cj",
+   "active_fy": "2026",
+   "active_fq": "3",
+   "outlay_amount": 18746274399.3,
+   "obligated_amount": 17949015256.39,
+   "budget_authority_amount": 43991652256.88,
+   "current_total_budget_authority_amount": 16046843330623.99,
+   "percentage_of_total_budget_authority": 0.0027414520943770788,
+   "agency_slug": "national-aeronautics-and-space-administration"
+  }
+ ]
+}

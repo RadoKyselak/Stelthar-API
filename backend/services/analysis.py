@@ -1,7 +1,8 @@
 from typing import Dict, Any
 import re
 from datetime import datetime
-from fastapi import HTTPException
+
+from exceptions import LLMException, MiradorException
 
 from config import logger
 from utils.parsing import extract_json_block
@@ -245,11 +246,25 @@ Claim: "The national debt is over $33 trillion."
         parsed = _apply_spending_plan_guardrails(claim, parsed)
         return parsed
 
-    except HTTPException as e:
-        logger.error("LLM failed generating plan: %s", getattr(e, "detail", str(e)))
-        fallback_plan["debug_exception"] = str(e)
+    except LLMException as e:
+        # The planner never ran. Everything downstream will therefore find no
+        # sources, and without this flag that outage is indistinguishable in the
+        # response from "no official data covers this claim" — which is a
+        # statement about the world rather than about our own availability.
+        logger.error("Planner LLM unavailable: %s", e.message)
+        fallback_plan["debug_exception"] = e.message
+        fallback_plan["degraded"] = True
+        fallback_plan["degraded_reason"] = "planner_llm_unavailable"
+        return _normalize_plan(fallback_plan, claim)
+    except MiradorException as e:
+        logger.exception("Planner failed with an application error.")
+        fallback_plan["debug_exception"] = e.message
+        fallback_plan["degraded"] = True
+        fallback_plan["degraded_reason"] = e.__class__.__name__
         return _normalize_plan(fallback_plan, claim)
     except Exception as e:
         logger.exception("Unexpected error generating plan. Falling back.")
         fallback_plan["debug_exception"] = str(e)
+        fallback_plan["degraded"] = True
+        fallback_plan["degraded_reason"] = "planner_unexpected_error"
         return _normalize_plan(fallback_plan, claim)

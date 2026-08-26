@@ -1,7 +1,15 @@
-from typing import Literal, List, Dict
+from typing import Literal, List, Dict, Optional
 from typing_extensions import TypedDict
 
+# What the synthesis step may conclude about a claim.
 VerdictType = Literal["Supported", "Contradicted", "Inconclusive"]
+
+# What the endpoint may return. Wider than VerdictType because the pipeline
+# can fail without reaching a conclusion, and "Error" is not a judgment about
+# the claim. It was previously absent, so _build_error_response produced a
+# payload the declared response_model rejected — meaning the entire graceful
+# degradation path raised instead of degrading.
+ResponseVerdictType = Literal["Supported", "Contradicted", "Inconclusive", "Error"]
 
 class EvidenceLink(TypedDict):
     """Individual evidence citation linking finding to source."""
@@ -20,7 +28,13 @@ class VerificationResponse(TypedDict):
     claim_original: str
     claim_normalized: str
     claim_type: str
-    verdict: VerdictType
+    # True when the pipeline failed before reaching a conclusion. A client MUST
+    # check this before showing the verdict: a degraded response carries the
+    # default "Inconclusive", which would otherwise read as a finding that no
+    # supporting data exists — a statement about the world, not about an outage.
+    degraded: bool
+    degraded_reason: Optional[str]
+    verdict: ResponseVerdictType
     confidence: float
     confidence_tier: Literal["High", "Medium", "Low"]
     confidence_breakdown: Dict[str, float]

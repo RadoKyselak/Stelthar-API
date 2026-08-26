@@ -1,0 +1,36 @@
+{
+ "data": [
+  {
+   "record_date": "2023-09-29",
+   "record_fiscal_year": "2023",
+   "tot_pub_debt_out_amt": "33167334044723.16"
+  }
+ ],
+ "meta": {
+  "count": 1,
+  "labels": {
+   "record_date": "Record Date",
+   "record_fiscal_year": "Fiscal Year",
+   "tot_pub_debt_out_amt": "Total Public Debt Outstanding"
+  },
+  "dataTypes": {
+   "record_date": "DATE",
+   "record_fiscal_year": "YEAR",
+   "tot_pub_debt_out_amt": "CURRENCY"
+  },
+  "dataFormats": {
+   "record_date": "YYYY-MM-DD",
+   "record_fiscal_year": "YYYY",
+   "tot_pub_debt_out_amt": "$10.20"
+  },
+  "total-count": 249,
+  "total-pages": 249
+ },
+ "links": {
+  "self": "&page%5Bnumber%5D=1&page%5Bsize%5D=1",
+  "first": "&page%5Bnumber%5D=1&page%5Bsize%5D=1",
+  "prev": null,
+  "next": "&page%5Bnumber%5D=2&page%5Bsize%5D=1",
+  "last": "&page%5Bnumber%5D=249&page%5Bsize%5D=1"
+ }
+}

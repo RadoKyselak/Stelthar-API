@@ -87,12 +87,22 @@ async def query_census_acs(params: Dict[str, Any]) -> List[Dict[str, Any]]:
                 data_value_raw = row_data.get(primary_var)
                 numeric_val = parse_numeric_value(data_value_raw)
 
+                # The period and geography MUST be stamped here. Without a
+                # `year`, _extract_source_years returns an empty set for Census
+                # rows, and the temporal-mismatch cap short-circuits entirely —
+                # so a 2022 ACS figure answering a 2024 claim was scored as a
+                # clean match. Census is the one adapter that deliberately
+                # substitutes adjacent years when the requested one is not yet
+                # published, which is exactly why it needs the label most.
                 results.append({
-                    "title": f"Census ACS: {primary_var} for {geo_name}",
+                    "title": f"Census ACS {year}: {primary_var} for {geo_name}",
                     "url": public_url(r.url),
                     "snippet": snippet,
                     "data_value": numeric_val,
                     "raw_data_value": data_value_raw,
+                    "year": str(year),
+                    "dataset": dataset,
+                    "geography": geo_name,
                     "raw_census_row": row_data
                 })
             return results
