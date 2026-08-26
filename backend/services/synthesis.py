@@ -1,5 +1,6 @@
 from typing import Dict, Any, List
-from fastapi import HTTPException
+
+from exceptions import LLMException, MiradorException
 from config.constants import LLM_CONFIG
 from config import logger
 from utils.parsing import extract_json_block
@@ -12,6 +13,7 @@ async def synthesize_finding_with_llm(
 ) -> Dict[str, Any]:
     
     default_response = {
+        "degraded": False,
         "verdict": "Inconclusive",
         "summary": "Could not determine outcome based on available data.",
         "justification": "No supporting government data was found or the analysis failed.",
@@ -146,10 +148,21 @@ async def synthesize_finding_with_llm(
             if isinstance(parsed.get("evidence_links"), list):
                 for link in parsed["evidence_links"]:
                     if isinstance(link, dict) and "finding" in link and "source_url" in link:
-                        best_match_url = source_map_for_linking.get(link["finding"])
-                        if not best_match_url:
+                        # Coerce before matching. A non-string finding (the
+                        # model returning a bare number, which the prompt
+                        # invites) previously raised TypeError here and was
+                        # swallowed as "no supporting data was found".
+                        finding = link.get("finding")
+                        if not isinstance(finding, str):
+                            finding = "" if finding is None else str(finding)
+                            link["finding"] = finding
+
+                        best_match_url = source_map_for_linking.get(finding)
+                        if not best_match_url and finding:
                             for text, url in source_map_for_linking.items():
-                                if link["finding"] in text or text in link["finding"]:
+                                if not isinstance(text, str):
+                                    continue
+                                if finding in text or text in finding:
                                     best_match_url = url
                                     break
                         link["source_url"] = best_match_url if best_match_url else link["source_url"]
@@ -177,11 +190,35 @@ async def synthesize_finding_with_llm(
             default_response["justification"] += " (LLM response parsing failed.)"
             return default_response
             
-    except HTTPException as e:
-        logger.error("LLM failed during synthesis: %s", getattr(e, "detail", str(e)))
-        default_response["justification"] += f" (LLM call failed: {e.detail})."
-        return default_response
-    except Exception as e:
+    except LLMException as e:
+        # The analysis service failed. That is NOT a finding about the claim,
+        # and must never be rendered as one.
+        logger.error("Synthesis LLM call failed: %s", e.message)
+        return {
+            **default_response,
+            "summary": "Verification could not be completed.",
+            "justification": (
+                f"The analysis service failed ({e.message}). This is not a "
+                f"judgment about the claim."
+            ),
+            "degraded": True,
+            "degraded_reason": "llm_unavailable",
+        }
+    except MiradorException as e:
+        logger.exception("Synthesis failed with an application error.")
+        return {
+            **default_response,
+            "summary": "Verification could not be completed.",
+            "justification": "The verification pipeline failed before reaching a conclusion.",
+            "degraded": True,
+            "degraded_reason": e.__class__.__name__,
+        }
+    except Exception:
         logger.exception("Unexpected error during LLM synthesis.")
-        default_response["justification"] += " (Unexpected analysis error.)"
-        return default_response
+        return {
+            **default_response,
+            "summary": "Verification could not be completed.",
+            "justification": "The verification pipeline failed before reaching a conclusion.",
+            "degraded": True,
+            "degraded_reason": "unexpected_error",
+        }

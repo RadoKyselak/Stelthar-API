@@ -118,6 +118,22 @@ class VerificationService:
             verdict = synthesis_result.get("verdict", "Inconclusive")
             summary_text = self._compose_summary(synthesis_result)
 
+            # A synthesis failure is an outage, not evidence about the claim.
+            # Without this the two are indistinguishable in the response, and
+            # the user reads "no supporting government data was found" — which
+            # is a statement about the world — when retrieval actually
+            # succeeded and only the analysis step died.
+            # Degradation can originate at any stage. Each one swallows its own
+            # exception and continues, so the flags have to be OR-ed rather than
+            # read from whichever stage happened to run last — a planner outage
+            # produces an empty source list, which synthesis then reports as
+            # "no relevant data sources found".
+            degraded = bool(synthesis_result.get("degraded")) or bool(analysis.get("degraded"))
+            degraded_reason = (
+                synthesis_result.get("degraded_reason")
+                or analysis.get("degraded_reason")
+            )
+
             confidence_breakdown = await self.confidence_scorer.compute_confidence(
                 sources=ranked_sources,
                 verdict=verdict,
@@ -143,10 +159,22 @@ class VerificationService:
                 duration, len(iterations_log), verdict, confidence_val,
             )
 
+            if degraded:
+                # Confidence is meaningless when the analysis never ran, and the
+                # summary must not read as a finding.
+                confidence_val = 0.0
+                confidence_tier = "Low"
+                summary_text = (
+                    "Verification could not be completed - the analysis service "
+                    "was unavailable. This is not a judgment about the claim."
+                )
+
             return {
                 "claim_original": claim,
                 "claim_normalized": claim_norm,
                 "claim_type": claim_type,
+                "degraded": degraded,
+                "degraded_reason": degraded_reason,
                 "verdict": verdict,
                 "confidence": confidence_val,
                 "confidence_tier": confidence_tier,
@@ -304,6 +332,8 @@ class VerificationService:
             "claim_original": claim,
             "claim_normalized": analysis.get("claim_normalized", claim),
             "claim_type": analysis.get("claim_type", "Other"),
+            "degraded": True,
+            "degraded_reason": "pipeline_exception",
             "verdict": "Error",
             "confidence": 0.0,
             "confidence_tier": "Low",
