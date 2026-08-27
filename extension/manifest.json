@@ -1,10 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Project Mirador",
-  "version": "1.7.0",
-  "description": "Highlight text and verify claims against official U.S. government data (BLS, BEA, Census, Congress.gov, Data.gov).",
-  "permissions": ["scripting", "activeTab", "storage", "contextMenus"],
-  "host_permissions": ["https://stelthar-api.vercel.app/*"],
+  "version": "1.8.0",
+  "description": "Look up official U.S. statistics and copy them with a full citation. Also verifies highlighted claims against BLS, Treasury and Census data.",
+  "permissions": [
+    "scripting",
+    "activeTab",
+    "storage",
+    "contextMenus",
+    "offscreen",
+    "notifications",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://stelthar-api.vercel.app/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -23,8 +33,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -32,5 +46,8 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "omnibox": {
+    "keyword": "mir"
   }
 }

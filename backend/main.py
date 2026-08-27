@@ -7,10 +7,11 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import check_api_keys_on_startup, logger
-from models import VerifyRequest
+from models import VerifyRequest, LookupRequest
 from models.verdicts import VerificationResponse
 from services.verification_service import VerificationService
 from services.verify_v2 import to_response_dict, verify as verify_v2
+from services.lookup import lookup, to_response_dict as lookup_to_response_dict
 from utils.validation import ValidationError
 from middleware.context import RequestContextMiddleware, get_request_id
 from exceptions import MiradorException, CircuitBreakerOpenException
@@ -181,6 +182,35 @@ async def verify_v2_endpoint(req: VerifyRequest) -> Dict[str, Any]:
         },
     )
     return to_response_dict(result)
+
+
+@app.post("/v2/lookup")
+async def lookup_endpoint(req: LookupRequest) -> Dict[str, Any]:
+    """Retrieval, not verification: the number and every citation form for it.
+
+    `/v2/verify` answers "is this claim true", which needs the caller to
+    already suspect something. This answers "what is the official figure", which
+    is what someone writing with data needs many times a day.
+
+    Tier 1 only — `model_calls` is always 0. A lookup that silently costs a
+    model call stops being instant, and the grounded tier cannot return a series
+    id and a stated period anyway, which is the point of the citation.
+
+    On a miss, `suggestions` names fetchable metrics rather than only reporting
+    the failure: coverage here is narrow on purpose, so the boundary has to be
+    visible to be usable.
+    """
+    result = await lookup(req.query.strip())
+    logger.info(
+        "lookup complete",
+        extra={
+            "request_id": get_request_id(),
+            "ok": result.ok,
+            "reason": result.reason,
+            "metric": result.metric,
+        },
+    )
+    return lookup_to_response_dict(result)
 
 
 @app.post("/verify", response_model=VerificationResponse)

@@ -36,6 +36,22 @@
         #evidence-links-list li { margin-bottom: 5px; }
         #evidence-links-list a { color: #0000EE; text-decoration: none; font-size: 12px; }
         #evidence-links-list a:hover { text-decoration: underline; }
+        /* --- lookup --- */
+        #lookup-input { width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; padding: 8px; font-family: 'Courier New', Courier, monospace; font-size: 13px; }
+        #lookup-hint { font-size: 11px; color: #999; margin-top: 4px; }
+        #lookup-result { display: none; margin-top: 10px; }
+        #lookup-value { font-size: 22px; font-weight: bold; color: #1a1a1a; }
+        #lookup-attribution { font-size: 12px; color: #666; margin-top: 2px; }
+        #lookup-caveat { font-size: 11px; color: #B8860B; margin-top: 6px; line-height: 1.4; }
+        #lookup-source-link { font-size: 11px; margin-top: 6px; }
+        #lookup-source-link a { color: #0000EE; }
+        .copy-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+        .copy-btn { flex: 1 1 auto; padding: 6px 8px; cursor: pointer; font-family: 'Courier New', Courier, monospace; font-size: 12px; background-color: #f0eadd; border: 1px solid #1a1a1a; border-radius: 3px; }
+        .copy-btn:hover { background-color: #e6e0cf; }
+        .copy-btn.copied { background-color: #d6efd6; border-color: #008000; }
+        #lookup-miss { display: none; margin-top: 10px; font-size: 12px; color: #555; line-height: 1.5; }
+        .sugg { display: inline-block; margin: 3px 4px 0 0; padding: 3px 6px; border: 1px dashed #888; border-radius: 3px; cursor: pointer; font-size: 11px; background: #f9f5ed; }
+        .sugg:hover { background: #efe8d8; }
         details#sources-dropdown { margin-top: 15px; border: 1px dashed #888; border-radius: 4px; background-color: #f9f5ed; }
         details#sources-dropdown summary { padding: 8px 10px; font-weight: bold; cursor: pointer; outline: none; font-size: 13px; }
         #sources-list { list-style: none; padding: 0 10px 10px 25px; margin: 0; font-size: 12px; max-height: 200px; overflow-y: auto; border-top: 1px dashed #aaa; }
@@ -69,6 +85,26 @@
 <body>
     <div id="main-title">Project Mirador</div>
     <div id="subtitle">Fact-checking with official U.S. government data</div>
+
+    <div class="section">
+        <div class="section-title">Look up a figure</div>
+        <input id="lookup-input" type="text" placeholder="unemployment 2023" autocomplete="off" spellcheck="false">
+        <div id="lookup-hint">Or from any tab: type <b>mir</b>, Tab, then your query.</div>
+        <div id="lookup-result">
+            <div id="lookup-value"></div>
+            <div id="lookup-attribution"></div>
+            <div id="lookup-caveat"></div>
+            <div id="lookup-source-link"></div>
+            <div class="copy-row">
+                <button class="copy-btn" data-format="inline">Copy cited</button>
+                <button class="copy-btn" data-format="note">Copy footnote</button>
+                <button class="copy-btn" data-format="markdown">Copy MD</button>
+                <button class="copy-btn" data-format="value">Copy value</button>
+            </div>
+        </div>
+        <div id="lookup-miss"></div>
+    </div>
+
     <div class="section">
         <div class="section-title">Claim</div>
         <div id="claim-text">Loading claim...</div>

@@ -262,3 +262,141 @@ document.addEventListener("DOMContentLoaded", () => {
 
     loadHistory();
 });
+
+// ===========================================================================
+// Lookup panel
+//
+// The popup is the discoverable surface; the omnibox is the fast one. Both
+// hit the same endpoint. Copying happens here rather than via the offscreen
+// document because a button click is a real user gesture, so the async
+// Clipboard API works directly and can carry both flavours.
+// ===========================================================================
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById("lookup-input");
+  const resultEl = document.getElementById("lookup-result");
+  const valueEl = document.getElementById("lookup-value");
+  const attrEl = document.getElementById("lookup-attribution");
+  const caveatEl = document.getElementById("lookup-caveat");
+  const linkEl = document.getElementById("lookup-source-link");
+  const missEl = document.getElementById("lookup-miss");
+  const buttons = Array.from(document.querySelectorAll(".copy-btn"));
+  if (!input) return;
+
+  let current = null;
+  let debounce = null;
+
+  const hideAll = () => {
+    resultEl.style.display = "none";
+    missEl.style.display = "none";
+  };
+
+  const showMiss = (result) => {
+    current = null;
+    resultEl.style.display = "none";
+    missEl.style.display = "block";
+    missEl.textContent = result.headline || "No match.";
+    (result.suggestions || []).slice(0, 5).forEach((s) => {
+      const chip = document.createElement("span");
+      chip.className = "sugg";
+      chip.textContent = s.example;
+      chip.addEventListener("click", () => {
+        input.value = s.example;
+        run(s.example);
+      });
+      missEl.appendChild(chip);
+    });
+  };
+
+  const showHit = (result) => {
+    current = result;
+    missEl.style.display = "none";
+    resultEl.style.display = "block";
+    const c = result.citations || {};
+    valueEl.textContent = c.value || result.value || "";
+    attrEl.textContent = c.attribution || "";
+    // A figure the agency did not publish, standing in for one it did, has to
+    // say so where the writer will actually read it.
+    caveatEl.textContent = c.caveat ? `Note: ${c.caveat}` : "";
+    linkEl.innerHTML = "";
+    if (c.url) {
+      const a = document.createElement("a");
+      a.href = c.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "View the source series";
+      linkEl.appendChild(a);
+    }
+    buttons.forEach((b) => {
+      b.classList.remove("copied");
+      b.textContent = b.dataset.label || b.textContent;
+    });
+  };
+
+  async function run(query) {
+    if (!query || query.trim().length < 2) {
+      hideAll();
+      return;
+    }
+    try {
+      const reply = await chrome.runtime.sendMessage({ type: "lookup", query: query.trim() });
+      if (!reply || !reply.ok) {
+        showMiss({ headline: `Lookup failed: ${(reply && reply.error) || "unknown error"}` });
+        return;
+      }
+      const result = reply.result;
+      if (result.ok) showHit(result);
+      else showMiss(result);
+    } catch (e) {
+      showMiss({ headline: `Lookup failed: ${e.message}` });
+    }
+  }
+
+  input.addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => run(input.value), 260);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      clearTimeout(debounce);
+      run(input.value);
+    }
+  });
+
+  async function copy(plain, html) {
+    try {
+      if (html && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": new Blob([plain], { type: "text/plain" }),
+            "text/html": new Blob([html], { type: "text/html" }),
+          }),
+        ]);
+        return true;
+      }
+      await navigator.clipboard.writeText(plain);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  buttons.forEach((btn) => {
+    btn.dataset.label = btn.textContent;
+    btn.addEventListener("click", async () => {
+      if (!current) return;
+      const c = current.citations || {};
+      const format = btn.dataset.format;
+      const plain = c[format] || c.inline || "";
+      // Only the inline form has a rich equivalent; a footnote pastes as text.
+      const ok = await copy(plain, format === "inline" ? c.html : "");
+      btn.classList.toggle("copied", ok);
+      btn.textContent = ok ? "Copied" : "Copy failed";
+      setTimeout(() => {
+        btn.classList.remove("copied");
+        btn.textContent = btn.dataset.label;
+      }, 1400);
+    });
+  });
+
+  input.focus();
+});
