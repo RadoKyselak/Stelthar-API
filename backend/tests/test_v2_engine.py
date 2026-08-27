@@ -142,6 +142,68 @@ class TestGeographyDoesNotSubstituteStates:
         assert resolve_geography("the unemployment rate rose") is None
 
 
+class TestGeographyFailsClosedOutsideTheUS:
+    """A named place that does not resolve must decline, not fall back to the US.
+
+    Reproduced against production before this fix, tier=structured, 0 model calls:
+
+        "The unemployment rate in France was 4% in 2023."  -> Supported
+        "The unemployment rate in Germany was 3% in 2023." -> Contradicted
+        "The unemployment rate on Mars was 4% in 2023."    -> Supported
+
+    Each was answered from LNS14000000, the US national series. resolve_geography
+    returned None for the unrecognised place, Request.geography was therefore None,
+    and mismatch_against skips the geography check entirely when it is None — so
+    the only guard that could have caught it was never consulted.
+    """
+
+    @pytest.mark.parametrize("country", ["France", "Germany", "Japan", "Canada"])
+    def test_foreign_country_does_not_resolve_to_the_nation(self, country):
+        g = resolve_geography(f"The unemployment rate in {country} was 4% in 2023.")
+        assert g is not None, "a named country must not read as 'no place named'"
+        assert not g.is_known
+        assert g.level == "unknown"
+
+    def test_unrecognised_proper_noun_declines(self):
+        g = resolve_geography("The unemployment rate on Mars was 4% in 2023.")
+        assert g is not None and not g.is_known
+
+    def test_continent_beats_the_national_phrase(self):
+        # "america" is a national phrase, so an earlier ordering answered
+        # "South America" with the US series.
+        g = resolve_geography("Unemployment in South America rose in 2023.")
+        assert g is not None and not g.is_known
+
+    def test_claim_naming_no_place_still_returns_none(self):
+        # None means "no geography constraint", which is legitimate and must
+        # keep working — the whole fix rests on these two cases being distinct.
+        assert resolve_geography("The unemployment rate was 3.6% in 2023.") is None
+
+    @pytest.mark.parametrize("text", [
+        "The unemployment rate in December 2023 was 3.7%.",
+        "Inflation was 9.1% in June 2022.",
+        "The unemployment rate in Q2 was 4%.",
+    ])
+    def test_locative_fallback_does_not_fire_on_non_places(self, text):
+        assert resolve_geography(text) is None
+
+    def test_us_geographies_are_unaffected(self):
+        assert resolve_geography("unemployment in Ohio").level == "state"
+        assert resolve_geography("unemployment in the United States").level == "nation"
+        assert resolve_geography("the population of New York City").level == "place"
+
+    def test_unknown_geography_is_refused_by_the_guard(self):
+        dp = _dp_pct(3.6, 2023)
+        request = Request(metric="unemployment_rate", year=2023,
+                          geography=Geography.unknown("France"))
+        assert not dp.answers(request)
+        assert "France" in dp.mismatch_against(request)
+
+    def test_unknown_geography_never_matches(self):
+        assert not Geography.national().matches(Geography.unknown("France"))
+        assert not Geography.unknown("France").matches(Geography.national())
+
+
 # ===========================================================================
 # metric matching
 # ===========================================================================
