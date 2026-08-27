@@ -323,10 +323,17 @@ async def verify(claim: str, allow_grounding: bool = True) -> VerificationV2:
 
     hint = ""
     if blocked == GEOGRAPHY_UNSUPPORTED and parsed.geography:
-        hint = (
-            f"The claim is about {parsed.geography.name}, which is below the level "
-            f"the official series covers. Find a figure for that specific place."
-        )
+        if not parsed.geography.is_known:
+            hint = (
+                f"The claim is about {parsed.geography.name}, which is not a U.S. "
+                f"geography. Every structured series here is U.S.-only, so find the "
+                f"figure published by that jurisdiction's own statistical agency."
+            )
+        else:
+            hint = (
+                f"The claim is about {parsed.geography.name}, which is below the level "
+                f"the official series covers. Find a figure for that specific place."
+            )
 
     g = await ground_claim(text, context_hint=hint)
     if not g.ok:

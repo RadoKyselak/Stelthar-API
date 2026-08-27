@@ -32,6 +32,10 @@ QUARTERLY = "quarterly"
 POINT_IN_TIME = "point_in_time"
 UNKNOWN_PERIOD = "unknown"
 
+# Geography levels. UNKNOWN_GEOGRAPHY is the counterpart of Period.unknown():
+# the claim named a place, and we could not resolve it to an official one.
+UNKNOWN_GEOGRAPHY = "unknown"
+
 _MONTH_NAMES = {
     1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
     7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December",
@@ -105,9 +109,30 @@ class Geography:
     def national() -> "Geography":
         return Geography(name="United States", level="nation")
 
+    @staticmethod
+    def unknown(name: str = "") -> "Geography":
+        """A place the claim named that could not be resolved to an official one.
+
+        Distinct from `None`, which means the claim named no place at all and is
+        therefore about whatever the series covers. Collapsing those two cases is
+        what let "the unemployment rate in France was 4%" be answered Supported
+        with the US national series: France did not resolve, resolution returned
+        None, and None was read as "no geography constraint".
+        """
+        return Geography(name=name or "an unidentified place",
+                         level=UNKNOWN_GEOGRAPHY)
+
+    @property
+    def is_known(self) -> bool:
+        return self.level != UNKNOWN_GEOGRAPHY
+
     def matches(self, requested: "Geography") -> bool:
         if requested is None:
             return True
+        # Fails CLOSED, like the period guard: an unresolved place on either side
+        # is a mismatch, never an implicit pass.
+        if not self.is_known or not requested.is_known:
+            return False
         if self.level != requested.level:
             return False
         if self.fips and requested.fips:
@@ -171,6 +196,12 @@ class Datapoint:
                     f"asked for calendar year {request.year}, evidence covers "
                     f"{self.observed.describe()}"
                 )
+
+        if request.geography is not None and not request.geography.is_known:
+            return (
+                f"the claim is about {request.geography.name}, which is not an "
+                f"official U.S. geography; evidence is for {self.geography.name}"
+            )
 
         if request.geography is not None and not self.geography.matches(request.geography):
             return (
