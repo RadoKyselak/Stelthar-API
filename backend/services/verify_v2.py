@@ -68,7 +68,7 @@ class VerificationV2:
     notes: List[str] = field(default_factory=list)
 
 
-async def _fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
+async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
     """Dispatch to the right free government API. No model call."""
     spec: MetricSpec = parsed.metric
     year = parsed.year
@@ -244,7 +244,7 @@ async def verify(claim: str, allow_grounding: bool = True) -> VerificationV2:
     if blocked is None:
         structured_ran = True
         try:
-            evidence = await _fetch_structured(parsed)
+            evidence = await fetch_structured(parsed)
         except SourceUnavailable as e:
             # Do not fall through to "not published". The source failed; say so.
             logger.warning("Source unavailable for %r: %s", text[:80], e)

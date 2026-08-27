@@ -13,7 +13,7 @@ from .claims import (
     ClaimAnalysis,
     ClaimType,
     APIQueryPlan,
-    VerifyRequest,
+    VerifyRequest, LookupRequest,
 )
 from .verdicts import (
     VerdictType,

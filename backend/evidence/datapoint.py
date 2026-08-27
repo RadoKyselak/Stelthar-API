@@ -82,7 +82,13 @@ class Period:
             return False
         return self.kind == FISCAL_YEAR and self.year == year
 
-    def describe(self) -> str:
+    # A basis longer than this is an explanation, not a label: it belongs on
+    # its own line rather than inside a parenthetical in someone's sentence.
+    # "annual average" fits; "computed as the mean of 12 monthly observations,
+    # to 1 dp" does not, and jammed inline it makes the citation unusable.
+    SHORT_BASIS_CHARS = 20
+
+    def describe(self, short: bool = False) -> str:
         if not self.is_known:
             return "period unknown"
         if self.kind == FISCAL_YEAR:
@@ -95,7 +101,25 @@ class Period:
             base = f"as of {self.record_date}"
         else:
             base = str(self.year)
-        return f"{base} ({self.basis})" if self.basis else base
+        if not self.basis:
+            return base
+        if short:
+            # Space-joined, not parenthesised: this string is itself about to
+            # be placed inside "3.7% (…)", and nested parens are unreadable.
+            return base if len(self.basis) > self.SHORT_BASIS_CHARS else f"{base} {self.basis}"
+        return f"{base} ({self.basis})"
+
+    @property
+    def long_basis(self) -> str:
+        """The basis when it is too long to sit inline — otherwise empty.
+
+        Callers surface this as a caveat beside the citation. It is never
+        dropped: a figure the agency did not publish, standing in for one it
+        did, has to say so somewhere the writer will read it.
+        """
+        if self.basis and len(self.basis) > self.SHORT_BASIS_CHARS:
+            return self.basis
+        return ""
 
 
 @dataclass(frozen=True)
