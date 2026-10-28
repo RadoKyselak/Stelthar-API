@@ -165,7 +165,7 @@ CLAIM: '''{claim}'''{hint}
 Answer in exactly this format, one field per line, nothing before or after:
 
 VERDICT: SUPPORTED | MOSTLY_ACCURATE | CONTRADICTED | MISLEADING | NO_EVIDENCE | NOT_EMPIRICAL
-OFFICIAL_VALUE: the authoritative figure with its unit, or NONE
+OFFICIAL_VALUE: only the authoritative figure and its unit, e.g. "4.9% annual rate" (at most 10 words), or NONE
 PERIOD: the period the figure covers, or NONE
 SOURCE_ORG: the organisation that published it, or NONE
 EXPLANATION: two sentences comparing the claim to what the source says"""

@@ -108,7 +108,8 @@ class TestWebSearchDisplay:
         assert [s["domain"] for s in d["sources"]] == ["insee.fr", "example.com"]
         assert all(s["url"].startswith("https://") for s in d["sources"])
         assert d["method"]["kind"] == "web_search" and "(1 official)" in d["method"]["text"]
-        assert d["reported_value"] == "7.3%"
+        assert d["reported_value"] == "7.3%" and d["reported_context"] == "2023 \u00b7 INSEE"
+        assert d["summary"] == "INSEE reports 7.3%."
 
 
 class TestFormatting:

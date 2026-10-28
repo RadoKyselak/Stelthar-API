@@ -74,6 +74,9 @@ class VerificationV2:
     # One entry per figure compared: the claim's number beside the official
     # one, with period, place and the size of any gap. Two for a two-point claim.
     points: List[Dict[str, Any]] = field(default_factory=list)
+    # Web-search answers: the figure the search reported, kept apart from the
+    # explanation so a client can show each once.
+    reported: Dict[str, str] = field(default_factory=dict)
 
 
 async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
@@ -300,6 +303,8 @@ def _grounded_to_result(
         parsed=_parsed_summary(parsed),
         search_suggestions_html=g.search_suggestions_html or None,
         notes=[f"search queries: {', '.join(g.search_queries)}"] if g.search_queries else [],
+        reported={"value": g.official_value or "", "period": g.period or "",
+                  "source_org": g.source_org or "", "explanation": g.explanation or ""},
     )
 
 

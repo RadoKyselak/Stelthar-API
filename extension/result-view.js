@@ -88,6 +88,9 @@
 .mv-src-line { margin-top:2px; font-size:12.5px; color:var(--mv-muted); overflow-wrap:anywhere; }
 .mv-src-line code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--mv-ink); }
 .mv-src-open { margin-top:4px; font-size:12.5px; color:var(--mv-link); font-weight:550; }
+.mv-more { font: inherit; font-size:12.5px; font-weight:600; color:var(--mv-link); background:none;
+  border:1px dashed var(--mv-line); border-radius:10px; padding:8px; cursor:pointer; }
+.mv-more:hover { border-color: var(--mv-faint); }
 .mv-method { margin-top:16px; padding-top:12px; border-top:1px solid var(--mv-line);
   display:flex; gap:10px; font-size:12.5px; color:var(--mv-muted); }
 .mv-method svg { width:18px; height:18px; flex:none; color:var(--mv-fg); margin-top:1px; }
@@ -357,8 +360,9 @@
 
     if (d.reported_value) {
       const r = el("div", "mv-reported");
-      r.appendChild(el("div", "mv-k", "Reported official figure"));
+      r.appendChild(el("div", "mv-k", "Figure found"));
       r.appendChild(el("div", "mv-v", d.reported_value));
+      if (d.reported_context) r.appendChild(el("div", "mv-ctx", d.reported_context));
       root.appendChild(r);
     }
 
@@ -387,7 +391,18 @@
       root.appendChild(el("div", "mv-h", data.length > 1 || web.length > 1 ? "Sources" : "Source"));
       const list = el("div", "mv-sources");
       data.forEach((s) => list.appendChild(dataSourceEl(s)));
-      web.slice(0, 6).forEach((s) => list.appendChild(webSourceEl(s)));
+      const shown = data.length ? 2 : 3;
+      web.slice(0, shown).forEach((s) => list.appendChild(webSourceEl(s)));
+      const rest = web.slice(shown, 6);
+      if (rest.length) {
+        const more = el("button", "mv-more", `Show ${rest.length} more source${rest.length > 1 ? "s" : ""}`);
+        more.type = "button";
+        more.addEventListener("click", () => {
+          rest.forEach((s) => list.insertBefore(webSourceEl(s), more));
+          more.remove();
+        });
+        list.appendChild(more);
+      }
       root.appendChild(list);
     }
 

@@ -322,14 +322,25 @@ def build_display(v) -> Dict[str, Any]:
         if c and c not in notes:
             notes.append(c)
 
+    summary = (v.headline or "").strip()
+    reported = getattr(v, "reported", None) or {}
+    reported_value, reported_context = "", ""
+    if v.tier == "grounded" and reported.get("value"):
+        reported_value = reported["value"]
+        reported_context = " \u00b7 ".join(x for x in (reported.get("period"),
+                                                      reported.get("source_org")) if x)
+        # The figure is shown in its own box; the summary is the explanation.
+        summary = reported.get("explanation") or summary
+
     return {
         "status": status,
         "verdict": {"key": key, "label": label, "meaning": meaning},
-        "summary": (v.headline or "").strip(),
+        "summary": summary,
         "confidence": _confidence(v),
         "reason": reason,
         "comparisons": [_comparison(p) for p in (v.points or [])],
-        "reported_value": v.official_value if (v.tier == "grounded" and v.official_value) else "",
+        "reported_value": reported_value,
+        "reported_context": reported_context,
         "sources": sources,
         "method": _method(v, sources),
         "notes": notes,
