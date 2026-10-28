@@ -22,7 +22,7 @@ is one whose cost grows.
 """
 import asyncio
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Dict, List, Optional
 
 from claims.metrics import MetricSpec
@@ -78,11 +78,24 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
     year = parsed.year
 
     if spec.source == "TREASURY":
+        if spec.treasury_metric in ("deficit", "receipts", "outlays"):
+            return await treasury_source.fetch_budget_total(spec.treasury_metric, year)
         return await treasury_source.fetch_national_debt(
             year=year, year_basis=parsed.year_basis
         )
 
     if spec.source == "BLS":
+        series_id = spec.series_id
+        geo = parsed.geography
+        if geo is not None and geo.level == "state" and geo.fips and spec.state_series_annual:
+            template = spec.state_series_monthly if parsed.month else spec.state_series_annual
+            series_id = template.format(fips=geo.fips)
+        if spec.bls_kind == "price" and year is None:
+            # "Gas is $3 a gallon" is about now: the latest monthly price.
+            return await bls_source.fetch_latest_monthly(
+                spec.metric, spec.label, series_id, spec.family
+            )
+        spec = replace(spec, series_id=series_id)
         if year is None:
             # A present-tense claim wants the most recent complete year.
             from datetime import datetime, timezone
@@ -112,6 +125,8 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
         return await census_source.fetch(spec, year, geo)
 
     if spec.source == "BEA":
+        if parsed.quarter is not None and year is not None:
+            return await bea_source.fetch_quarter(spec, year, parsed.quarter)
         return await bea_source.fetch(spec, year)
 
     return []
@@ -151,25 +166,39 @@ def _structured_is_applicable(parsed: ParsedClaim) -> Optional[str]:
     return None
 
 
-def _soften_for_alternate_measure(parsed: ParsedClaim, v: Verdict) -> Verdict:
-    """A mismatch against one of two official measures is not a contradiction.
+def _alternate_measure_applies(parsed: ParsedClaim, v: Verdict) -> bool:
+    """Only a near-miss can be explained by a different official survey.
 
-    Census headlines median household income and the poverty rate from CPS
-    ASEC, while the wired series is ACS. They differ by design ($80,610 vs
-    $77,719 for 2023 median income), so a claim quoting the CPS figure is
-    correct and must not be reported as Contradicted on the ACS number alone.
-    """
+    Census's CPS and ACS medians differ by a few percent; a claim of $10 gas
+    against $3.30 is not a survey difference, it is wrong."""
+    spec = parsed.metric
+    if not (spec and spec.alternate_measure and v.verdict == CONTRADICTED):
+        return False
+    if v.relative_delta is None:
+        return False
+    return abs(v.relative_delta) <= spec.alternate_band
+
+
+def _soften_for_alternate_measure(parsed: ParsedClaim, v: Verdict) -> Verdict:
+    """A near-miss against one of several official measures is not a
+    contradiction. Census headlines median household income and the poverty
+    rate from CPS ASEC while the wired series is ACS ($80,610 vs $77,719 for
+    2023 median income); EIA and BLS publish different gas price averages."""
+    if not _alternate_measure_applies(parsed, v):
+        return v
     alt = parsed.metric.alternate_measure
+    source = v.evidence[0].source if v.evidence else "the agency"
     return Verdict(
         verdict=NO_VERDICT, confidence=LOW, reason=ALTERNATE_MEASURE,
         headline=(
-            f"{v.headline} Census also publishes {alt}, which differs from the ACS "
-            f"figure by design; the claim may be quoting that one."
+            f"{v.headline} Another official measure also exists ({alt}); it differs "
+            f"from the {source} figure by design, and the claim may be quoting it."
         ),
         claimed_display=v.claimed_display, official_display=v.official_display,
         delta_display=v.delta_display, relative_delta=v.relative_delta,
         evidence=v.evidence,
-        caveats=v.caveats + [f"Not marked wrong on the ACS figure alone: Census also publishes {alt}."],
+        caveats=v.caveats + [f"Not marked wrong on the {source} figure alone: another "
+                             f"official measure exists ({alt})."],
     )
 
 
@@ -184,9 +213,24 @@ async def _safe_ground(text: str, hint: str, client_ip: Optional[str] = None,
         return GroundedAnswer(ok=False, error=f"internal error: {type(e).__name__}")
 
 
+NO_SOURCE = "no_source_found"
+
+
 def _grounded_to_result(
     claim: str, parsed: ParsedClaim, g: GroundedAnswer, started: float
 ) -> VerificationV2:
+    # A government-data fact checker does not hand down a verdict it cannot
+    # source. An AI answer with no retrieved page behind it is not shown as
+    # Supported / Contradicted, however plausible it sounds.
+    if not g.citations and g.verdict in ("SUPPORTED", "CONTRADICTED", "MISLEADING"):
+        return VerificationV2(
+            claim=claim, verdict=NO_VERDICT, confidence=LOW,
+            headline=("No source could be found to check this claim against, so no "
+                      "verdict is given."),
+            reason=NO_SOURCE, tier=TIER_GROUNDED, model_calls=g.model_calls,
+            elapsed_seconds=round(time.monotonic() - started, 2),
+            parsed=_parsed_summary(parsed),
+        )
     verdict_map = {
         "SUPPORTED": SUPPORTED,
         "CONTRADICTED": CONTRADICTED,
@@ -290,6 +334,78 @@ def _verdict_to_result(
     )
 
 
+_TIER_RANK = {LOW: 0, MEDIUM: 1, HIGH: 2}
+
+
+def _is_two_point(parsed: ParsedClaim) -> bool:
+    """"Unemployment fell from 8.1% in 2020 to 3.6% in 2023": two years, two
+    values, each checkable on its own. Pairing is by order of appearance,
+    which matches how these claims are written ("from X in A to Y in B",
+    "X in B, down from Y in A")."""
+    return (
+        parsed.metric is not None
+        and len(parsed.all_years or []) == 2
+        and len(parsed.all_values or []) == 2
+        and parsed.comparator == "equals"
+        and parsed.month is None and parsed.quarter is None
+        and not parsed.has_unresolved_period
+    )
+
+
+async def _verify_two_points(text: str, parsed: ParsedClaim, started: float) -> Optional[VerificationV2]:
+    spec = parsed.metric
+    verdicts: List[Verdict] = []
+    for year, value in zip(parsed.all_years, parsed.all_values):
+        if value.family == "unknown":
+            value = replace(value, family=spec.family)
+        sub = replace(parsed, year=year, claimed_value=value, all_years=[year],
+                      all_values=[value],
+                      year_is_future=bool(parsed.year_basis == "calendar" and year > datetime_now_year()))
+        if sub.year_is_future:
+            return None
+        try:
+            evidence = await fetch_structured(sub)
+        except SourceUnavailable:
+            return None  # the normal path reports the outage
+        except Exception:
+            logger.exception("Two-point lookup failed for %r", text[:120])
+            return None
+        v = assess(sub, evidence)
+        v = _soften_for_alternate_measure(sub, v)
+        verdicts.append(v)
+
+    if any(v.verdict == NO_VERDICT for v in verdicts):
+        verdict, reason = NO_VERDICT, next(v.reason for v in verdicts if v.verdict == NO_VERDICT)
+    elif any(v.verdict == CONTRADICTED for v in verdicts):
+        verdict, reason = CONTRADICTED, None
+    else:
+        verdict, reason = SUPPORTED, None
+
+    headline = " ".join(f"{y}: {v.headline}" for y, v in zip(parsed.all_years, verdicts))
+    caveats: List[str] = []
+    for v in verdicts:
+        for c in v.caveats:
+            if c not in caveats:
+                caveats.append(c)
+    evidence = [d.to_dict() for v in verdicts for d in v.evidence]
+    confidence = min((v.confidence for v in verdicts), key=lambda t: _TIER_RANK.get(t, 0))
+    return VerificationV2(
+        claim=text, verdict=verdict, confidence=confidence if verdict != NO_VERDICT else LOW,
+        headline=headline, reason=reason, caveats=caveats, evidence=evidence,
+        claim_value=" → ".join(v.claimed_display for v in verdicts if v.claimed_display) or None,
+        official_value=" → ".join(v.official_display for v in verdicts if v.official_display) or None,
+        tier=TIER_STRUCTURED, model_calls=0,
+        elapsed_seconds=round(time.monotonic() - started, 2),
+        parsed=_parsed_summary(parsed),
+        notes=["two-point claim: each value checked against its own year"],
+    )
+
+
+def datetime_now_year() -> int:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).year
+
+
 async def verify(claim: str, allow_grounding: bool = True,
                  client_ip: Optional[str] = None) -> VerificationV2:
     """Verify a claim. Never raises; every failure becomes a stated reason."""
@@ -303,6 +419,11 @@ async def verify(claim: str, allow_grounding: bool = True,
 
     parsed = parse_claim(text)
     blocked = _structured_is_applicable(parsed)
+
+    if blocked is None and _is_two_point(parsed):
+        two = await _verify_two_points(text, parsed, started)
+        if two is not None and (two.verdict != NO_VERDICT or not allow_grounding):
+            return two
     structured_ran = False
 
     if blocked is None:
@@ -341,8 +462,7 @@ async def verify(claim: str, allow_grounding: bool = True,
 
         if evidence:
             verdict = assess(parsed, evidence)
-            if verdict.verdict == CONTRADICTED and parsed.metric.alternate_measure:
-                verdict = _soften_for_alternate_measure(parsed, verdict)
+            verdict = _soften_for_alternate_measure(parsed, verdict)
             # A structured answer that landed cleanly is the best outcome: exact
             # number, stated period, zero model calls.
             if verdict.verdict != NO_VERDICT or not allow_grounding:

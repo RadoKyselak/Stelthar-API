@@ -23,7 +23,7 @@ import httpx
 from config import BEA_API_KEY, logger
 from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from evidence.cache import TTL_IMMUTABLE, TTL_VOLATILE, cached
-from evidence.datapoint import ANNUAL, Datapoint, Geography, Period
+from evidence.datapoint import ANNUAL, QUARTERLY, Datapoint, Geography, Period
 from evidence.sources import SourceUnavailable
 from evidence.units import PERCENT, Quantity, parse_number, scale_from_exponent
 from utils.rate_limiter import get_quota_limiter
@@ -61,7 +61,7 @@ def _bea_error(payload: Dict[str, Any]) -> Optional[str]:
     return str(err)
 
 
-async def _fetch_table(table: str, years: List[int]) -> Optional[Dict[str, Any]]:
+async def _fetch_table(table: str, years: List[int], frequency: str = "A") -> Optional[Dict[str, Any]]:
     if not BEA_API_KEY:
         raise SourceUnavailable("BEA", "BEA_API_KEY not configured")
 
@@ -71,7 +71,7 @@ async def _fetch_table(table: str, years: List[int]) -> Optional[Dict[str, Any]]
         "method": "GetData",
         "DataSetName": "NIPA",
         "TableName": table,
-        "Frequency": "A",
+        "Frequency": frequency,
         "Year": year_param,
         "ResultFormat": "json",
     }
@@ -103,13 +103,23 @@ async def _fetch_table(table: str, years: List[int]) -> Optional[Dict[str, Any]]
     current = datetime.now(timezone.utc).year
     # Recent years are revised every July and September; older ones rarely.
     ttl = TTL_VOLATILE * 24 if max(years) >= current - 2 else TTL_IMMUTABLE
-    return await cached("bea", f"{table}:{year_param}", ttl, _load)
+    return await cached("bea", f"{table}:{frequency}:{year_param}", ttl, _load)
+
+
+def _parse_time_period(period: str):
+    """(year, quarter) from BEA's TimePeriod: "2023" or "2026Q2"."""
+    period = (period or "").strip().upper()
+    if len(period) == 4 and period.isdigit():
+        return int(period), None
+    if len(period) == 6 and period[:4].isdigit() and period[4] == "Q" and period[5] in "1234":
+        return int(period[:4]), int(period[5])
+    return None, None
 
 
 def _row_to_datapoint(spec, row: Dict[str, Any], api_url: str) -> Optional[Datapoint]:
-    period = str(row.get("TimePeriod") or "").strip()
-    if not (len(period) == 4 and period.isdigit()):
-        return None  # annual request; anything else is not what we asked for
+    year, quarter = _parse_time_period(str(row.get("TimePeriod") or ""))
+    if year is None:
+        return None
     raw = row.get("DataValue")
     value = parse_number(raw)
     if value is None:
@@ -122,8 +132,13 @@ def _row_to_datapoint(spec, row: Dict[str, Any], api_url: str) -> Optional[Datap
         quantity=Quantity(magnitude=value, family=spec.family, raw=str(raw)),
         metric=spec.metric,
         label=spec.label,
-        observed=Period(year=int(period), kind=ANNUAL,
-                        basis="annual" if spec.family != PERCENT else "annual, vs prior year"),
+        observed=(
+            Period(year=year, kind=QUARTERLY, quarter=quarter,
+                   basis="seasonally adjusted annual rate")
+            if quarter else
+            Period(year=year, kind=ANNUAL,
+                   basis="annual" if spec.family != PERCENT else "annual, vs prior year")
+        ),
         geography=Geography.national(),
         source="BEA",
         source_url=table_permalink(spec.bea_table),
@@ -132,7 +147,10 @@ def _row_to_datapoint(spec, row: Dict[str, Any], api_url: str) -> Optional[Datap
         raw_value=str(raw),
         extra={"table": spec.bea_table, "line": spec.bea_line,
                "line_description": desc, "api_url": api_url,
-               "metric_name": row.get("METRIC_NAME")},
+               "metric_name": row.get("METRIC_NAME"),
+               **({"caveat": ("BEA revises quarterly GDP several times (advance, second and "
+                              "third estimates, then annual updates); this is the latest "
+                              "published estimate.")} if quarter else {})},
     )
 
 
@@ -164,3 +182,19 @@ async def fetch(spec, year: Optional[int]) -> List[Datapoint]:
     # year there is only one.
     points.sort(key=lambda p: p.observed.year or 0, reverse=True)
     return points[:1]
+
+
+async def fetch_quarter(spec, year: int, quarter: int) -> List[Datapoint]:
+    """One quarter's figure (for T10101 line 1: real GDP growth at a
+    seasonally adjusted annual rate). Matched on the row's own TimePeriod."""
+    blob = await _fetch_table(spec.bea_table, [year], frequency="Q")
+    if not blob:
+        return []
+    for r in blob["rows"]:
+        if not _matches_line(spec, r):
+            continue
+        if _parse_time_period(str(r.get("TimePeriod") or "")) != (year, quarter):
+            continue
+        dp = _row_to_datapoint(spec, r, blob["url"])
+        return [dp] if dp else []
+    return []

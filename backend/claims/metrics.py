@@ -60,6 +60,27 @@ class MetricSpec:
     # vs ACS). A claim quoting the other one is not wrong, so a mismatch
     # against ACS alone must not be reported as Contradicted.
     alternate_measure: str = ""
+    # A variant of another metric selected by a qualifier in the claim, e.g.
+    # the Black unemployment rate. `qualifier` is a regex; the parser switches
+    # from `parent` to this spec when it matches, and the qualifier is then the
+    # metric's own universe rather than an unsupported subgroup.
+    parent: Optional[str] = None
+    qualifier: Optional[str] = None
+    # BLS LAUS series for a state, formatted with the 2-digit FIPS code:
+    # annual figures use the not-seasonally-adjusted series (the basis of the
+    # official annual average), monthly ones the seasonally adjusted series.
+    state_series_annual: Optional[str] = None
+    state_series_monthly: Optional[str] = None
+    # Federal budget totals are reported by fiscal year; a claim saying "in
+    # 2024" means FY2024. The datapoint says so explicitly.
+    fiscal_year_default: bool = False
+    # Floor for the equality tolerance as a share of the official value.
+    # Survey prices are quoted loosely ("$3.50 a gallon"), and different
+    # surveys (BLS, EIA, AAA) differ by a few percent.
+    min_relative_tolerance: float = 0.0
+    # How far apart two official measures can plausibly be. A miss larger
+    # than this is Contradicted even when an alternate measure exists.
+    alternate_band: float = 0.10
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +97,10 @@ _SPECS: List[MetricSpec] = [
         family=PERCENT, series_id="LNS14000000", bls_kind="rate",
         phrases=("unemployment rate", "unemployment", "jobless rate",
                  "rate of unemployment", "out of work"),
-        notes="Seasonally adjusted, 16 years and over.",
+        geo_levels=("nation", "state"),
+        state_series_annual="LAUST{fips}0000000000003",
+        state_series_monthly="LASST{fips}0000000000003",
+        notes="Seasonally adjusted, 16 years and over. States: BLS LAUS.",
     ),
     MetricSpec(
         metric="labor_force_participation", label="Labor force participation rate",
@@ -96,6 +120,108 @@ _SPECS: List[MetricSpec] = [
         source="BLS", family=USD, series_id="CES0500000003", bls_kind="rate",
         phrases=("average hourly earnings", "average hourly wage", "hourly earnings"),
     ),
+    # ---- Unemployment by group (BLS CPS) ---------------------------------
+    # Selected by qualifier ("the unemployment rate for Black workers") or by
+    # phrase ("Black unemployment"). National only.
+    *[
+        MetricSpec(
+            metric=f"unemployment_rate_{key}", label=f"Unemployment rate, {label}",
+            source="BLS", family=PERCENT, series_id=series, bls_kind="rate",
+            parent="unemployment_rate", qualifier=qualifier, phrases=phrases,
+            notes=note,
+        )
+        for key, label, series, qualifier, phrases, note in [
+            ("black", "Black or African American", "LNS14000006",
+             r"\b(?:black|african[- ]americans?)\b",
+             ("black unemployment rate", "black unemployment",
+              "african american unemployment rate", "african american unemployment"),
+             "Seasonally adjusted, 16 years and over."),
+            ("white", "White", "LNS14000003",
+             r"\bwhites?\b(?!\s+house)",
+             ("white unemployment rate", "white unemployment"),
+             "Seasonally adjusted, 16 years and over."),
+            ("hispanic", "Hispanic or Latino", "LNS14000009",
+             r"\b(?:hispanics?|latin[oax]s?|latine)\b",
+             ("hispanic unemployment rate", "hispanic unemployment",
+              "latino unemployment rate", "latino unemployment"),
+             "Seasonally adjusted, 16 years and over."),
+            ("asian", "Asian", "LNS14032183",
+             r"\basians?\b",
+             ("asian unemployment rate", "asian unemployment",
+              "asian american unemployment"),
+             "Seasonally adjusted, 16 years and over."),
+            ("women", "women, 16 years and over", "LNS14000002",
+             r"\b(?:women|female)\b",
+             ("female unemployment rate", "women's unemployment rate",
+              "unemployment rate for women", "unemployment among women"),
+             "Seasonally adjusted."),
+            ("men", "men, 16 years and over", "LNS14000001",
+             r"\b(?:men|male)\b",
+             ("male unemployment rate", "men's unemployment rate",
+              "unemployment rate for men", "unemployment among men"),
+             "Seasonally adjusted."),
+            ("teens", "16 to 19 years", "LNS14000012",
+             r"\b(?:teens?|teenagers?|teenage|(?:aged?\s+|ages\s+)?16\s*(?:to|-|through)\s*19)\b",
+             ("teen unemployment rate", "teen unemployment",
+              "teenage unemployment", "teenage unemployment rate"),
+             "Seasonally adjusted."),
+            ("youth", "16 to 24 years", "LNS14024887",
+             r"\b(?:youth|young (?:people|adults|workers|americans)|(?:aged?\s+|ages\s+)?16\s*(?:to|-|through)\s*24)\b",
+             ("youth unemployment rate", "youth unemployment"),
+             "Seasonally adjusted."),
+            ("veterans", "veterans, 18 years and over", "LNU04049526",
+             r"\bveterans?\b",
+             ("veteran unemployment rate", "veteran unemployment",
+              "veterans unemployment rate", "veterans unemployment"),
+             "Not seasonally adjusted."),
+        ]
+    ],
+
+    # ---- Average consumer prices (BLS Average Price Data, U.S. city average)
+    *[
+        MetricSpec(
+            metric=metric, label=label, source="BLS", family=USD,
+            series_id=series, bls_kind="price", phrases=phrases,
+            min_relative_tolerance=0.02, alternate_measure=alt, alternate_band=0.05, notes=note,
+        )
+        for metric, label, series, phrases, alt, note in [
+            ("gas_price", "Average price of regular unleaded gasoline (per gallon)",
+             "APU000074714",
+             ("price of gas", "gas prices", "gas price", "gasoline prices",
+              "gasoline price", "price of gasoline", "gallon of gas",
+              "gallon of gasoline", "price at the pump", "prices at the pump",
+              "gas was", "gas is", "gas cost", "gas costs", "gasoline was",
+              "gasoline cost", "gas averaged", "gasoline averaged"),
+             "EIA's weekly retail gasoline price and AAA's daily average, which "
+             "differ from BLS's monthly average by a few cents",
+             "BLS AP series APU000074714, U.S. city average."),
+            ("egg_price", "Average price of a dozen grade A large eggs",
+             "APU0000708111",
+             ("price of eggs", "egg prices", "egg price", "dozen eggs",
+              "carton of eggs", "cost of eggs"),
+             "", "BLS AP series APU0000708111, U.S. city average."),
+            ("milk_price", "Average price of a gallon of whole milk",
+             "APU0000709112",
+             ("price of milk", "milk prices", "milk price", "gallon of milk"),
+             "", "BLS AP series APU0000709112, U.S. city average."),
+            ("ground_beef_price", "Average price of 100% ground beef (per pound)",
+             "APU0000703112",
+             ("ground beef", "price of beef", "beef prices", "hamburger meat"),
+             "", "BLS AP series APU0000703112, U.S. city average."),
+            ("coffee_price", "Average price of ground roast coffee (per pound)",
+             "APU0000717311",
+             ("price of coffee", "coffee prices", "coffee price", "pound of coffee"),
+             "", "BLS AP series APU0000717311, U.S. city average."),
+            ("electricity_price", "Average price of electricity (per kWh)",
+             "APU000072610",
+             ("price of electricity", "electricity prices", "electricity price",
+              "electricity rates", "cost of electricity", "per kilowatt-hour",
+              "per kilowatt hour", "per kwh"),
+             "EIA's average retail electricity price, which is measured differently",
+             "BLS AP series APU000072610, U.S. city average."),
+        ]
+    ],
+
     # ---- Prices (BLS) -----------------------------------------------------
     MetricSpec(
         metric="inflation_rate", label="CPI-U inflation rate (year over year)",
@@ -128,6 +254,40 @@ _SPECS: List[MetricSpec] = [
         phrases=("national debt", "public debt", "federal debt", "total public debt",
                  "debt outstanding", "the debt", "gross national debt"),
         notes="Daily 'debt to the penny' series; a point-in-time figure.",
+    ),
+
+    # ---- Federal budget (Treasury Monthly Treasury Statement) -------------
+    MetricSpec(
+        metric="federal_deficit", label="Federal budget deficit",
+        source="TREASURY", family=USD, treasury_metric="deficit",
+        fiscal_year_default=True,
+        phrases=("federal deficit", "budget deficit", "federal budget deficit",
+                 "the deficit", "deficit", "annual deficit"),
+        notes="MTS Table 1, fiscal-year-to-date total at September 30.",
+    ),
+    MetricSpec(
+        metric="federal_receipts", label="Federal receipts (revenue)",
+        source="TREASURY", family=USD, treasury_metric="receipts",
+        fiscal_year_default=True,
+        phrases=("federal revenue", "federal revenues", "federal receipts",
+                 "government revenue", "tax revenue", "tax revenues",
+                 "federal tax revenue", "the government collected"),
+        notes="MTS Table 1, fiscal-year-to-date total at September 30.",
+    ),
+    MetricSpec(
+        metric="federal_outlays", label="Federal outlays (spending)",
+        source="TREASURY", family=USD, treasury_metric="outlays",
+        fiscal_year_default=True,
+        phrases=("federal spending", "federal outlays", "government spending",
+                 "total federal spending", "the government spent",
+                 "federal government spent", "federal government spending"),
+        notes="MTS Table 1, fiscal-year-to-date total at September 30.",
+    ),
+    # Recognised so it is NOT read as the budget deficit; no adapter yet.
+    MetricSpec(
+        metric="trade_deficit", label="Trade deficit", source="BEA", family=USD,
+        phrases=("trade deficit", "trade gap", "trade balance"),
+        structured=False,
     ),
 
     # ---- Macro aggregates (BEA NIPA) -------------------------------------
@@ -193,6 +353,8 @@ _SPECS: List[MetricSpec] = [
         family=PERCENT, census_variable="S1701_C03_001E",
         census_dataset="acs/acs1/subject", min_year=2010,
         alternate_measure="the official poverty rate from CPS ASEC (and the Supplemental Poverty Measure)",
+        # 2023: official CPS 11.1%, SPM 12.9%, ACS 12.5% — 11% apart.
+        alternate_band=0.20,
         geo_levels=("nation", "state"),
         phrases=("poverty rate", "rate of poverty", "people in poverty",
                  "living in poverty", "poverty level"),
@@ -202,6 +364,7 @@ _SPECS: List[MetricSpec] = [
         family=PERCENT, census_variable="S2701_C05_001E",
         census_dataset="acs/acs1/subject", min_year=2015,
         alternate_measure="the CPS ASEC uninsured rate",
+        alternate_band=0.15,
         geo_levels=("nation", "state"),
         phrases=("uninsured rate", "without health insurance", "uninsured",
                  "lack health insurance", "health insurance coverage"),
@@ -231,6 +394,13 @@ _PHRASE_INDEX: List[Tuple[str, MetricSpec]] = sorted(
     ((p.lower(), s) for s in _SPECS for p in s.phrases),
     key=lambda kv: -len(kv[0]),
 )
+
+
+# parent metric -> its qualifier-selected variants
+VARIANTS: Dict[str, List[MetricSpec]] = {}
+for _s in _SPECS:
+    if _s.parent:
+        VARIANTS.setdefault(_s.parent, []).append(_s)
 
 
 def all_metrics() -> List[MetricSpec]:
