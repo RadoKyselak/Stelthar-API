@@ -41,6 +41,9 @@
       .verdict.supported { color: #008000; }
       .verdict.contradicted { color: #CC0000; }
       .verdict.inconclusive { color: #B8860B; }
+      .verdict.misleading { color: #D2691E; }
+      .verdict.no-verdict, .verdict.degraded { color: #666; }
+      .suggestions { margin-top: 6px; }
       .confidence { color: #666; font-size: 12px; margin-bottom: 6px; }
       .summary { margin-bottom: 8px; }
       .links { list-style: none; padding: 0; margin: 0; }
@@ -133,16 +136,25 @@
       }
 
       const r = resp.result;
-      const verdictRaw = (r.verdict || "Inconclusive").toLowerCase();
+      // v2 engine: verdict_detail carries Misleading / No verdict.
+      const verdictRaw = (r.verdict_detail || r.verdict || "Inconclusive").toLowerCase();
       const verdict = document.createElement("div");
-      verdict.className = `verdict ${verdictRaw}`;
-      verdict.textContent = `VERDICT: ${verdictRaw.toUpperCase()}`;
+      verdict.className = `verdict ${r.degraded ? "degraded" : verdictRaw.replace(/\s+/g, "-")}`;
+      verdict.textContent = r.degraded ? "VERDICT: COULDN'T CHECK" : `VERDICT: ${verdictRaw.toUpperCase()}`;
       body.appendChild(verdict);
 
       const conf = document.createElement("div");
       conf.className = "confidence";
-      const tier = r.confidence_tier ? ` (${r.confidence_tier})` : "";
-      conf.textContent = `Confidence: ${formatConfidence(r.confidence)}${tier}`;
+      if (r.degraded) {
+        conf.textContent = "Outage on our side — not a judgment about the claim.";
+      } else if (r.engine === "v2") {
+        conf.textContent = verdictRaw === "no verdict"
+          ? "Confidence: —"
+          : `Confidence: ${r.confidence_tier || "Low"}`;
+      } else {
+        const tier = r.confidence_tier ? ` (${r.confidence_tier})` : "";
+        conf.textContent = `Confidence: ${formatConfidence(r.confidence)}${tier}`;
+      }
       body.appendChild(conf);
 
       if (r.summary) {
@@ -166,6 +178,20 @@
           ul.appendChild(li);
         });
         body.appendChild(ul);
+      }
+
+      // Required by Google Search grounding wherever its citations appear.
+      // Nested shadow root keeps Google's inline styles self-contained.
+      if (r.search_suggestions_html) {
+        const holder = document.createElement("div");
+        holder.className = "suggestions";
+        const sr = holder.attachShadow({ mode: "open" });
+        sr.innerHTML = r.search_suggestions_html;
+        sr.querySelectorAll("a").forEach((a) => {
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+        });
+        body.appendChild(holder);
       }
 
       if (r._cached) {

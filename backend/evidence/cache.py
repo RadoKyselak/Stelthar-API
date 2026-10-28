@@ -32,9 +32,15 @@ from config import logger
 TTL_IMMUTABLE = 30 * 24 * 3600
 TTL_VOLATILE = 3600
 
-_CACHE_DIR = pathlib.Path(
-    os.getenv("STELTHAR_CACHE_DIR", pathlib.Path(__file__).resolve().parent.parent / ".cache")
-)
+def _default_cache_dir() -> pathlib.Path:
+    # Serverless filesystems (Vercel, Lambda) are read-only outside /tmp, so
+    # the repo-relative default silently never cached anything in production.
+    if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+        return pathlib.Path("/tmp/stelthar-cache")
+    return pathlib.Path(__file__).resolve().parent.parent / ".cache"
+
+
+_CACHE_DIR = pathlib.Path(os.getenv("STELTHAR_CACHE_DIR") or _default_cache_dir())
 
 
 def _path_for(namespace: str, key: str) -> pathlib.Path:

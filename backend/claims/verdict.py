@@ -212,9 +212,19 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
             official_display=official_display, evidence=usable, caveats=caveats,
         )
 
+    # Survey estimates (Census ACS) carry a published margin of error. A claim
+    # inside that margin cannot be called wrong on sampling noise, so the
+    # equality band is widened to it — and the caveat says so.
+    tolerance = claimed.tolerance()
+    moe = official.extra.get("margin_of_error") if official.extra else None
+    if moe and parsed.comparator == "equals":
+        tolerance = max(tolerance or 0.0, float(moe))
+    if official.extra and official.extra.get("caveat"):
+        caveats.append(official.extra["caveat"])
+
     agrees = _satisfies_comparator(
         claimed.magnitude, official.quantity.magnitude, parsed.comparator,
-        claimed.tolerance(),
+        tolerance,
     )
 
     claimed_display = humanize(claimed.magnitude, official.quantity.family)
@@ -230,7 +240,7 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
 
     headline = (
         f"{claim_side} {official.source} reports {official.display_value()} "
-        f"for {official.observed.describe()}."
+        f"for {official.observed.describe(short=True)}."
     )
 
     # Confidence reflects what is actually known about the evidence, not how

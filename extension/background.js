@@ -1,5 +1,8 @@
 const BACKEND_URL = "https://stelthar-api.vercel.app/verify";
-const CACHE_KEY = "stelthar_cache";
+// v2: results cached under the old key include a week of "Inconclusive"
+// answers produced while the backend's Gemini model was retired. A new key
+// drops them on update instead of serving them for another 12 hours.
+const CACHE_KEY = "stelthar_cache_v2";
 const HISTORY_KEY = "stelthar_history";
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12h — gov data doesn't change intra-day
 const CACHE_MAX_ENTRIES = 50;
@@ -42,8 +45,9 @@ async function appendHistory(claim, result) {
   const history = data[HISTORY_KEY] || [];
   const entry = {
     claim,
-    verdict: result.verdict || "Inconclusive",
+    verdict: result.verdict_detail || result.verdict || "Inconclusive",
     confidence: result.confidence ?? null,
+    confidence_tier: result.confidence_tier || null,
     ts: Date.now(),
   };
   const deduped = history.filter(
@@ -71,7 +75,7 @@ async function verifyClaim(claim, { bypassCache = false } = {}) {
     });
   } catch (e) {
     if (e.name === "AbortError") {
-      throw new Error("Verification timed out. The claim may be too complex — try a shorter, more specific claim.");
+      throw new Error("Verification timed out. Try a shorter, more specific claim (a number, a year, and what it measures).");
     }
     throw new Error("Could not reach the verification service. Check your connection and try again.");
   } finally {
@@ -93,8 +97,12 @@ async function verifyClaim(claim, { bypassCache = false } = {}) {
   }
 
   const result = await resp.json();
-  await setCachedResult(claim, result);
-  await appendHistory(claim, result);
+  // A degraded answer is an outage, not a finding; caching it would keep
+  // showing the outage after the service recovers.
+  if (!result.degraded) {
+    await setCachedResult(claim, result);
+    await appendHistory(claim, result);
+  }
   return result;
 }
 

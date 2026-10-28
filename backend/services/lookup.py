@@ -29,7 +29,7 @@ from config import logger
 from evidence.citation import render
 from evidence.datapoint import Datapoint
 from evidence.sources import SourceUnavailable
-from services.verify_v2 import fetch_structured
+from services.verify_v2 import fetch_structured, has_structured_adapter
 
 # Reasons a lookup produced nothing. Each names a different fix, because
 # "no data" covering an outage is the failure this codebase already paid for
@@ -69,11 +69,8 @@ _AMBIGUOUS_QUERIES = {
 
 # Sources with a typed-datapoint adapter today. A suggestion pointing at a
 # metric that cannot be fetched is worse than no suggestion.
-_WIRED_SOURCES = ("BLS", "TREASURY", "USASPENDING")
-
-
 def is_wired(spec: MetricSpec) -> bool:
-    return spec.source in _WIRED_SOURCES
+    return has_structured_adapter(spec)
 
 
 def wired_metrics() -> List[MetricSpec]:

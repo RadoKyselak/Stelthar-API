@@ -35,7 +35,9 @@ from config import logger
 from evidence.datapoint import Datapoint
 from evidence.grounded import GroundedAnswer, ground_claim
 from evidence.sources import SourceUnavailable
+from evidence.sources import bea as bea_source
 from evidence.sources import bls as bls_source
+from evidence.sources import census as census_source
 from evidence.sources import treasury as treasury_source
 from evidence.sources import usaspending as usaspending_source
 
@@ -101,10 +103,29 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
             )
         return got
 
-    # BEA and Census are wired through the legacy adapters and are not yet
-    # migrated to typed datapoints; routing them to grounded search is more
-    # accurate than returning a figure whose period cannot be verified.
+    if spec.source == "CENSUS":
+        geo = parsed.geography
+        if geo is not None and geo.level != "state":
+            geo = None  # national; finer levels are blocked before this point
+        return await census_source.fetch(spec, year, geo)
+
+    if spec.source == "BEA":
+        return await bea_source.fetch(spec, year)
+
     return []
+
+
+def has_structured_adapter(spec: Optional[MetricSpec]) -> bool:
+    """True when a typed adapter can fetch this metric today."""
+    if spec is None or not spec.structured:
+        return False
+    if spec.source in ("BLS", "TREASURY"):
+        return True
+    if spec.source == "CENSUS":
+        return bool(spec.census_variable)
+    if spec.source == "BEA":
+        return bool(spec.bea_table and spec.bea_line)
+    return False
 
 
 def _structured_is_applicable(parsed: ParsedClaim) -> Optional[str]:
@@ -116,7 +137,7 @@ def _structured_is_applicable(parsed: ParsedClaim) -> Optional[str]:
             return GEOGRAPHY_UNSUPPORTED
     if parsed.year_is_future:
         return PERIOD_UNAVAILABLE
-    if parsed.metric.source in ("BEA", "CENSUS"):
+    if not has_structured_adapter(parsed.metric):
         return NO_SERIES
     return None
 

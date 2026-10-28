@@ -6,12 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+import config
 from config import check_api_keys_on_startup, logger
 from models import VerifyRequest, LookupRequest
 from models.verdicts import VerificationResponse
 from services.verification_service import VerificationService
 from services.verify_v2 import to_response_dict, verify as verify_v2
 from services.lookup import lookup, to_response_dict as lookup_to_response_dict
+from services import verify_compat
+from utils import gemini_models
 from utils.validation import ValidationError
 from middleware.context import RequestContextMiddleware, get_request_id
 from exceptions import MiradorException, CircuitBreakerOpenException
@@ -19,7 +22,7 @@ from exceptions import MiradorException, CircuitBreakerOpenException
 app = FastAPI(
     title="Stelthar API",
     description="Government data-backed fact-checking API for Project Mirador",
-    version="1.0.0"
+    version="2.1.0"
 )
 
 @app.on_event("startup")
@@ -139,11 +142,24 @@ async def health_check():
 
 @app.get("/health")
 async def detailed_health_check():
+    """What the service will actually use — so a retired model or a missing key
+    shows up here, not as a week of silent "Inconclusive" answers."""
+    sources = {
+        "gemini": bool(config.GEMINI_API_KEY),
+        "bls": bool(config.BLS_API_KEY),
+        "bea": bool(config.BEA_API_KEY),
+        "census": bool(config.CENSUS_API_KEY),
+        "treasury": True,
+        "usaspending": True,
+    }
     return {
-        "status": "healthy",
+        "status": "healthy" if sources["gemini"] else "degraded",
         "service": "stelthar-api",
-        "version": "1.0.0",
-        "timestamp": asyncio.get_event_loop().time()
+        "version": app.version,
+        "llm_model": gemini_models.active_model(),
+        "llm_model_candidates": gemini_models.candidates(),
+        "sources_configured": sources,
+        "timestamp": asyncio.get_event_loop().time(),
     }
 
 @app.post("/v2/verify")
@@ -213,19 +229,44 @@ async def lookup_endpoint(req: LookupRequest) -> Dict[str, Any]:
     return lookup_to_response_dict(result)
 
 
-@app.post("/verify", response_model=VerificationResponse)
-async def verify(req: VerifyRequest) -> VerificationResponse:
+@app.post("/verify")
+async def verify(req: VerifyRequest) -> Dict[str, Any]:
+    """The endpoint every installed extension calls.
+
+    Runs the v2 engine and answers in the v1 field layout, so the Chrome Web
+    Store build gets exact, sourced answers without a store update. See
+    services/verify_compat.py.
+    """
     claim = req.claim.strip()
     if not claim:
         raise HTTPException(status_code=400, detail="Claim cannot be empty.")
-    
+    result = await verify_compat.verify(claim)
+    logger.info(
+        "verification complete",
+        extra={
+            "request_id": get_request_id(),
+            "tier": result.get("tier"),
+            "model_calls": result.get("model_calls"),
+            "verdict": result.get("verdict_detail"),
+        },
+    )
+    return result
+
+
+@app.post("/v1/verify", response_model=VerificationResponse)
+async def verify_legacy(req: VerifyRequest) -> VerificationResponse:
+    """The original multi-pass planner, kept for comparison and rollback."""
+    claim = req.claim.strip()
+    if not claim:
+        raise HTTPException(status_code=400, detail="Claim cannot be empty.")
+
     request_id = get_request_id()
     logger.info(
-        f"Processing verification request",
+        f"Processing legacy verification request",
         extra={
             "request_id": request_id,
             "claim_length": len(claim)
         }
     )
-    
+
     return await verification_service.verify_claim(claim)

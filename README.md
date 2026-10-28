@@ -156,60 +156,27 @@ See the [API Documentation](#api-documentation) section below for detailed endpo
 
 ## 🏗 Architecture
 
-Stelthar runs an **agentic (multi-pass) evidence pipeline**. Rather than issuing one
-query plan and giving up when it misses, the engine critiques what it retrieved and
-re-plans against the specific gap.
+Stelthar runs a **tiered evidence engine**. Cheap, exact sources run first; a
+model is only called when no official series covers the claim.
 
-- **Plan:** An LLM routes the claim to the source that can actually answer it
-  (agency budget → USAspending, national debt → Treasury, GDP → BEA, inflation → BLS,
-  demographics → Census with server-side variable resolution).
-- **Retrieve:** All selected sources are queried in parallel, deduplicated across passes.
-- **Critique:** A dedicated critic checks whether the evidence contains a real datapoint
-  addressing the claim's entities *and* timeframe. Dataset catalog pages are explicitly
-  rejected as non-evidence.
-- **Re-plan:** If evidence is insufficient, the critic proposes a corrected plan and the
-  loop retries (bounded by `MAX_ITERATIONS`).
-- **Synthesize:** The LLM reasons only over ranked evidence, with valueless sources
-  labelled so they cannot be mistaken for proof.
-- **Score:** Confidence is capped when evidence doesn't earn it (no datapoint, low
-  relevance, or year mismatch).
+| Tier | What runs | Cost | Typical latency |
+|---|---|---|---|
+| 1 — structured | Deterministic claim parser → BLS, BEA, Census ACS, Treasury | 0 model calls | 0.3–1s |
+| 2 — grounded | One Gemini call with Google Search grounding | 1 model call | 3–8s |
 
-```
-┌─────────────────┐
-│  User Browser   │
-│  (Chrome Ext)   │
-└────────┬────────┘
-         │ Highlighted OR Pasted Claim
-         ▼
-┌──────────────────────────┐
-│   Claim Analysis (LLM)   │──► routes to the source that has the answer
-└────────┬─────────────────┘
-         ▼
-┌──────────────────────────────────────────────┐
-│              AGENTIC LOOP (≤3 passes)        │
-│                                              │
-│  ┌────────────┐      ┌───────────────────┐   │
-│  │  Retrieve  │─────►│  Critique         │   │
-│  │  (parallel)│      │  • real datapoint?│   │
-│  └─────▲──────┘      │  • right year?    │   │
-│        │             │  • on topic?      │   │
-│        │             └─────────┬─────────┘   │
-│        │   insufficient        │ sufficient  │
-│        └──── re-plan ◄─────────┤             │
-└──────────────────────────────────────────────┘
-         │
-         ▼
-┌──────────────────────┐
-│ Rank evidence        │  numbers first, catalog pages last
-│ Synthesize (LLM)     │
-│ Score + cap          │
-└──────┬───────────────┘
-       ▼
-┌──────────────────────────────┐
-│ Verdict + Confidence         │
-│ + Sources + debug_iterations │
-└──────────────────────────────┘
-```
+- **Parse:** metric, year (calendar vs fiscal), month, geography, comparator
+  ("more than", "under") and the precision the claim was written to.
+- **Fetch:** the exact series for that metric, with the period and geography
+  read from the agency's response — never copied from the request.
+- **Assess:** compares within the claim's written precision (and the survey's
+  margin of error for Census), and fails closed on period or geography mismatch.
+- **Verdicts:** `Supported`, `Contradicted`, `Misleading`, or `No verdict`
+  with a machine-readable `reason` saying what would have to change.
+
+**Model resilience.** `GEMINI_MODEL` is a preference, not a single point of
+failure: if Google retires it, the API falls through `GEMINI_FALLBACK_MODELS`
+(default `gemini-3.8-flash`, then the `gemini-flash-latest` alias) and keeps
+serving. `GET /health` shows the model in use and which source keys are set.
 
 ---
 
@@ -217,75 +184,61 @@ re-plans against the specific gap.
 
 ### Base URL
 ```
-https://api.stelthar.com
+https://stelthar-api.vercel.app
 ```
 
 ### Endpoints
 
-#### `POST /verify`
-Verify a claim against government data sources.
+| Endpoint | Purpose |
+|---|---|
+| `POST /verify` | Verify a claim. v2 engine, v1-compatible response (what the extension calls). |
+| `POST /v2/verify` | Same engine, v2-only response fields. |
+| `POST /v2/lookup` | "What is the official figure?" — value plus ready-to-paste citations. |
+| `POST /v1/verify` | Legacy multi-pass planner, kept for comparison. |
+| `GET /health` | Model in use, configured sources. |
 
-**Request Body:**
+#### `POST /verify`
+
 ```json
-{
-    "claim": "The United States federal government spent more on defense than on education in 2023."
-}
+{ "claim": "Inflation hit 9% in June 2022" }
 ```
 
-**Response:**
+Response (abridged — `sources`, `evidence`, `citations` and `parsed` are also returned):
+
 ```json
 {
-    "claim_original": "The United States federal government spent more on defense than on education in 2023.",
-    "claim_normalized": "US federal spending: defense > education (2023)",
-    "claim_type": "quantitative_comparison",
     "verdict": "Supported",
-    "confidence": 0.75,
-    "confidence_tier": "Medium",
-    "confidence_breakdown": {
-        "source_reliability": 0.7,
-        "evidence_density": 1.0,
-        "semantic_alignment": 0.66
-    },
-    "summary": "Federal defense spending ($790.9B) exceeded education spending ($178.6B) in 2023 according to BEA NIPA data.",
+    "verdict_detail": "Supported",
+    "confidence": 0.9,
+    "confidence_tier": "High",
+    "summary": "Claim says 9%. BLS reports 9.06% for June 2022 (M06 2022 vs M06 2021, not seasonally adjusted).",
     "evidence_links": [
         {
-            "finding": "Defense: $790.9B",
-            "source_url": "https://apps.bea.gov/NIPA/T31600"
-        },
-        {
-            "finding": "Education: $178.6B",
-            "source_url": "https://apps.bea.gov/NIPA/T31600"
+            "finding": "CPI-U inflation rate (year over year): 9.06% (June 2022 (M06 2022 vs M06 2021, not seasonally adjusted)) \u2014 BLS",
+            "source_url": "https://data.bls.gov/timeseries/CUUR0000SA0"
         }
     ],
-    "sources": [
-        {
-            "title": "BEA NIPA T31600 - National Defense",
-            "url": "https://apps.bea.gov/NIPA/T31600",
-            "snippet": "2023 defense spending: $790.2B",
-            "data_value": 790197.0,
-            "unit": "Millions USD"
-        },
-        {
-            "title": "BEA NIPA T31600 - Education",
-            "url": "https://apps.bea.gov/NIPA/T31600",
-            "snippet": "2023 education spending: $178.6B",
-            "data_value": 178621.0,
-            "unit": "Millions USD"
-        }
-    ],
-    "debug_plan": {
-        "claim_type": "quantitative_comparison",
-        "entities": ["defense", "education", "2023"],
-        "api_plan": {
-            "tier1": { "bea": { "table": "T31600", "year": "2023", "lines": ["2", "14"] } },
-            "tier2_keywords": ["federal spending 2023"]
-        }
-    },
-    "debug_log": []
+    "headline": "Claim says 9%. BLS reports 9.06% for June 2022 (M06 2022 vs M06 2021, not seasonally adjusted).",
+    "reason": null,
+    "claim_value": "9%",
+    "official_value": "9.06% (June 2022 (M06 2022 vs M06 2021, not seasonally adjusted))",
+    "caveats": [],
+    "tier": "structured",
+    "model_calls": 0,
+    "elapsed_seconds": 0.0,
+    "degraded": false
 }
 ```
 
-**Rate Limits: 100 requests/day**
+`search_suggestions_html` is set when the grounded tier answered. Any UI that
+shows grounded citations **must** render it (Google Search grounding terms).
+
+**Coverage (tier 1):** unemployment, labor-force participation, payrolls,
+hourly earnings, CPI/core CPI/PPI inflation (BLS); national debt (Treasury);
+GDP, real GDP growth, personal income (BEA); population, median household
+income, poverty rate, uninsured rate, median home value, bachelor's degree
+attainment — national or by state (Census ACS 1-year). Everything else goes
+to tier 2.
 
 ---
 
@@ -304,7 +257,7 @@ Any contributions you make are **greatly appreciated**.
 2. **Install dependencies**
    ```bash
    # Backend dependencies
-   pip install -r requirements.txt
+   pip install -r backend/requirements.txt -r backend/requirements-dev.txt
    
    # Frontend - load the extension in Chrome
    # Navigate to chrome://extensions/
@@ -320,7 +273,7 @@ Any contributions you make are **greatly appreciated**.
 
 4. **Run tests**
    ```bash
-   pytest tests/
+   make test
    ```
 
 ### Contribution Guidelines

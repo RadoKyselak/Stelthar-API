@@ -40,7 +40,7 @@ class TestVerifyEndpoint:
         assert response.status_code == 422
     
     def test_verify_successful(self, test_client):
-        """Test successful /verify request.
+        """Test successful legacy /v1/verify request.
 
         The pipeline now lives in VerificationService (plan -> retrieve ->
         critique -> synthesize), so this patches the service's collaborators
@@ -87,7 +87,7 @@ class TestVerifyEndpoint:
                    AsyncMock(return_value=synthesis)), \
              patch("confidence.confidence_scorer.ConfidenceScorer.compute_confidence",
                    AsyncMock(return_value=confidence)):
-            response = test_client.post("/verify", json={"claim": "Test claim"})
+            response = test_client.post("/v1/verify", json={"claim": "Test claim"})
 
         assert response.status_code == 200
         data = response.json()
