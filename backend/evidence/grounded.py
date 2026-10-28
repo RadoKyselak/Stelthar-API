@@ -92,6 +92,10 @@ class GroundedAnswer:
     skipped: bool = False
     # Set when a spend/rate limit refused the call.
     limited: bool = False
+    # False when the provider does not map answer spans to sources (Claude
+    # answering in the fixed field format). grounded_fraction is then
+    # meaningless and must not be read as "0% backed".
+    span_attribution: bool = True
 
     @property
     def grounded_fraction(self) -> float:

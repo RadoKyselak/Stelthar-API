@@ -203,7 +203,7 @@ def _grounded_to_result(
 
     # Confidence from what the grounding actually returned, not from how
     # decisive the model sounded.
-    grounded_share = g.grounded_fraction
+    grounded_share = g.grounded_fraction if g.span_attribution else 1.0
     if g.has_official_source and grounded_share >= 0.5:
         confidence = MEDIUM
     else:
@@ -216,7 +216,7 @@ def _grounded_to_result(
         caveats.append(
             "No primary government source was found; this rests on secondary reporting."
         )
-    if g.citations and grounded_share < 0.5:
+    if g.citations and g.span_attribution and grounded_share < 0.5:
         caveats.append(
             f"Only {grounded_share:.0%} of the answer text is backed by a retrieved source."
         )

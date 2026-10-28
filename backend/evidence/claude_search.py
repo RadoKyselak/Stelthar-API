@@ -180,8 +180,10 @@ async def ground_claim(claim: str, context_hint: str = "") -> GroundedAnswer:
         period=fields.get("period", ""),
         source_org=fields.get("source_org", ""),
         explanation=fields.get("explanation", ""),
-        citations=citations[:8],
+        # Official sources first, then the rest; at most 6.
+        citations=sorted(citations, key=lambda c: not c.official)[:6],
         segments=segments,
+        span_attribution=any(seg.citation_indices for seg in segments),
         search_queries=queries,
         model=model,
         cost_usd=cost,

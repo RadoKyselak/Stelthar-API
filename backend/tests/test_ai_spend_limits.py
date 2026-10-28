@@ -323,3 +323,21 @@ class TestEndpoints:
         assert ai["model"] == "claude-haiku-5-5"
         assert ai["max_spend_usd_per_day"] == 1.0 and ai["max_calls_per_client_per_day"] == 10
         assert ai["worst_case_usd_per_call"] < 0.05
+
+
+class TestConfidenceWithoutSpanCitations:
+    """Live preview, 2026-10-28: Claude answered from dol.gov pages but put no
+    inline citations on the formatted answer, and the response said 'Only 0%
+    of the answer text is backed by a retrieved source' at Low confidence."""
+
+    async def test_official_sources_without_span_citations(self, test_client, fake_claude):
+        resp = claude_response()
+        for b in resp.content:
+            if b.type == "text":
+                b.citations = []
+        fake_claude.return_value = resp
+        body = test_client.post("/verify", json={"claim": "The federal minimum wage is $7.25 an hour"}).json()
+        assert body["verdict"] == "Supported"
+        assert body["confidence_tier"] == "Medium"
+        assert "0%" not in body["summary"]
+        assert body["sources"][0]["url"].startswith("https://www.dol.gov")
