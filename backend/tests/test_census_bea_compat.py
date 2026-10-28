@@ -342,9 +342,46 @@ class TestGeminiModelFallback:
         async def post(url, headers=None, json=None):
             return FakeResponse(429, {"error": {"code": 429, "message": "quota"}})
         ctx, client = fake_client(post=post)
-        async with ctx as c:
-            r, _ = await gemini_models.generate(c, {"contents": []}, {})
-        assert r.status_code == 429 and client.post.await_count == 1
+        with patch.object(gemini_models, "GEMINI_MODEL", "gemini-3.8-flash"), \
+             patch.object(gemini_models, "GEMINI_FALLBACK_MODELS", ["gemini-3.8-flash", "gemini-flash-latest"]):
+            async with ctx as c:
+                r, _ = await gemini_models.generate(c, {"contents": []}, {})
+            assert r.status_code == 429
+            # Each model tried once; neither written off as retired.
+            assert client.post.await_count == 2
+            assert not gemini_models._dead
+            assert gemini_models.candidates()  # still has models to try
+
+    async def test_quota_on_one_model_falls_through_to_the_next(self):
+        """Production 2026-10-28: gemini-3.8-flash answered 429 on every call."""
+        calls = []
+
+        async def post(url, headers=None, json=None):
+            calls.append(url)
+            if "gemini-3.8-flash" in url:
+                return FakeResponse(429, {"error": {"code": 429, "message": "You exceeded your current quota"}})
+            return FakeResponse(200, gemini_ok())
+        ctx, _ = fake_client(post=post)
+        with patch.object(gemini_models, "GEMINI_MODEL", "gemini-3.8-flash"), \
+             patch.object(gemini_models, "GEMINI_FALLBACK_MODELS", ["gemini-3.8-flash", "gemini-flash-latest"]):
+            async with ctx as c:
+                r, model = await gemini_models.generate(c, {"contents": []}, {})
+                assert r.status_code == 200 and model == "gemini-flash-latest"
+                # While 3.8 cools down, the next call goes straight to the alias.
+                calls.clear()
+                await gemini_models.generate(c, {"contents": []}, {})
+                assert len(calls) == 1 and "gemini-flash-latest" in calls[0]
+
+    async def test_quota_message_is_plain_language(self):
+        from evidence import grounded
+
+        async def post(url, headers=None, json=None):
+            return FakeResponse(429, {"error": {"code": 429, "message": "quota"}})
+        ctx, _ = fake_client(post=post)
+        with patch("evidence.grounded.httpx.AsyncClient", return_value=ctx), \
+             patch("evidence.grounded.GEMINI_API_KEY", "k"):
+            g = await grounded.ground_claim("x is y")
+        assert not g.ok and "quota" in g.error
 
     def test_gen3_drops_low_temperature_and_sets_low_thinking(self):
         body = {"generationConfig": {"temperature": 0.0}}
