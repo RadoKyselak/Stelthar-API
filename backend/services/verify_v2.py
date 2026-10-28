@@ -34,7 +34,8 @@ from claims.verdict import (
 import config
 from config import logger
 from evidence.datapoint import Datapoint
-from evidence.grounded import GroundedAnswer, ground_claim
+from evidence import ai_search
+from evidence.grounded import GroundedAnswer, ground_claim  # noqa: F401 (tests patch it)
 from evidence.sources import SourceUnavailable
 from evidence.sources import bea as bea_source
 from evidence.sources import bls as bls_source
@@ -172,10 +173,12 @@ def _soften_for_alternate_measure(parsed: ParsedClaim, v: Verdict) -> Verdict:
     )
 
 
-async def _safe_ground(text: str, hint: str) -> GroundedAnswer:
-    """ground_claim, but an unexpected exception is an outage, never a 500."""
+async def _safe_ground(text: str, hint: str, client_ip: Optional[str] = None,
+                       names_a_metric: bool = False) -> GroundedAnswer:
+    """The paid AI tier, behind its gate and spend limits. Never raises."""
     try:
-        return await ground_claim(text, context_hint=hint)
+        return await ai_search.search(text, hint, client_ip=client_ip,
+                                      names_a_metric=names_a_metric)
     except Exception as e:  # noqa: BLE001 — verify() promises never to raise
         logger.exception("Grounded search raised for %r", text[:120])
         return GroundedAnswer(ok=False, error=f"internal error: {type(e).__name__}")
@@ -200,7 +203,7 @@ def _grounded_to_result(
 
     # Confidence from what the grounding actually returned, not from how
     # decisive the model sounded.
-    grounded_share = g.grounded_fraction
+    grounded_share = g.grounded_fraction if g.span_attribution else 1.0
     if g.has_official_source and grounded_share >= 0.5:
         confidence = MEDIUM
     else:
@@ -213,7 +216,7 @@ def _grounded_to_result(
         caveats.append(
             "No primary government source was found; this rests on secondary reporting."
         )
-    if g.citations and grounded_share < 0.5:
+    if g.citations and g.span_attribution and grounded_share < 0.5:
         caveats.append(
             f"Only {grounded_share:.0%} of the answer text is backed by a retrieved source."
         )
@@ -242,7 +245,7 @@ def _grounded_to_result(
             for c in g.citations
         ],
         tier=TIER_GROUNDED,
-        model_calls=1,
+        model_calls=g.model_calls,
         elapsed_seconds=round(time.monotonic() - started, 2),
         parsed=_parsed_summary(parsed),
         search_suggestions_html=g.search_suggestions_html or None,
@@ -287,7 +290,8 @@ def _verdict_to_result(
     )
 
 
-async def verify(claim: str, allow_grounding: bool = True) -> VerificationV2:
+async def verify(claim: str, allow_grounding: bool = True,
+                 client_ip: Optional[str] = None) -> VerificationV2:
     """Verify a claim. Never raises; every failure becomes a stated reason."""
     started = time.monotonic()
     text = (claim or "").strip()
@@ -350,7 +354,7 @@ async def verify(claim: str, allow_grounding: bool = True) -> VerificationV2:
                 f"{verdict.headline}"
             )
             if allow_grounding:
-                g = await _safe_ground(text, hint)
+                g = await _safe_ground(text, hint, client_ip, parsed.metric is not None)
                 if g.ok:
                     result = _grounded_to_result(text, parsed, g, started)
                     result.evidence = [d.to_dict() for d in verdict.evidence]
@@ -404,13 +408,25 @@ async def verify(claim: str, allow_grounding: bool = True) -> VerificationV2:
                 f"the official series covers. Find a figure for that specific place."
             )
 
-    g = await _safe_ground(text, hint)
+    g = await _safe_ground(text, hint, client_ip, parsed.metric is not None)
+    if not g.ok and g.skipped:
+        # Deliberately not sent: a limit, or a claim the gate keeps away from
+        # the paid tier. Not an outage, and nothing was spent.
+        return VerificationV2(
+            claim=text, verdict=NO_VERDICT, confidence=LOW,
+            headline=g.error if g.limited else f"{unresolved_headline} {g.error}",
+            reason=unresolved_reason,
+            tier=TIER_NONE, model_calls=0,
+            elapsed_seconds=round(time.monotonic() - started, 2),
+            parsed=_parsed_summary(parsed),
+            notes=["degraded: ai limit reached"] if g.limited else [],
+        )
     if not g.ok:
         return VerificationV2(
             claim=text, verdict=NO_VERDICT, confidence=LOW,
             headline=f"Could not retrieve evidence for this claim ({g.error}).",
             reason=unresolved_reason,
-            tier=TIER_NONE, model_calls=1,
+            tier=TIER_NONE, model_calls=g.model_calls,
             elapsed_seconds=round(time.monotonic() - started, 2),
             parsed=_parsed_summary(parsed),
         )

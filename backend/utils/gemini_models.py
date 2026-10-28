@@ -19,6 +19,7 @@ survives retirements, but its behaviour can change underneath us. Pinned
 models come first; the alias is the safety net.
 """
 import copy
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -29,6 +30,11 @@ GENERATE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:
 
 _working: Optional[str] = None
 _dead: set = set()
+# Models that answered 429 recently. Quotas are per model, so the next
+# candidate may still have headroom; the throttled one is retried after the
+# cooldown rather than written off.
+_cooldown: Dict[str, float] = {}
+QUOTA_COOLDOWN_SECONDS = 60.0
 
 _GONE_MARKERS = (
     "no longer available", "not found", "is not supported", "was not found",
@@ -43,6 +49,11 @@ def candidates(preferred: Optional[str] = None) -> List[str]:
         m = (m or "").strip()
         if m and m not in order and m not in _dead:
             order.append(m)
+    now = time.monotonic()
+    fresh = [m for m in order if _cooldown.get(m, 0.0) <= now]
+    # Throttled models go last, not away: if every model is throttled, still
+    # try them rather than failing without a request.
+    order = fresh + [m for m in order if m not in fresh]
     if not order:
         # Everything is marked dead. Retry the alias rather than refusing
         # outright — the dead set may be stale after a transient 404.
@@ -126,6 +137,14 @@ async def generate(
                 GENERATE_URL.format(model=model), headers=headers,
                 json=_without_thinking(payload),
             )
+        if getattr(r, "status_code", None) == 429:
+            logger.warning(
+                "Gemini model %s is over quota (HTTP 429): %s",
+                model, (getattr(r, "text", "") or "")[:1500],
+            )
+            _cooldown[model] = time.monotonic() + QUOTA_COOLDOWN_SECONDS
+            last = r
+            continue
         if _is_model_gone(r):
             logger.error(
                 "Gemini model %s is unavailable (HTTP %s); trying the next candidate",
@@ -165,3 +184,4 @@ def _reset_for_tests() -> None:
     global _working
     _working = None
     _dead.clear()
+    _cooldown.clear()

@@ -39,7 +39,12 @@ class TestVerifyEndpoint:
         
         assert response.status_code == 422
     
-    def test_verify_successful(self, test_client):
+    def test_legacy_v1_is_off_by_default(self, test_client):
+        """/v1 spends 4-8 uncapped model calls per request; it must be opt-in."""
+        r = test_client.post("/v1/verify", json={"claim": "Test claim"})
+        assert r.status_code == 404
+
+    def test_verify_successful(self, test_client, monkeypatch):
         """Test successful legacy /v1/verify request.
 
         The pipeline now lives in VerificationService (plan -> retrieve ->
@@ -76,6 +81,8 @@ class TestVerifyEndpoint:
             "gate": {}, "stopped_reason": None,
         }
         confidence = {"confidence": 0.85, "R": 0.9, "E": 0.8, "S": 0.85, "S_semantic_sim": 0.75}
+        import config
+        monkeypatch.setattr(config, "ENABLE_LEGACY_V1", True)
 
         with patch("services.verification_service.analyze_claim_for_api_plan",
                    AsyncMock(return_value=analysis)), \
