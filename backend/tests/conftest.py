@@ -17,7 +17,7 @@ def setup_test_env():
         "BLS_API_KEY": "test_bls_key",
         "CONGRESS_API_KEY": "test_congress_key",
         "DATA_GOV_API_KEY": "test_datagov_key",
-        "GEMINI_MODEL": "gemini-2.5-flash"
+        "GEMINI_MODEL": "gemini-3.8-flash"
     }
     for key, value in env_vars.items():
         os.environ[key] = value
@@ -37,7 +37,7 @@ def mock_env_vars(monkeypatch):
         "BLS_API_KEY": "test_bls_key",
         "CONGRESS_API_KEY": "test_congress_key",
         "DATA_GOV_API_KEY": "test_datagov_key",
-        "GEMINI_MODEL": "gemini-2.5-flash"
+        "GEMINI_MODEL": "gemini-3.8-flash"
     }
     for key, value in env_vars.items():
         monkeypatch.setenv(key, value)

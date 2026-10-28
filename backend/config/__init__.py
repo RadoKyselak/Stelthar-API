@@ -20,9 +20,20 @@ BLS_API_KEY = os.getenv("BLS_API_KEY")
 SEARCH_GOV_AFFILIATE = os.getenv("SEARCH_GOV_AFFILIATE")
 SEARCH_GOV_API_KEY = os.getenv("SEARCH_GOV_API_KEY")
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+# gemini-2.5-flash was retired for this project's key in 2026-10 and every call
+# 404'd, silently degrading the whole service. GEMINI_MODEL is now a preference,
+# not a single point of failure: utils.gemini_models walks the fallback list
+# when a model reports itself gone. Override either via env without a deploy.
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+GEMINI_MODEL = (os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL).strip()
+GEMINI_FALLBACK_MODELS = [
+    m.strip() for m in os.getenv(
+        "GEMINI_FALLBACK_MODELS", f"{DEFAULT_GEMINI_MODEL},gemini-flash-latest"
+    ).split(",") if m.strip()
+]
 GEMINI_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-EMBEDDING_MODEL_NAME = "text-embedding-004"
+# text-embedding-004 was shut down 2026-01-14; gemini-embedding-001 replaces it.
+EMBEDDING_MODEL_NAME = (os.getenv("GEMINI_EMBEDDING_MODEL") or "gemini-embedding-001").strip()
 GEMINI_EMBED_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL_NAME}:embedContent"
 GEMINI_BATCH_EMBED_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL_NAME}:batchEmbedContents"
 
@@ -75,6 +86,9 @@ __all__ = [
     "DATA_GOV_API_KEY",
     "BLS_API_KEY",
     "GEMINI_ENDPOINT",
+    "GEMINI_MODEL",
+    "DEFAULT_GEMINI_MODEL",
+    "GEMINI_FALLBACK_MODELS",
     "GEMINI_EMBED_ENDPOINT",
     "GEMINI_BATCH_EMBED_ENDPOINT",
     "EMBEDDING_MODEL_NAME",

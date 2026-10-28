@@ -28,14 +28,17 @@ from typing import Any, Dict, List, Optional
 from claims.metrics import MetricSpec
 from claims.parser import ParsedClaim, parse_claim
 from claims.verdict import (
-    GEOGRAPHY_UNSUPPORTED, HIGH, LOW, MEDIUM, MISLEADING, NO_SERIES, NO_VERDICT,
+    ALTERNATE_MEASURE, GEOGRAPHY_UNSUPPORTED, HIGH, LOW, MEDIUM, MISLEADING, NO_SERIES, NO_VERDICT,
     NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, Verdict, assess,
 )
+import config
 from config import logger
 from evidence.datapoint import Datapoint
 from evidence.grounded import GroundedAnswer, ground_claim
 from evidence.sources import SourceUnavailable
+from evidence.sources import bea as bea_source
 from evidence.sources import bls as bls_source
+from evidence.sources import census as census_source
 from evidence.sources import treasury as treasury_source
 from evidence.sources import usaspending as usaspending_source
 
@@ -101,10 +104,32 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
             )
         return got
 
-    # BEA and Census are wired through the legacy adapters and are not yet
-    # migrated to typed datapoints; routing them to grounded search is more
-    # accurate than returning a figure whose period cannot be verified.
+    if spec.source == "CENSUS":
+        geo = parsed.geography
+        if geo is not None and geo.level != "state":
+            geo = None  # national; finer levels are blocked before this point
+        return await census_source.fetch(spec, year, geo)
+
+    if spec.source == "BEA":
+        return await bea_source.fetch(spec, year)
+
     return []
+
+
+def has_structured_adapter(spec: Optional[MetricSpec]) -> bool:
+    """True when a typed adapter can fetch this metric today."""
+    if spec is None or not spec.structured:
+        return False
+    if spec.source in ("BLS", "TREASURY"):
+        return True
+    # Census and BEA refuse keyless requests. Without a key the claim goes to
+    # grounded search, as it did before these adapters existed, rather than
+    # every such claim reporting an outage.
+    if spec.source == "CENSUS":
+        return bool(spec.census_variable and config.CENSUS_API_KEY)
+    if spec.source == "BEA":
+        return bool(spec.bea_table and spec.bea_line and config.BEA_API_KEY)
+    return False
 
 
 def _structured_is_applicable(parsed: ParsedClaim) -> Optional[str]:
@@ -116,9 +141,44 @@ def _structured_is_applicable(parsed: ParsedClaim) -> Optional[str]:
             return GEOGRAPHY_UNSUPPORTED
     if parsed.year_is_future:
         return PERIOD_UNAVAILABLE
-    if parsed.metric.source in ("BEA", "CENSUS"):
+    if not has_structured_adapter(parsed.metric):
+        return NO_SERIES
+    if parsed.structured_blocker:
+        return NO_SERIES
+    if parsed.year is not None and parsed.metric.min_year and parsed.year < parsed.metric.min_year:
         return NO_SERIES
     return None
+
+
+def _soften_for_alternate_measure(parsed: ParsedClaim, v: Verdict) -> Verdict:
+    """A mismatch against one of two official measures is not a contradiction.
+
+    Census headlines median household income and the poverty rate from CPS
+    ASEC, while the wired series is ACS. They differ by design ($80,610 vs
+    $77,719 for 2023 median income), so a claim quoting the CPS figure is
+    correct and must not be reported as Contradicted on the ACS number alone.
+    """
+    alt = parsed.metric.alternate_measure
+    return Verdict(
+        verdict=NO_VERDICT, confidence=LOW, reason=ALTERNATE_MEASURE,
+        headline=(
+            f"{v.headline} Census also publishes {alt}, which differs from the ACS "
+            f"figure by design; the claim may be quoting that one."
+        ),
+        claimed_display=v.claimed_display, official_display=v.official_display,
+        delta_display=v.delta_display, relative_delta=v.relative_delta,
+        evidence=v.evidence,
+        caveats=v.caveats + [f"Not marked wrong on the ACS figure alone: Census also publishes {alt}."],
+    )
+
+
+async def _safe_ground(text: str, hint: str) -> GroundedAnswer:
+    """ground_claim, but an unexpected exception is an outage, never a 500."""
+    try:
+        return await ground_claim(text, context_hint=hint)
+    except Exception as e:  # noqa: BLE001 — verify() promises never to raise
+        logger.exception("Grounded search raised for %r", text[:120])
+        return GroundedAnswer(ok=False, error=f"internal error: {type(e).__name__}")
 
 
 def _grounded_to_result(
@@ -277,6 +337,8 @@ async def verify(claim: str, allow_grounding: bool = True) -> VerificationV2:
 
         if evidence:
             verdict = assess(parsed, evidence)
+            if verdict.verdict == CONTRADICTED and parsed.metric.alternate_measure:
+                verdict = _soften_for_alternate_measure(parsed, verdict)
             # A structured answer that landed cleanly is the best outcome: exact
             # number, stated period, zero model calls.
             if verdict.verdict != NO_VERDICT or not allow_grounding:
@@ -288,7 +350,7 @@ async def verify(claim: str, allow_grounding: bool = True) -> VerificationV2:
                 f"{verdict.headline}"
             )
             if allow_grounding:
-                g = await ground_claim(text, context_hint=hint)
+                g = await _safe_ground(text, hint)
                 if g.ok:
                     result = _grounded_to_result(text, parsed, g, started)
                     result.evidence = [d.to_dict() for d in verdict.evidence]
@@ -322,12 +384,19 @@ async def verify(claim: str, allow_grounding: bool = True) -> VerificationV2:
         )
 
     hint = ""
+    if parsed.structured_blocker and parsed.metric is not None:
+        hint = (
+            f"Do not answer with the all-population annual total for "
+            f"{parsed.metric.label.lower()}: {parsed.structured_blocker}. Find the "
+            f"figure for exactly what the claim describes."
+        )
     if blocked == GEOGRAPHY_UNSUPPORTED and parsed.geography:
         if not parsed.geography.is_known:
             hint = (
-                f"The claim is about {parsed.geography.name}, which is not a U.S. "
-                f"geography. Every structured series here is U.S.-only, so find the "
-                f"figure published by that jurisdiction's own statistical agency."
+                f"The claim names \"{parsed.geography.name}\", which could not be "
+                f"resolved to the United States or a U.S. state, so no U.S. national "
+                f"series was used. If it is a place outside the U.S. (or a city, or the "
+                f"world), find the figure from that jurisdiction's own statistical agency."
             )
         else:
             hint = (
@@ -335,7 +404,7 @@ async def verify(claim: str, allow_grounding: bool = True) -> VerificationV2:
                 f"the official series covers. Find a figure for that specific place."
             )
 
-    g = await ground_claim(text, context_hint=hint)
+    g = await _safe_ground(text, hint)
     if not g.ok:
         return VerificationV2(
             claim=text, verdict=NO_VERDICT, confidence=LOW,

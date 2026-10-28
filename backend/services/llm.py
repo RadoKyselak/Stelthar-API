@@ -7,10 +7,10 @@ from utils.retry import async_retry
 from utils.rate_limiter import get_quota_limiter
 from utils.circuit_breaker import circuit_breaker
 from exceptions import LLMException
+from utils import gemini_models
 
 from config import (
     GEMINI_API_KEY,
-    GEMINI_ENDPOINT,
     GEMINI_BATCH_EMBED_ENDPOINT,
     EMBEDDING_MODEL_NAME,
     logger
@@ -42,7 +42,7 @@ async def call_gemini(prompt: str) -> Dict[str, Any]:
     data = None
     try:
         async with httpx.AsyncClient(timeout=LLM_CONFIG.REQUEST_TIMEOUT) as client:
-            response = await client.post(GEMINI_ENDPOINT, headers=headers, json=body)
+            response, _model = await gemini_models.generate(client, body, headers)
             response.raise_for_status()
             data = response.json()
     except httpx.HTTPStatusError as e:
@@ -61,12 +61,7 @@ async def call_gemini(prompt: str) -> Dict[str, Any]:
     text = ""
     try:
         if isinstance(data, dict):
-            candidates = data.get("candidates", [])
-            if isinstance(candidates, list) and candidates:
-                content = candidates[0].get("content", {})
-                parts = content.get("parts", [])
-                if isinstance(parts, list) and parts:
-                    text = parts[0].get("text", "")
+            text = gemini_models.response_text(data)
             if not text:
                 text = data.get("output", "") or data.get("text", "")
     except (AttributeError, IndexError, TypeError) as e:

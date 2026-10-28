@@ -282,8 +282,8 @@ async def check_tavily() -> Check:
 
 
 async def main() -> int:
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    embed_model = os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-004")
+    model = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
+    embed_model = os.getenv("GEMINI_EMBEDDING_MODEL") or "gemini-embedding-001"
 
     print("=" * 78)
     print("STELTHAR PREFLIGHT — one live request per dependency")

@@ -35,12 +35,9 @@ from urllib.parse import urlparse
 
 import httpx
 
-from config import GEMINI_API_KEY, GEMINI_MODEL, logger
+from config import GEMINI_API_KEY, logger
 from config.constants import LLM_CONFIG
-
-_ENDPOINT_TMPL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-)
+from utils import gemini_models
 
 # Domains whose figures are primary rather than reported second-hand.
 _OFFICIAL_HINTS = (".gov", ".mil", ".fed.us")
@@ -228,28 +225,32 @@ async def ground_claim(
     if not claim or not claim.strip():
         return GroundedAnswer(ok=False, error="empty claim")
 
-    # Grounding is free only on the 2.5 tier; 3.x models are not on the free
-    # tier for search. Defaulting here keeps the pipeline inside the free quota.
-    model = model or GEMINI_MODEL or "gemini-2.5-flash"
-    url = _ENDPOINT_TMPL.format(model=model)
-
     body = {
         "contents": [{"role": "user", "parts": [{"text": _build_prompt(claim, context_hint)}]}],
         "tools": [{"google_search": {}}],
         # No responseSchema: it silently empties groundingChunks/Supports.
+        # Temperature/thinking are tuned per model family in gemini_models.
         "generationConfig": {"temperature": 0.0},
     }
 
     try:
         async with httpx.AsyncClient(timeout=LLM_CONFIG.REQUEST_TIMEOUT) as client:
-            r = await client.post(url, headers={"x-goog-api-key": GEMINI_API_KEY}, json=body)
-            if r.status_code != 200:
-                logger.warning("Grounded search HTTP %s: %s", r.status_code, r.text[:300])
-                return GroundedAnswer(ok=False, error=f"HTTP {r.status_code}")
+            r, used = await gemini_models.generate(
+                client, body, {"x-goog-api-key": GEMINI_API_KEY}, preferred=model,
+            )
+            if r is None or r.status_code != 200:
+                status = getattr(r, "status_code", "no response")
+                logger.warning("Grounded search HTTP %s (%s): %s", status, used,
+                               (getattr(r, "text", "") or "")[:300])
+                return GroundedAnswer(ok=False, error=f"HTTP {status}")
             payload = r.json()
     except httpx.HTTPError as e:
         logger.warning("Grounded search request failed: %s", e)
         return GroundedAnswer(ok=False, error=f"request failed: {e}")
+    except ValueError as e:
+        # A 200 whose body is not JSON (proxy error page, truncated stream).
+        logger.warning("Grounded search returned a non-JSON body: %s", e)
+        return GroundedAnswer(ok=False, error="non-JSON response")
 
     candidates = payload.get("candidates") or []
     if not candidates:
@@ -257,8 +258,7 @@ async def ground_claim(
         return GroundedAnswer(ok=False, error=str(reason))
 
     cand = candidates[0]
-    parts = ((cand.get("content") or {}).get("parts") or [])
-    answer = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+    answer = gemini_models.response_text(payload)
     if not answer.strip():
         return GroundedAnswer(ok=False, error="empty answer text")
 

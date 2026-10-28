@@ -44,6 +44,7 @@ NOT_EMPIRICAL = "claim_is_not_empirically_testable"
 NO_VALUE_IN_CLAIM = "claim_states_no_checkable_value"
 TREND_CLAIM = "claim_describes_a_trend_and_needs_a_series"
 UNRESOLVED_PERIOD = "claim_names_a_period_that_cannot_be_resolved_to_a_date"
+ALTERNATE_MEASURE = "agency_publishes_more_than_one_official_figure"
 
 HIGH, MEDIUM, LOW = "High", "Medium", "Low"
 
@@ -212,9 +213,19 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
             official_display=official_display, evidence=usable, caveats=caveats,
         )
 
+    # Survey estimates (Census ACS) carry a published margin of error. A claim
+    # inside that margin cannot be called wrong on sampling noise, so the
+    # equality band is widened to it — and the caveat says so.
+    tolerance = claimed.tolerance()
+    moe = official.extra.get("margin_of_error") if official.extra else None
+    if moe and parsed.comparator == "equals":
+        tolerance = max(tolerance or 0.0, float(moe))
+    if official.extra and official.extra.get("caveat"):
+        caveats.append(official.extra["caveat"])
+
     agrees = _satisfies_comparator(
         claimed.magnitude, official.quantity.magnitude, parsed.comparator,
-        claimed.tolerance(),
+        tolerance,
     )
 
     claimed_display = humanize(claimed.magnitude, official.quantity.family)
@@ -230,7 +241,7 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
 
     headline = (
         f"{claim_side} {official.source} reports {official.display_value()} "
-        f"for {official.observed.describe()}."
+        f"for {official.observed.describe(short=True)}."
     )
 
     # Confidence reflects what is actually known about the evidence, not how

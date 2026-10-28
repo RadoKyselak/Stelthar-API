@@ -116,7 +116,9 @@ class TestLookupDeclines:
         assert r.suggestions, "a decline with no suggestion is a dead end"
 
     async def test_unwired_source_says_so_rather_than_no_data(self):
-        r = await lookup("gdp 2023")
+        # GDP and Census metrics are wired now; defense spending is recognised
+        # but its BEA line mapping is unverified, so it must say so.
+        r = await lookup("defense spending 2023")
         assert not r.ok and r.reason == METRIC_NOT_WIRED
         assert "BEA" in r.headline
 

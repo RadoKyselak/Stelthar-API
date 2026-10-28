@@ -21,6 +21,10 @@
         #verdict-text.supported { color: #008000; }
         #verdict-text.contradicted { color: #CC0000; }
         #verdict-text.inconclusive { color: #B8860B; }
+        #verdict-text.misleading { color: #D2691E; }
+        #verdict-text.no-verdict { color: #666; }
+        #verdict-text.degraded { color: #666; }
+        #search-suggestions { display: none; margin-top: 8px; }
         #verdict-text.error { color: #CC0000; }
         #confidence-text { font-size: 14px; color: #666; margin-bottom: 6px; }
         #cached-badge { display: none; font-size: 11px; color: #888; margin-bottom: 6px; }
@@ -78,6 +82,8 @@
         .hist-verdict.supported { color: #008000; }
         .hist-verdict.contradicted { color: #CC0000; }
         .hist-verdict.inconclusive { color: #B8860B; }
+        .hist-verdict.misleading { color: #D2691E; }
+        .hist-verdict.no-verdict { color: #666; }
         .hist-claim { display: block; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #shortcut-hint { font-size: 10px; color: #aaa; text-align: center; margin-top: 10px; }
     </style>
@@ -129,6 +135,7 @@
             <div class="section-title">Evidence Links</div>
             <ul id="evidence-links-list"></ul>
         </div>
+        <div id="search-suggestions"></div>
         <details id="sources-dropdown" style="display: none;"><summary>View All Sources Consulted</summary><ul id="sources-list"></ul></details>
     </div>
     <div id="error-message"></div>

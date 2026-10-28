@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Project Mirador",
-  "version": "1.8.0",
-  "description": "Look up official U.S. statistics and copy them with a full citation. Also verifies highlighted claims against BLS, Treasury and Census data.",
+  "version": "1.9.0",
+  "description": "Look up official U.S. statistics and copy them with a full citation. Also verifies highlighted claims against BLS, BEA, Census and Treasury data.",
   "permissions": [
     "scripting",
     "activeTab",

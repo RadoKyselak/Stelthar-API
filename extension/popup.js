@@ -35,6 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
         verdictTextEl.className = "";
         confidenceTextEl.textContent = "CONFIDENCE: ...";
         summaryTextEl.textContent = "Loading summary...";
+        renderSearchSuggestions("");
         evidenceLinksListEl.innerHTML = "";
         sourcesListEl.innerHTML = "";
     };
@@ -90,17 +91,54 @@ document.addEventListener("DOMContentLoaded", () => {
         label.textContent = `${pct}%`;
     };
 
+    // The v2 engine reports Supported / Contradicted / Misleading / No verdict
+    // in `verdict_detail`; `verdict` keeps the old three values for old builds.
+    const verdictOf = (r) => r.verdict_detail || r.verdict || "Inconclusive";
+    const verdictClass = (v) => v.toLowerCase().replace(/\s+/g, "-");
+
+    const confidenceLine = (r) => {
+        if (r.engine === "v2") {
+            if (verdictOf(r) === "No verdict") return "CONFIDENCE: —";
+            // A tier is what the engine actually knows; the percentage only
+            // exists for the old popup.
+            return `CONFIDENCE: ${(r.confidence_tier || "Low").toUpperCase()}`;
+        }
+        const tier = r.confidence_tier ? ` (${r.confidence_tier})` : "";
+        return `CONFIDENCE: ${formatConfidence(r.confidence)}${tier}`;
+    };
+
+    // Google Search grounding requires showing its search-suggestion chips
+    // wherever grounded citations are shown. Rendered inside a shadow root so
+    // Google's inline styles cannot leak into ours.
+    const renderSearchSuggestions = (html) => {
+        let host = document.getElementById("search-suggestions");
+        if (!host) return;
+        host.style.display = html ? "block" : "none";
+        if (!html) return;
+        const root = host.shadowRoot || host.attachShadow({ mode: "open" });
+        root.innerHTML = html;
+        root.querySelectorAll("a").forEach((a) => {
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+        });
+    };
+
     const renderResult = (jsonResp) => {
         loadingIndicator.style.display = "none";
         resultsArea.style.display = "block";
         setVerifyButtonState();
 
-        const verdict = (jsonResp.verdict || "Inconclusive").toUpperCase();
-        verdictTextEl.textContent = `VERDICT: ${verdict}`;
-        verdictTextEl.className = (jsonResp.verdict || "inconclusive").toLowerCase();
+        const verdictRaw = verdictOf(jsonResp);
+        verdictTextEl.textContent = jsonResp.degraded
+            ? "VERDICT: COULDN'T CHECK"
+            : `VERDICT: ${verdictRaw.toUpperCase()}`;
+        verdictTextEl.className = jsonResp.degraded ? "degraded" : verdictClass(verdictRaw);
 
-        const tier = jsonResp.confidence_tier ? ` (${jsonResp.confidence_tier})` : "";
-        confidenceTextEl.textContent = `CONFIDENCE: ${formatConfidence(jsonResp.confidence)}${tier}`;
+        confidenceTextEl.textContent = jsonResp.degraded
+            ? "This is an outage on our side, not a judgment about the claim."
+            : confidenceLine(jsonResp);
+
+        renderSearchSuggestions(jsonResp.search_suggestions_html || "");
 
         cachedBadgeEl.style.display = jsonResp._cached ? "block" : "none";
 
@@ -201,8 +239,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 const li = document.createElement("li");
                 const verdictSpan = document.createElement("span");
                 const verdictRaw = (entry.verdict || "inconclusive").toLowerCase();
-                verdictSpan.className = `hist-verdict ${verdictRaw}`;
-                verdictSpan.textContent = `${verdictRaw.toUpperCase()} · ${formatConfidence(entry.confidence)}`;
+                verdictSpan.className = `hist-verdict ${verdictRaw.replace(/\s+/g, "-")}`;
+                // "No verdict" is no judgment at all; "0%" would read as "almost
+                // certainly false".
+                const conf = verdictRaw === "no verdict"
+                    ? "—"
+                    : (entry.confidence_tier || formatConfidence(entry.confidence));
+                verdictSpan.textContent = `${verdictRaw.toUpperCase()} · ${conf}`;
                 const claimSpan = document.createElement("span");
                 claimSpan.className = "hist-claim";
                 claimSpan.textContent = entry.claim;

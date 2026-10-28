@@ -74,6 +74,84 @@ _RELATIVE_PERIOD_RE = re.compile(
 )
 
 
+# ---------------------------------------------------------------------------
+# Qualifiers the structured series cannot honour.
+#
+# Every structured series is a single total: all persons, all households, the
+# whole year, current dollars. A claim about a subgroup, a quarter, a per-capita
+# figure or an inflation-adjusted figure asserts something about a DIFFERENT
+# number. Comparing it to the total produced confident wrong verdicts on true
+# claims ("the child poverty rate was 13.7%" -> Contradicted vs 12.5% all ages;
+# "GDP grew 4.9% in Q3 2023" -> Contradicted vs 2.9% annual). These claims are
+# routed to grounded search instead, which can find the right series.
+# ---------------------------------------------------------------------------
+_NUM_UNIT_AHEAD = r"(?!\s*(?:million|billion|trillion|thousand|percent|%|k\b|bn\b|tn\b))"
+
+_SUBGROUP_RE = re.compile(
+    r"\b(?:black|white(?!\s+house)|hispanic|latin[oax]s?|latine|asian|african[- ]americans?|"
+    r"native americans?|american indians?|indigenous|pacific islanders?|multiracial|"
+    r"women|men|female|male|mothers|fathers|single (?:mothers|parents|women|men)|"
+    r"children|child|kids|teens?|teenagers?|youth|young (?:people|adults|workers|men|women)|"
+    r"seniors|elderly|older (?:americans|adults|workers)|retirees|veterans|"
+    r"immigrants?|foreign[- ]born|native[- ]born|non[- ]citizens?|"
+    r"rural|urban|disabled|people with disabilities|households headed by|"
+    r"married couples?|families with)\b"
+    r"|\b(?:aged?|ages)\s+\d{1,2}\b"
+    r"|\b(?:under|over|above|below)\s+(?:the\s+age\s+of\s+)?\d{1,2}\b" + _NUM_UNIT_AHEAD +
+    r"|\b\d{1,2}\s*(?:to|-|through)\s*\d{1,2}[- ]year[- ]olds?\b"
+    r"|\b\d{1,2}\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b",
+    re.IGNORECASE,
+)
+
+# The universe a metric is already defined over is not a subgroup of it.
+_UNIVERSE_OK = {
+    "bachelors_or_higher": re.compile(r"\b25\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b|"
+                                      r"\b(?:aged?|ages|over)\s+25\b", re.IGNORECASE),
+    "unemployment_rate": re.compile(r"\b16\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b", re.IGNORECASE),
+    "labor_force_participation": re.compile(r"\b16\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b", re.IGNORECASE),
+}
+
+_QUARTER_RE = re.compile(
+    r"\bq[1-4]\b|\b(?:first|second|third|fourth|1st|2nd|3rd|4th)[- ]quarter\b|"
+    r"\bquarterly\b|\bannuali[sz]ed\b|\bannual rate\b|\bsaar\b",
+    re.IGNORECASE,
+)
+_PER_CAPITA_RE = re.compile(r"\bper\s+(?:capita|person|head|resident|worker|household)\b", re.IGNORECASE)
+_REAL_DOLLARS_RE = re.compile(
+    r"\breal\b(?!\s+estate)|\bchained\b|\binflation[- ]adjusted\b|\bconstant[- ]dollars?\b",
+    re.IGNORECASE,
+)
+_NOMINAL_RE = re.compile(r"\bnominal\b|\bcurrent[- ]dollars?\b", re.IGNORECASE)
+
+
+_AGE_BOUND_RE = re.compile(
+    r"\b\d{1,2}\s+(?:years?\s+)?(?:and|or)\s+(?:older|over|above)\b"
+    r"|\b(?:aged?|ages)\s+\d{1,2}\s*\+?(?:\s*(?:to|-)\s*\d{1,2})?"
+    r"|\b\d{1,2}\s*\+\s*(?=\s*(?:year|adult|population|people))",
+    re.IGNORECASE,
+)
+
+
+def structured_blocker(text: str, spec: Optional[MetricSpec]) -> str:
+    """Why the matched series cannot answer this claim, or "" if it can."""
+    if spec is None or not text:
+        return ""
+    m = _SUBGROUP_RE.search(text)
+    if m:
+        ok = _UNIVERSE_OK.get(spec.metric)
+        if not (ok and ok.search(m.group(0))):
+            return f"the claim is about a subgroup (\u201c{m.group(0).strip()}\u201d), not the total the series measures"
+    if _QUARTER_RE.search(text):
+        return "the claim is about a quarter or an annualised rate; only annual and monthly figures are wired up"
+    if _PER_CAPITA_RE.search(text):
+        return "the claim is a per-capita figure; the series is a total"
+    if spec.family == _units.USD and _REAL_DOLLARS_RE.search(text):
+        return "the claim is inflation-adjusted; the series is in current dollars"
+    if spec.metric == "real_gdp_growth" and _NOMINAL_RE.search(text):
+        return "the claim is nominal growth; the series is real (inflation-adjusted) growth"
+    return ""
+
+
 def _all_quantities(text: str) -> List[Quantity]:
     """Every quantity in the claim, so multi-point assertions are detectable."""
     out: List[Quantity] = []
@@ -109,6 +187,9 @@ class ParsedClaim:
     # ("when he took office"), which this parser cannot resolve to a year.
     has_unresolved_period: bool = False
     unparsed_reason: str = ""
+    # Set when the claim qualifies the metric in a way the series cannot
+    # honour (subgroup, quarter, per-capita, real vs nominal).
+    structured_blocker: str = ""
 
     @property
     def is_actionable(self) -> bool:
@@ -213,7 +294,10 @@ def parse_claim(text: str) -> ParsedClaim:
 
     geography = resolve_geography(raw)
 
-    value_text = _strip_years_for_value(raw, years)
+    # Age bounds that define a universe ("adults 25 and older", "ages 16+")
+    # are not claimed values; left in, they made a one-number claim look like
+    # a two-number trend claim.
+    value_text = _AGE_BOUND_RE.sub(" ", _strip_years_for_value(raw, years))
     claimed = parse_quantity(value_text)
     # A percent claim whose metric is a percent metric: keep as-is. A bare
     # number with no unit against a USD metric is dollars.
@@ -246,4 +330,5 @@ def parse_claim(text: str) -> ParsedClaim:
         all_values=all_values,
         has_unresolved_period=has_unresolved,
         unparsed_reason=reason,
+        structured_blocker=structured_blocker(raw, spec),
     )
