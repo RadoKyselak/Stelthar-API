@@ -124,6 +124,14 @@ _REAL_DOLLARS_RE = re.compile(
 _NOMINAL_RE = re.compile(r"\bnominal\b|\bcurrent[- ]dollars?\b", re.IGNORECASE)
 
 
+_AGE_BOUND_RE = re.compile(
+    r"\b\d{1,2}\s+(?:years?\s+)?(?:and|or)\s+(?:older|over|above)\b"
+    r"|\b(?:aged?|ages)\s+\d{1,2}\s*\+?(?:\s*(?:to|-)\s*\d{1,2})?"
+    r"|\b\d{1,2}\s*\+\s*(?=\s*(?:year|adult|population|people))",
+    re.IGNORECASE,
+)
+
+
 def structured_blocker(text: str, spec: Optional[MetricSpec]) -> str:
     """Why the matched series cannot answer this claim, or "" if it can."""
     if spec is None or not text:
@@ -286,7 +294,10 @@ def parse_claim(text: str) -> ParsedClaim:
 
     geography = resolve_geography(raw)
 
-    value_text = _strip_years_for_value(raw, years)
+    # Age bounds that define a universe ("adults 25 and older", "ages 16+")
+    # are not claimed values; left in, they made a one-number claim look like
+    # a two-number trend claim.
+    value_text = _AGE_BOUND_RE.sub(" ", _strip_years_for_value(raw, years))
     claimed = parse_quantity(value_text)
     # A percent claim whose metric is a percent metric: keep as-is. A bare
     # number with no unit against a USD metric is dollars.

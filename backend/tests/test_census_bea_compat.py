@@ -592,3 +592,14 @@ class TestReviewFixesEndToEnd:
              patch("evidence.grounded.GEMINI_API_KEY", "k"):
             g = await grounded.ground_claim("x is y")
         assert not g.ok and "JSON" in g.error
+
+
+@pytest.mark.parametrize("claim,value", [
+    ("35% of adults 25 and older had a bachelor's degree or higher in 2023", 35.0),
+    ("The unemployment rate for people 16 years and over was 3.6% in 2023", 3.6),
+])
+def test_universe_age_bound_is_not_a_second_value(claim, value):
+    """Found live on the preview: '25 and older' made this a 'trend claim'."""
+    p = parse_claim(claim)
+    assert not p.is_trend_claim, p.all_values
+    assert p.claimed_value.magnitude == value
