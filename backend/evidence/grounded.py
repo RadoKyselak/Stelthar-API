@@ -148,6 +148,9 @@ Rules:
   set VERDICT to NOT_EMPIRICAL.
 - If you cannot find an authoritative figure, set VERDICT to NO_EVIDENCE. Do not
   guess a number.
+- If the claim matches an official figure as it was first published, and the
+  agency has since revised it, answer SUPPORTED and say in EXPLANATION what the
+  figure was revised to. A revision is not the claimant's error.
 - A claim can be numerically accurate yet misleading through a cherry-picked
   baseline, a nominal-vs-inflation-adjusted comparison, a raw count where a rate
   is the meaningful measure, or a subgroup presented as the whole. If that is the
