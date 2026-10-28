@@ -43,7 +43,7 @@ class LookupRequest(BaseModel):
 
 class VerifyRequest(BaseModel):
     """Request body for /verify endpoint with validation."""
-    claim: str = Field(..., min_length=3, max_length=5000)
+    claim: str = Field(..., min_length=3, max_length=1000)
 
     @field_validator('claim')
     @classmethod

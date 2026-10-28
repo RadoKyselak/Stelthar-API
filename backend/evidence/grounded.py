@@ -82,6 +82,16 @@ class GroundedAnswer:
     # ToS: must be rendered by any UI showing this answer.
     search_suggestions_html: str = ""
     error: str = ""
+    # Accounting. model_calls is 0 for a cache hit or a request that was
+    # refused before anything was sent.
+    model_calls: int = 1
+    model: str = ""
+    cost_usd: float = 0.0
+    # True when no AI call was attempted on purpose (limits, input gate) —
+    # distinct from an outage.
+    skipped: bool = False
+    # Set when a spend/rate limit refused the call.
+    limited: bool = False
 
     @property
     def grounded_fraction(self) -> float:
@@ -180,7 +190,16 @@ def _parse_fields(text: str) -> Dict[str, str]:
     for k in ("official_value", "period", "source_org"):
         if (out.get(k) or "").upper() in ("NONE", "N/A", "-"):
             out[k] = ""
+    # Output caps. Only these parsed fields ever reach a caller, and each is
+    # short — so the endpoint cannot be used to get free long-form text out
+    # of the model, whatever the claim asks for.
+    for k, cap in _FIELD_CAPS.items():
+        if out.get(k) and len(out[k]) > cap:
+            out[k] = out[k][:cap].rstrip() + "…"
     return out
+
+
+_FIELD_CAPS = {"official_value": 120, "period": 120, "source_org": 160, "explanation": 500}
 
 
 def _extract_grounding(candidate: Dict[str, Any], answer: str) -> tuple:

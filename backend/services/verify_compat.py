@@ -14,7 +14,7 @@ so updated clients can render the richer result.
 
 The legacy planner remains reachable at `/v1/verify` for comparison.
 """
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from claims.verdict import NO_VERDICT
 from services.verify_v2 import TIER_GROUNDED, VerificationV2, to_response_dict
@@ -85,7 +85,9 @@ def _sources(v: VerificationV2) -> List[Dict[str, Any]]:
 def to_legacy_shape(v: VerificationV2) -> Dict[str, Any]:
     """v1 field names first, v2 fields alongside."""
     degraded_reason = None
-    if v.reason in _DEGRADED_REASONS or any(n.startswith("degraded") for n in v.notes):
+    if any(n.startswith("degraded: ai limit") for n in v.notes):
+        degraded_reason = "ai_limit_reached"
+    elif v.reason in _DEGRADED_REASONS or any(n.startswith("degraded") for n in v.notes):
         degraded_reason = "source_unavailable"
     # Grounding failed outright (model, key or quota problem): not a judgment,
     # and the routing reason v2 carries would misname the cause.
@@ -127,11 +129,11 @@ def to_legacy_shape(v: VerificationV2) -> Dict[str, Any]:
     return out
 
 
-async def verify(claim: str) -> Dict[str, Any]:
+async def verify(claim: str, client_ip: Optional[str] = None) -> Dict[str, Any]:
     """Never raises: the old client shows a raw 500 as a failure banner, where a
     degraded response at least says the outage is ours."""
     try:
-        return to_legacy_shape(await verify_v2(claim))
+        return to_legacy_shape(await verify_v2(claim, client_ip=client_ip))
     except Exception:  # noqa: BLE001
         from config import logger
         logger.exception("verify_compat failed for %r", (claim or "")[:120])

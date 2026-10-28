@@ -613,8 +613,8 @@ class TestReviewFixesEndToEnd:
         assert r.tier == "none"
 
     async def test_grounding_exception_is_degraded_not_500(self, test_client):
-        with patch("services.verify_v2.ground_claim", AsyncMock(side_effect=ValueError("bad json"))):
-            r = test_client.post("/verify", json={"claim": "Bananas are the best fruit"})
+        with patch("services.verify_v2.ai_search.search", AsyncMock(side_effect=ValueError("bad json"))):
+            r = test_client.post("/verify", json={"claim": "Bananas cost $2 a pound in 2023"})
         assert r.status_code == 200
         body = r.json()
         assert body["degraded"] is True and body["degraded_reason"] == "llm_unavailable"

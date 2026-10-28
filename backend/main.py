@@ -14,7 +14,17 @@ from services.verification_service import VerificationService
 from services.verify_v2 import to_response_dict, verify as verify_v2
 from services.lookup import lookup, to_response_dict as lookup_to_response_dict
 from services import verify_compat
-from utils import gemini_models
+from utils import gemini_models, spend_guard
+
+
+def _client_ip(request: Request) -> str:
+    """The caller's IP as Vercel reports it. Vercel overwrites these headers at
+    its edge, so a client cannot spoof them to dodge the per-client limit."""
+    for h in ("x-vercel-forwarded-for", "x-real-ip", "x-forwarded-for"):
+        v = request.headers.get(h)
+        if v:
+            return v.split(",")[0].strip()
+    return request.client.host if request.client else ""
 from utils.validation import ValidationError
 from middleware.context import RequestContextMiddleware, get_request_id
 from exceptions import MiradorException, CircuitBreakerOpenException
@@ -146,6 +156,7 @@ async def detailed_health_check():
     shows up here, not as a week of silent "Inconclusive" answers."""
     sources = {
         "gemini": bool(config.GEMINI_API_KEY),
+        "anthropic": bool(config.ANTHROPIC_API_KEY),
         "bls": bool(config.BLS_API_KEY),
         "bea": bool(config.BEA_API_KEY),
         "census": bool(config.CENSUS_API_KEY),
@@ -153,17 +164,19 @@ async def detailed_health_check():
         "usaspending": True,
     }
     return {
-        "status": "healthy" if sources["gemini"] else "degraded",
+        "status": "healthy",
         "service": "stelthar-api",
         "version": app.version,
         "llm_model": gemini_models.active_model(),
         "llm_model_candidates": gemini_models.candidates(),
         "sources_configured": sources,
+        "ai_search": await spend_guard.status(),
+        "legacy_v1_enabled": config.ENABLE_LEGACY_V1,
         "timestamp": asyncio.get_event_loop().time(),
     }
 
 @app.post("/v2/verify")
-async def verify_v2_endpoint(req: VerifyRequest) -> Dict[str, Any]:
+async def verify_v2_endpoint(req: VerifyRequest, request: Request) -> Dict[str, Any]:
     """Evidence-first verification: exact number, stated period, direct link.
 
     Added alongside `/verify` rather than replacing it, so the extension already
@@ -187,7 +200,7 @@ async def verify_v2_endpoint(req: VerifyRequest) -> Dict[str, Any]:
     if not claim:
         raise HTTPException(status_code=400, detail="Claim cannot be empty.")
 
-    result = await verify_v2(claim)
+    result = await verify_v2(claim, client_ip=_client_ip(request))
     logger.info(
         "v2 verification complete",
         extra={
@@ -230,7 +243,7 @@ async def lookup_endpoint(req: LookupRequest) -> Dict[str, Any]:
 
 
 @app.post("/verify")
-async def verify(req: VerifyRequest) -> Dict[str, Any]:
+async def verify(req: VerifyRequest, request: Request) -> Dict[str, Any]:
     """The endpoint every installed extension calls.
 
     Runs the v2 engine and answers in the v1 field layout, so the Chrome Web
@@ -240,7 +253,7 @@ async def verify(req: VerifyRequest) -> Dict[str, Any]:
     claim = req.claim.strip()
     if not claim:
         raise HTTPException(status_code=400, detail="Claim cannot be empty.")
-    result = await verify_compat.verify(claim)
+    result = await verify_compat.verify(claim, client_ip=_client_ip(request))
     logger.info(
         "verification complete",
         extra={
@@ -255,7 +268,12 @@ async def verify(req: VerifyRequest) -> Dict[str, Any]:
 
 @app.post("/v1/verify", response_model=VerificationResponse)
 async def verify_legacy(req: VerifyRequest) -> VerificationResponse:
-    """The original multi-pass planner, kept for comparison and rollback."""
+    """The original multi-pass planner, kept for comparison and rollback.
+
+    Off by default: it spends 4-8 model calls per request and sits outside the
+    AI spend limits. Set ENABLE_LEGACY_V1=true to turn it back on."""
+    if not config.ENABLE_LEGACY_V1:
+        raise HTTPException(status_code=404, detail="Not found")
     claim = req.claim.strip()
     if not claim:
         raise HTTPException(status_code=400, detail="Claim cannot be empty.")
