@@ -151,6 +151,10 @@ Rules:
 - If the claim matches an official figure as it was first published, and the
   agency has since revised it, answer SUPPORTED and say in EXPLANATION what the
   figure was revised to. A revision is not the claimant's error.
+- If the claim's figure is close to the official one but not equal at the
+  precision it was written - off by one step in its last digit, such as 4.1%
+  against an official 4.0%, and within 5% of it - set VERDICT to MOSTLY_ACCURATE.
+  A figure that is off by more than that is CONTRADICTED.
 - A claim can be numerically accurate yet misleading through a cherry-picked
   baseline, a nominal-vs-inflation-adjusted comparison, a raw count where a rate
   is the meaningful measure, or a subgroup presented as the whole. If that is the
@@ -160,7 +164,7 @@ CLAIM: '''{claim}'''{hint}
 
 Answer in exactly this format, one field per line, nothing before or after:
 
-VERDICT: SUPPORTED | CONTRADICTED | MISLEADING | NO_EVIDENCE | NOT_EMPIRICAL
+VERDICT: SUPPORTED | MOSTLY_ACCURATE | CONTRADICTED | MISLEADING | NO_EVIDENCE | NOT_EMPIRICAL
 OFFICIAL_VALUE: the authoritative figure with its unit, or NONE
 PERIOD: the period the figure covers, or NONE
 SOURCE_ORG: the organisation that published it, or NONE
@@ -176,7 +180,8 @@ _FIELD_RE = {
 }
 
 _VALID_VERDICTS = {
-    "SUPPORTED", "CONTRADICTED", "MISLEADING", "NO_EVIDENCE", "NOT_EMPIRICAL",
+    "SUPPORTED", "MOSTLY_ACCURATE", "CONTRADICTED", "MISLEADING", "NO_EVIDENCE",
+    "NOT_EMPIRICAL",
 }
 
 
@@ -186,7 +191,7 @@ def _parse_fields(text: str) -> Dict[str, str]:
         m = rx.search(text or "")
         if m:
             out[key] = m.group(1).strip()
-    verdict = (out.get("verdict") or "").upper().strip()
+    verdict = (out.get("verdict") or "").upper().strip().replace(" ", "_")
     # Tolerate decoration like "**SUPPORTED**" or "SUPPORTED (high confidence)".
     for v in _VALID_VERDICTS:
         if v in verdict:

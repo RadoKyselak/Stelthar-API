@@ -27,13 +27,19 @@ from typing import List, Optional
 
 from claims.parser import ParsedClaim
 from evidence.datapoint import Datapoint, Request
-from evidence.units import humanize
+from evidence.units import PERCENT, humanize
 
 # Verdicts.
 SUPPORTED = "Supported"
+MOSTLY_ACCURATE = "Mostly accurate"
 CONTRADICTED = "Contradicted"
 MISLEADING = "Misleading"
 NO_VERDICT = "No verdict"
+
+# A near miss is off by at most one step in the claim's last written digit
+# (4.1% against 4.0%) AND within this share of the official figure, so a
+# coarse claim ("3%" against 3.6%) is still Contradicted.
+NEAR_MISS_MAX_RELATIVE = 0.05
 
 # Reasons a verdict could not be reached. Each is actionable.
 NO_SERIES = "no_official_series_for_this_claim"
@@ -108,6 +114,34 @@ def _satisfies_comparator(
         return diff <= tol_abs
     denom = abs(official) if abs(official) > 1e-12 else 1.0
     return diff / denom <= relative_fallback
+
+
+def _is_near_miss(
+    claimed: float, official: float, precision: Optional[float], tolerance: Optional[float],
+) -> bool:
+    """Is a failed equality claim off by only one step in its last digit?
+
+    "Unemployment in Texas was 4.1%" against BLS's 4.0% is not false in the
+    way "10%" is. Calling both Contradicted overstates the error; calling the
+    first Supported hides it. It is Mostly accurate, and the headline states
+    the gap.
+    """
+    if precision is None or precision <= 0:
+        return False
+    diff = abs(claimed - official)
+    if diff > ((tolerance or 0.0) + precision) * (1 + 1e-9):
+        return False
+    denom = abs(official) if abs(official) > 1e-12 else 1.0
+    return diff / denom <= NEAR_MISS_MAX_RELATIVE
+
+
+def _gap_phrase(delta: float, family: str) -> str:
+    """'0.1 percentage point', '$70.00 billion'."""
+    gap = abs(delta)
+    if family == PERCENT:
+        n = f"{gap:.2f}".rstrip("0").rstrip(".")
+        return f"{n} percentage point{'s' if gap > 1 + 1e-9 else ''}"
+    return humanize(gap, family)
 
 
 def _phrase_for(comparator: str) -> str:
@@ -264,8 +298,21 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
             relative_delta=rel, evidence=usable, caveats=caveats,
         )
 
+    if agrees:
+        outcome = SUPPORTED
+    elif parsed.comparator == "equals" and _is_near_miss(
+        claimed.magnitude, official.quantity.magnitude, claimed.precision, tolerance,
+    ):
+        outcome = MOSTLY_ACCURATE
+        headline = (
+            f"{headline[:-1]}: close, but off by "
+            f"{_gap_phrase(delta, official.quantity.family)}."
+        )
+    else:
+        outcome = CONTRADICTED
+
     return Verdict(
-        verdict=SUPPORTED if agrees else CONTRADICTED,
+        verdict=outcome,
         confidence=confidence,
         headline=headline,
         claimed_display=claimed_display,

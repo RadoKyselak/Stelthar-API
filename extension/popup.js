@@ -91,7 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
         label.textContent = `${pct}%`;
     };
 
-    // The v2 engine reports Supported / Contradicted / Misleading / No verdict
+    // The v2 engine reports Supported / Mostly accurate / Contradicted / Misleading / No verdict
     // in `verdict_detail`; `verdict` keeps the old three values for old builds.
     const verdictOf = (r) => r.verdict_detail || r.verdict || "Inconclusive";
     const verdictClass = (v) => v.toLowerCase().replace(/\s+/g, "-");
