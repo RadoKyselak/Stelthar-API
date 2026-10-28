@@ -27,7 +27,8 @@ from typing import List, Optional
 
 from claims.parser import ParsedClaim
 from evidence.datapoint import Datapoint, Request
-from evidence.units import PERCENT, humanize
+from evidence.citation import agency_short
+from evidence.units import PERCENT, humanize, humanize_claim
 
 # Verdicts.
 SUPPORTED = "Supported"
@@ -65,6 +66,9 @@ class Verdict:
     official_display: str = ""
     delta_display: str = ""
     relative_delta: Optional[float] = None
+    # "0.1 percentage point": the size of the miss in words. Equality claims only.
+    gap_display: str = ""
+    comparator: str = "equals"
     evidence: List[Datapoint] = field(default_factory=list)
     caveats: List[str] = field(default_factory=list)
 
@@ -265,7 +269,7 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
         tolerance,
     )
 
-    claimed_display = humanize(claimed.magnitude, official.quantity.family)
+    claimed_display = humanize_claim(claimed.magnitude, official.quantity.family, claimed.precision)
     delta = official.quantity.magnitude - claimed.magnitude
     denom = abs(official.quantity.magnitude)
     rel = (delta / denom) if denom > 1e-12 else None
@@ -277,7 +281,7 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
         claim_side = f"Claim says {claimed_display}."
 
     headline = (
-        f"{claim_side} {official.source} reports {official.display_value()} "
+        f"{claim_side} {agency_short(official.source)} reports {official.display_value()} "
         f"for {official.observed.describe(short=True)}."
     )
 
@@ -311,6 +315,10 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
     else:
         outcome = CONTRADICTED
 
+    gap = ""
+    if parsed.comparator == "equals" and abs(delta) > 1e-12:
+        gap = _gap_phrase(delta, official.quantity.family)
+
     return Verdict(
         verdict=outcome,
         confidence=confidence,
@@ -319,6 +327,8 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
         official_display=official_display,
         delta_display=humanize(delta, official.quantity.family),
         relative_delta=rel,
+        gap_display=gap,
+        comparator=parsed.comparator,
         evidence=usable,
         caveats=caveats,
     )

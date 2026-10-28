@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Mirador</title>
+  <meta name="description" content="Check any number against official U.S. government data from BLS, BEA, the Census Bureau and the Treasury, with a link to the exact source.">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="brand" href="/" aria-label="Project Mirador home">
+        <img src="/static/icon.svg" alt="" width="26" height="26">
+        <span>Project Mirador</span>
+      </a>
+      <nav aria-label="Sections">
+        <a href="#lookup">Look up</a>
+        <a href="#how">How it works</a>
+        <a href="#coverage">Coverage</a>
+        <a href="/docs">API</a>
+        <a class="nav-cta" href="https://chromewebstore.google.com/detail/anehbncclhojcaihgeoebennaccpeegn" rel="noopener">Get the extension</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <h1 id="hero-title">Check any number against official U.S.&nbsp;data.</h1>
+      <p class="lede">Paste a claim with a figure in it. Mirador finds the exact number the
+        Bureau of Labor Statistics, the Bureau of Economic Analysis, the Census Bureau or the
+        Treasury published, compares it with the claim, and links you to the source.</p>
+
+      <form id="check-form" class="check" autocomplete="off">
+        <label for="claim" class="sr">Claim to check</label>
+        <textarea id="claim" name="claim" rows="2" maxlength="1000"
+          placeholder="e.g. Unemployment in Texas was 4.1% in 2023" required></textarea>
+        <div class="check-row">
+          <span id="count" class="count" aria-live="polite"></span>
+          <button id="check-btn" type="submit" class="primary">Check claim</button>
+        </div>
+      </form>
+
+      <div class="examples" aria-label="Example claims">
+        <span class="examples-t">Try:</span>
+        <button type="button" class="ex">Unemployment in Texas was 4.1% in 2023</button>
+        <button type="button" class="ex">The federal deficit was $1.8 trillion in 2024</button>
+        <button type="button" class="ex">Eggs cost $4.82 a dozen in January 2023</button>
+        <button type="button" class="ex">Unemployment fell from 8.1% in 2020 to 3.6% in 2023</button>
+        <button type="button" class="ex">The government spent over $7 trillion in 2024</button>
+        <button type="button" class="ex">Real GDP grew at a 2.2% annual rate in Q2 2026</button>
+      </div>
+
+      <div id="result" class="result" aria-live="polite"></div>
+    </section>
+
+    <section id="lookup" class="band" aria-labelledby="lookup-title">
+      <div class="wrap">
+        <h2 id="lookup-title">Look up an official figure</h2>
+        <p class="sub">Writing, not checking? Get the number with a ready-to-paste citation.</p>
+        <div class="lookup">
+          <label for="lookup-q" class="sr">Figure to look up</label>
+          <input id="lookup-q" type="search" placeholder="unemployment texas 2023" spellcheck="false">
+        </div>
+        <div id="lookup-out" class="lookup-out" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section id="how" class="wrap" aria-labelledby="how-title">
+      <h2 id="how-title">How a claim is checked</h2>
+      <ol class="steps">
+        <li>
+          <span class="step-n">1</span>
+          <h3>Read the claim</h3>
+          <p>Mirador pulls out the figure, what it measures, the period and the place, plus how
+            precisely the figure was written, so “9%” and “9.06%” are held to different standards.</p>
+        </li>
+        <li>
+          <span class="step-n">2</span>
+          <h3>Fetch the official figure</h3>
+          <p>The number comes straight from the agency’s own data service. The period and place
+            are read from the agency’s response, never assumed.</p>
+        </li>
+        <li>
+          <span class="step-n">3</span>
+          <h3>Compare, and show the work</h3>
+          <p>You get the verdict, both numbers side by side, the size of any gap, and a link to the
+            exact series. Nothing is hidden behind a score.</p>
+        </li>
+      </ol>
+
+      <h2 class="rules-title">The rules it follows</h2>
+      <ul class="rules">
+        <li><b>No verdict without a source.</b> Every answer links to the published data or
+          document it rests on. If no source can be found, it says so.</li>
+        <li><b>Precision is respected.</b> “9%” matches 9.06%. “4.1%” against an official 4.0% is
+          <i>Mostly accurate</i>, not true and not false.</li>
+        <li><b>Revisions are not your error.</b> A claim that matches an agency’s first published
+          estimate is supported, with a note on the later revision.</li>
+        <li><b>“Can’t check” is never dressed up as a verdict.</b> An outage, a missing period or
+          an unsupported place each get their own plain explanation.</li>
+        <li><b>AI is the last resort.</b> Exact-figure checks use no AI at all. When a claim
+          needs a web search, the model may only report what a source says, under strict daily
+          limits.</li>
+      </ul>
+
+      <div class="verdict-key" aria-label="What the verdicts mean">
+        <div><span class="dot supported"></span><b>Supported</b> Matches the official figure.</div>
+        <div><span class="dot mostly"></span><b>Mostly accurate</b> Off by one step in the claim’s last digit.</div>
+        <div><span class="dot contradicted"></span><b>Contradicted</b> The official figure says otherwise.</div>
+        <div><span class="dot misleading"></span><b>Misleading</b> Right number, misleading frame.</div>
+        <div><span class="dot none"></span><b>No verdict</b> Nothing official settles it, and why.</div>
+      </div>
+    </section>
+
+    <section id="coverage" class="band" aria-labelledby="coverage-title">
+      <div class="wrap">
+        <h2 id="coverage-title">Checked against an exact official figure</h2>
+        <p class="sub" id="coverage-sub">Claims outside this list are checked by searching
+          published sources, with official ones preferred.</p>
+        <div id="coverage-grid" class="coverage-grid"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p>Data from the U.S. Bureau of Labor Statistics, U.S. Bureau of Economic Analysis, U.S. Census
+      Bureau and U.S. Department of the Treasury. Project Mirador is independent and not affiliated
+      with any government agency.</p>
+    <p><a href="https://chromewebstore.google.com/detail/anehbncclhojcaihgeoebennaccpeegn" rel="noopener">Chrome extension</a> · <a href="/docs">API documentation</a> · <a href="/health">Service status</a> ·
+      <a href="https://github.com/RadoKyselak/Stelthar-API" rel="noopener">Source code</a></p>
+  </footer>
+
+  <script src="/static/result-view.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -22,7 +22,7 @@ explicitly — which the pipeline treats as a mismatch, not as a pass.
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from evidence.units import Quantity, humanize
+from evidence.units import PERCENT, Quantity, humanize
 
 # Period kinds.
 ANNUAL = "annual"
@@ -87,6 +87,23 @@ class Period:
     # "annual average" fits; "computed as the mean of 12 monthly observations,
     # to 1 dp" does not, and jammed inline it makes the citation unusable.
     SHORT_BASIS_CHARS = 20
+
+    def label(self) -> str:
+        """The period alone, without its basis: "2023", "FY2024", "Q2 2026"."""
+        return self.describe_base()
+
+    def describe_base(self) -> str:
+        if not self.is_known:
+            return "period unknown"
+        if self.kind == FISCAL_YEAR:
+            return f"FY{self.year}"
+        if self.kind == MONTHLY and self.month:
+            return f"{_MONTH_NAMES.get(self.month, '')} {self.year}".strip()
+        if self.kind == QUARTERLY and self.quarter:
+            return f"Q{self.quarter} {self.year}"
+        if self.kind == POINT_IN_TIME and self.record_date:
+            return f"as of {self.record_date}"
+        return str(self.year)
 
     def describe(self, short: bool = False) -> str:
         if not self.is_known:
@@ -238,6 +255,16 @@ class Datapoint:
         return self.mismatch_against(request) is None
 
     def display_value(self) -> str:
+        # A rate keeps the precision the agency published it at: BLS writes
+        # "4.0", and "4%" beside a claim of "4.1%" would hide that precision.
+        if self.quantity.family == PERCENT and self.raw_value:
+            raw = str(self.raw_value).strip()
+            try:
+                same = abs(float(raw) - self.quantity.magnitude) < 1e-9
+            except ValueError:
+                same = False
+            if same and "." in raw and len(raw.split(".")[1]) <= 2:
+                return f"{raw}%"
         return humanize(self.quantity.magnitude, self.quantity.family)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -250,6 +277,8 @@ class Datapoint:
             "unit": self.quantity.family,
             "raw_value": self.raw_value,
             "period": self.observed.describe(),
+            "period_label": self.observed.label(),
+            "period_basis": self.observed.basis or "",
             "period_year": self.observed.year,
             "period_kind": self.observed.kind,
             "geography": self.geography.name,

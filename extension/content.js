@@ -2,10 +2,53 @@
   const MIN_CLAIM_LEN = 12;
   const MAX_CLAIM_LEN = 600;
   const BUBBLE_TIMEOUT_MS = 6000;
+  const PANEL_WIDTH = 380;
+  const View = window.MiradorView;
 
   let host = null;
   let shadow = null;
   let bubbleTimer = null;
+
+  const PANEL_CSS = `
+    :host { all: initial; }
+    .bubble {
+      position: absolute; display: inline-flex; align-items: center; gap: 7px;
+      background: #15181d; color: #fff; padding: 6px 12px 6px 7px; border-radius: 999px;
+      font: 600 13px/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      cursor: pointer; white-space: nowrap; user-select: none; border: 1px solid rgba(255,255,255,.08);
+      box-shadow: 0 6px 20px rgba(0,0,0,.22), 0 1px 3px rgba(0,0,0,.2);
+      animation: pop .14s ease-out;
+    }
+    .bubble:hover { background: #2a2f38; }
+    .bubble:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 2px; }
+    @keyframes pop { from { opacity: 0; transform: translateY(3px) scale(.98); } to { opacity: 1; transform: none; } }
+    .panel {
+      --p-card: #ffffff; --p-line: #e3e1db; --p-muted: #5a6170; --p-ink: #15181d;
+      position: absolute; width: ${PANEL_WIDTH}px; max-width: calc(100vw - 24px);
+      max-height: min(78vh, 680px); overflow: auto; overscroll-behavior: contain;
+      background: var(--p-card); color: var(--p-ink); border: 1px solid var(--p-line); border-radius: 14px;
+      box-shadow: 0 18px 48px rgba(16,24,40,.18), 0 2px 8px rgba(16,24,40,.08);
+      font: 14px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      animation: pop .16s ease-out;
+    }
+    @media (prefers-color-scheme: dark) {
+      .panel { --p-card: #17191e; --p-line: #2d3139; --p-muted: #a6adb9; --p-ink: #eceef1;
+        box-shadow: 0 18px 48px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.4); }
+    }
+    @media (prefers-reduced-motion: reduce) { .bubble, .panel { animation: none; } }
+    .panel-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center;
+      justify-content: space-between; gap: 8px; padding: 9px 10px 9px 14px;
+      background: var(--p-card); border-bottom: 1px solid var(--p-line); }
+    .panel-brand { display: flex; align-items: center; gap: 8px; font-weight: 680; font-size: 13px; }
+    .panel-brand small { font-weight: 500; color: var(--p-muted); font-size: 12px; }
+    .panel-close { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px;
+      border: 0; background: transparent; color: var(--p-muted); cursor: pointer; font-size: 16px; }
+    .panel-close:hover { background: rgba(127,127,127,.14); color: var(--p-ink); }
+    .panel-close:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+    .panel-claim { margin: 12px 14px 0; padding-left: 10px; border-left: 3px solid var(--p-line);
+      color: var(--p-muted); font-size: 13px; font-style: italic; max-height: 4.6em; overflow: hidden; }
+    .panel-body { padding: 12px 14px 14px; }
+  `;
 
   const ensureShadowHost = () => {
     if (host && document.documentElement.contains(host)) return shadow;
@@ -19,42 +62,7 @@
     shadow = host.attachShadow({ mode: "closed" });
 
     const style = document.createElement("style");
-    style.textContent = `
-      * { box-sizing: border-box; font-family: 'Courier New', Courier, monospace; }
-      .bubble {
-        position: absolute; background: #111; color: #fff; padding: 6px 10px;
-        border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.35); user-select: none;
-      }
-      .bubble:hover { background: #333; }
-      .panel {
-        position: absolute; width: 340px; max-width: calc(100vw - 24px);
-        background: #fdfaf3; color: #1a1a1a; border: 2px solid #1a1a1a;
-        border-radius: 6px; padding: 12px; font-size: 13px; line-height: 1.45;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
-      }
-      .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-      .panel-title { font-weight: bold; font-size: 13px; }
-      .panel-close { cursor: pointer; border: 1px solid #1a1a1a; background: #f0eadd; padding: 0 6px; font-size: 13px; line-height: 18px; border-radius: 3px; }
-      .panel-claim { color: #555; font-style: italic; font-size: 12px; margin-bottom: 8px; max-height: 60px; overflow: hidden; }
-      .verdict { font-weight: bold; font-size: 15px; margin-bottom: 2px; }
-      .verdict.supported { color: #008000; }
-      .verdict.contradicted { color: #CC0000; }
-      .verdict.inconclusive { color: #B8860B; }
-      .verdict.mostly-accurate { color: #4F7A00; }
-      .verdict.misleading { color: #D2691E; }
-      .verdict.no-verdict, .verdict.degraded { color: #666; }
-      .suggestions { margin-top: 6px; }
-      .confidence { color: #666; font-size: 12px; margin-bottom: 6px; }
-      .summary { margin-bottom: 8px; }
-      .links { list-style: none; padding: 0; margin: 0; }
-      .links li { margin-bottom: 4px; }
-      .links a { color: #0000EE; font-size: 12px; text-decoration: none; word-break: break-word; }
-      .links a:hover { text-decoration: underline; }
-      .loading { color: #555; }
-      .error { color: #CC0000; font-weight: bold; }
-      .cached-note { color: #888; font-size: 11px; margin-top: 6px; }
-    `;
+    style.textContent = PANEL_CSS + View.css;
     shadow.appendChild(style);
     document.documentElement.appendChild(host);
     return shadow;
@@ -68,12 +76,7 @@
   const clampLeft = (left, width) =>
     Math.max(8, Math.min(left, window.scrollX + document.documentElement.clientWidth - width - 8));
 
-  const formatConfidence = (conf) => {
-    if (conf === null || conf === undefined) return "N/A";
-    const num = typeof conf === "string" ? Number(conf.replace("%", "").replace(",", "")) : conf;
-    if (Number.isNaN(num)) return String(conf);
-    return `${Math.round(num > 0 && num <= 1 ? num * 100 : num)}%`;
-  };
+  const closePanel = () => removeEl("panel");
 
   const showPanel = (claim, anchorRect) => {
     const root = ensureShadowHost();
@@ -82,126 +85,64 @@
 
     const panel = document.createElement("div");
     panel.className = "panel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Project Mirador fact check");
 
-    const top = anchorRect
-      ? window.scrollY + anchorRect.bottom + 8
-      : window.scrollY + 80;
-    const left = anchorRect
-      ? clampLeft(window.scrollX + anchorRect.left, 340)
-      : clampLeft(window.scrollX + 80, 340);
+    const top = anchorRect ? window.scrollY + anchorRect.bottom + 10 : window.scrollY + 80;
+    const left = clampLeft(window.scrollX + (anchorRect ? anchorRect.left : 80), PANEL_WIDTH);
     panel.style.top = `${top}px`;
     panel.style.left = `${left}px`;
 
     const header = document.createElement("div");
-    header.className = "panel-header";
-    const title = document.createElement("span");
-    title.className = "panel-title";
-    title.textContent = "Project Mirador";
+    header.className = "panel-head";
+    const brand = document.createElement("div");
+    brand.className = "panel-brand";
+    brand.appendChild(View.logo(20));
+    brand.appendChild(document.createTextNode("Project Mirador"));
+    const sub = document.createElement("small");
+    sub.textContent = "· official U.S. data";
+    brand.appendChild(sub);
     const close = document.createElement("button");
     close.className = "panel-close";
+    close.type = "button";
+    close.setAttribute("aria-label", "Close");
     close.textContent = "✕";
-    close.onclick = () => panel.remove();
-    header.appendChild(title);
+    close.onclick = closePanel;
+    header.appendChild(brand);
     header.appendChild(close);
     panel.appendChild(header);
 
     const claimEl = document.createElement("div");
     claimEl.className = "panel-claim";
-    claimEl.textContent = `"${claim}"`;
+    claimEl.textContent = `“${claim}”`;
     panel.appendChild(claimEl);
 
     const body = document.createElement("div");
-    const loading = document.createElement("div");
-    loading.className = "loading";
-    loading.textContent = "Checking against official government data…";
-    body.appendChild(loading);
+    body.className = "panel-body";
     panel.appendChild(body);
-
     root.appendChild(panel);
+    close.focus({ preventScroll: true });
 
-    chrome.runtime.sendMessage({ type: "verifyClaim", claim }, (resp) => {
-      body.textContent = "";
-      if (chrome.runtime.lastError || !resp) {
-        const err = document.createElement("div");
-        err.className = "error";
-        err.textContent = "Verification unavailable. Try the extension popup.";
-        body.appendChild(err);
-        return;
-      }
-      if (!resp.ok) {
-        const err = document.createElement("div");
-        err.className = "error";
-        err.textContent = resp.error;
-        body.appendChild(err);
-        return;
-      }
-
-      const r = resp.result;
-      // v2 engine: verdict_detail carries Mostly accurate / Misleading / No verdict.
-      const verdictRaw = (r.verdict_detail || r.verdict || "Inconclusive").toLowerCase();
-      const verdict = document.createElement("div");
-      verdict.className = `verdict ${r.degraded ? "degraded" : verdictRaw.replace(/\s+/g, "-")}`;
-      verdict.textContent = r.degraded ? "VERDICT: COULDN'T CHECK" : `VERDICT: ${verdictRaw.toUpperCase()}`;
-      body.appendChild(verdict);
-
-      const conf = document.createElement("div");
-      conf.className = "confidence";
-      if (r.degraded) {
-        conf.textContent = "Outage on our side — not a judgment about the claim.";
-      } else if (r.engine === "v2") {
-        conf.textContent = verdictRaw === "no verdict"
-          ? "Confidence: —"
-          : `Confidence: ${r.confidence_tier || "Low"}`;
-      } else {
-        const tier = r.confidence_tier ? ` (${r.confidence_tier})` : "";
-        conf.textContent = `Confidence: ${formatConfidence(r.confidence)}${tier}`;
-      }
-      body.appendChild(conf);
-
-      if (r.summary) {
-        const summary = document.createElement("div");
-        summary.className = "summary";
-        summary.textContent = r.summary;
-        body.appendChild(summary);
-      }
-
-      if (r.evidence_links?.length) {
-        const ul = document.createElement("ul");
-        ul.className = "links";
-        r.evidence_links.slice(0, 5).forEach((link) => {
-          const li = document.createElement("li");
-          const a = document.createElement("a");
-          a.href = link.source_url;
-          a.textContent = `→ ${link.finding}`;
-          a.target = "_blank";
-          a.rel = "noopener noreferrer";
-          li.appendChild(a);
-          ul.appendChild(li);
-        });
-        body.appendChild(ul);
-      }
-
-      // Required by Google Search grounding wherever its citations appear.
-      // Nested shadow root keeps Google's inline styles self-contained.
-      if (r.search_suggestions_html) {
-        const holder = document.createElement("div");
-        holder.className = "suggestions";
-        const sr = holder.attachShadow({ mode: "open" });
-        sr.innerHTML = r.search_suggestions_html;
-        sr.querySelectorAll("a").forEach((a) => {
-          a.target = "_blank";
-          a.rel = "noopener noreferrer";
-        });
-        body.appendChild(holder);
-      }
-
-      if (r._cached) {
-        const note = document.createElement("div");
-        note.className = "cached-note";
-        note.textContent = "Cached result (checked within the last 12h).";
-        body.appendChild(note);
-      }
-    });
+    const run = (bypassCache) => {
+      body.replaceChildren(View.loading());
+      chrome.runtime.sendMessage({ type: "verifyClaim", claim, bypassCache }, (resp) => {
+        if (chrome.runtime.lastError || !resp) {
+          body.replaceChildren(View.error(
+            "The extension's background service did not answer. Reload the page and try again.",
+            { onRetry: () => run(true) }));
+          return;
+        }
+        if (!resp.ok) {
+          body.replaceChildren(View.error(resp.error, { onRetry: () => run(true) }));
+          return;
+        }
+        body.replaceChildren(View.render(resp.result, {
+          cached: !!resp.result._cached,
+          onRecheck: () => run(true),
+        }));
+      });
+    };
+    run(false);
   };
 
   const isEditableTarget = (node) => {
@@ -234,11 +175,13 @@
       if (!rect.width && !rect.height) return;
 
       const root = ensureShadowHost();
-      const bubble = document.createElement("div");
+      const bubble = document.createElement("button");
+      bubble.type = "button";
       bubble.className = "bubble";
-      bubble.textContent = "✓ Verify with Project Mirador";
-      bubble.style.top = `${window.scrollY + rect.top - 34}px`;
-      bubble.style.left = `${clampLeft(window.scrollX + rect.left, 210)}px`;
+      bubble.appendChild(View.logo(18));
+      bubble.appendChild(document.createTextNode("Check this claim"));
+      bubble.style.top = `${window.scrollY + rect.top - 38}px`;
+      bubble.style.left = `${clampLeft(window.scrollX + rect.left, 170)}px`;
       bubble.onclick = () => showPanel(text, rect);
       root.appendChild(bubble);
 
@@ -249,6 +192,10 @@
   document.addEventListener("mousedown", (e) => {
     if (host && e.composedPath?.().includes(host)) return;
     removeEl("bubble");
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && shadow && shadow.querySelector(".panel")) closePanel();
   });
 
   chrome.runtime.onMessage.addListener((message) => {

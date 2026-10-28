@@ -322,6 +322,33 @@ def parse_quantity(text: str) -> Optional[Quantity]:
     )
 
 
+def humanize_claim(magnitude: float, family: str, precision: Optional[float]) -> str:
+    """Render a claimed figure to the precision it was written with.
+
+    "$7 trillion" stays "$7 trillion", not "$7.00 trillion": restating a
+    claim with digits it never had misquotes it."""
+    import math
+    if not precision or precision <= 0:
+        return humanize(magnitude, family)
+
+    def places(step: float) -> int:
+        return max(0, min(3, -math.floor(math.log10(step) + 1e-9)))
+
+    if family == PERCENT:
+        return f"{magnitude:.{places(precision)}f}%"
+    if family in (USD, PERSONS, JOBS):
+        a = abs(magnitude)
+        sign = "-" if magnitude < 0 else ""
+        money = "$" if family == USD else ""
+        for scale, word in ((1e12, "trillion"), (1e9, "billion"), (1e6, "million")):
+            if a >= scale:
+                return f"{sign}{money}{a / scale:.{places(precision / scale)}f} {word}"
+        if family == USD and a < 100:
+            return f"{sign}${a:,.{places(precision)}f}"
+        return f"{sign}{money}{a:,.0f}"
+    return humanize(magnitude, family)
+
+
 def humanize(magnitude: float, family: str) -> str:
     """Render a base-unit magnitude the way a person would write it."""
     if family == PERCENT:

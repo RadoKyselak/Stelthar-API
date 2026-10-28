@@ -32,3 +32,6 @@ jobs:
       - name: Extension syntax
         working-directory: extension
         run: for f in *.js; do node --check "$f"; done
+      - name: Web page syntax
+        working-directory: backend/static
+        run: for f in *.js; do node --check "$f"; done
