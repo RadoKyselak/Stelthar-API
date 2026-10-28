@@ -97,7 +97,8 @@ _SUBGROUP_RE = re.compile(
     r"rural|urban|disabled|people with disabilities|households headed by|"
     r"married couples?|families with)\b"
     r"|\b(?:aged?|ages)\s+\d{1,2}\b"
-    r"|\b(?:under|over|above|below)\s+(?:the\s+age\s+of\s+)?\d{1,2}\b" + _NUM_UNIT_AHEAD +
+    # "over 65" is an age; "over 4.1%" is a threshold, so a decimal is not an age.
+    r"|\b(?:under|over|above|below)\s+(?:the\s+age\s+of\s+)?\d{1,2}(?![.,]\d)\b" + _NUM_UNIT_AHEAD +
     r"|\b\d{1,2}\s*(?:to|-|through)\s*\d{1,2}[- ]year[- ]olds?\b"
     r"|\b\d{1,2}\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b",
     re.IGNORECASE,

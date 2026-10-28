@@ -170,8 +170,11 @@ model is only called when no official series covers the claim.
   read from the agency's response — never copied from the request.
 - **Assess:** compares within the claim's written precision (and the survey's
   margin of error for Census), and fails closed on period or geography mismatch.
-- **Verdicts:** `Supported`, `Contradicted`, `Misleading`, or `No verdict`
-  with a machine-readable `reason` saying what would have to change.
+- **Verdicts:** `Supported`, `Mostly accurate`, `Contradicted`, `Misleading`,
+  or `No verdict` with a machine-readable `reason` saying what would have to
+  change. `Mostly accurate` means the claim is off by one step in its last
+  written digit and within 5% ("Texas unemployment was 4.1%" when BLS reports
+  4.0%); the headline states the gap.
 
 **Model resilience.** `GEMINI_MODEL` is a preference, not a single point of
 failure: if Google retires it, the API falls through `GEMINI_FALLBACK_MODELS`

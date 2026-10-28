@@ -28,8 +28,8 @@ from typing import Any, Dict, List, Optional
 from claims.metrics import MetricSpec
 from claims.parser import ParsedClaim, parse_claim
 from claims.verdict import (
-    ALTERNATE_MEASURE, GEOGRAPHY_UNSUPPORTED, HIGH, LOW, MEDIUM, MISLEADING, NO_SERIES, NO_VERDICT,
-    NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, Verdict, assess,
+    ALTERNATE_MEASURE, GEOGRAPHY_UNSUPPORTED, HIGH, LOW, MEDIUM, MISLEADING, MOSTLY_ACCURATE,
+    NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, Verdict, assess,
 )
 import config
 from config import logger
@@ -172,7 +172,7 @@ def _alternate_measure_applies(parsed: ParsedClaim, v: Verdict) -> bool:
     Census's CPS and ACS medians differ by a few percent; a claim of $10 gas
     against $3.30 is not a survey difference, it is wrong."""
     spec = parsed.metric
-    if not (spec and spec.alternate_measure and v.verdict == CONTRADICTED):
+    if not (spec and spec.alternate_measure and v.verdict in (CONTRADICTED, MOSTLY_ACCURATE)):
         return False
     if v.relative_delta is None:
         return False
@@ -222,7 +222,8 @@ def _grounded_to_result(
     # A government-data fact checker does not hand down a verdict it cannot
     # source. An AI answer with no retrieved page behind it is not shown as
     # Supported / Contradicted, however plausible it sounds.
-    if not g.citations and g.verdict in ("SUPPORTED", "CONTRADICTED", "MISLEADING"):
+    if not g.citations and g.verdict in ("SUPPORTED", "MOSTLY_ACCURATE", "CONTRADICTED",
+                                         "MISLEADING"):
         return VerificationV2(
             claim=claim, verdict=NO_VERDICT, confidence=LOW,
             headline=("No source could be found to check this claim against, so no "
@@ -233,6 +234,7 @@ def _grounded_to_result(
         )
     verdict_map = {
         "SUPPORTED": SUPPORTED,
+        "MOSTLY_ACCURATE": MOSTLY_ACCURATE,
         "CONTRADICTED": CONTRADICTED,
         "MISLEADING": MISLEADING,
         "NO_EVIDENCE": NO_VERDICT,
@@ -371,13 +373,16 @@ async def _verify_two_points(text: str, parsed: ParsedClaim, started: float) -> 
             logger.exception("Two-point lookup failed for %r", text[:120])
             return None
         v = assess(sub, evidence)
-        v = _soften_for_alternate_measure(sub, v)
+        if v.verdict != MOSTLY_ACCURATE:
+            v = _soften_for_alternate_measure(sub, v)
         verdicts.append(v)
 
     if any(v.verdict == NO_VERDICT for v in verdicts):
         verdict, reason = NO_VERDICT, next(v.reason for v in verdicts if v.verdict == NO_VERDICT)
     elif any(v.verdict == CONTRADICTED for v in verdicts):
         verdict, reason = CONTRADICTED, None
+    elif any(v.verdict == MOSTLY_ACCURATE for v in verdicts):
+        verdict, reason = MOSTLY_ACCURATE, None
     else:
         verdict, reason = SUPPORTED, None
 
@@ -461,12 +466,18 @@ async def verify(claim: str, allow_grounding: bool = True,
             )
 
         if evidence:
-            verdict = assess(parsed, evidence)
-            verdict = _soften_for_alternate_measure(parsed, verdict)
+            base = assess(parsed, evidence)
+            verdict = _soften_for_alternate_measure(parsed, base)
+            # A near miss that another official measure might explain is sent
+            # to the search, but the search can only upgrade it (to Supported,
+            # when the claim matches e.g. an earlier BEA estimate exactly). If
+            # it finds nothing better, the near miss stands.
+            near_miss = base.verdict == MOSTLY_ACCURATE
+            fallback = base if near_miss else verdict
             # A structured answer that landed cleanly is the best outcome: exact
             # number, stated period, zero model calls.
             if verdict.verdict != NO_VERDICT or not allow_grounding:
-                return _verdict_to_result(text, parsed, verdict, started)
+                return _verdict_to_result(text, parsed, fallback, started)
             # Otherwise fall through — grounding may still resolve it, and the
             # structured figure is carried along as context.
             hint = (
@@ -477,10 +488,18 @@ async def verify(claim: str, allow_grounding: bool = True,
                 g = await _safe_ground(text, hint, client_ip, parsed.metric is not None)
                 if g.ok:
                     result = _grounded_to_result(text, parsed, g, started)
-                    result.evidence = [d.to_dict() for d in verdict.evidence]
-                    result.notes.append("structured lookup ran first and did not settle it")
-                    return result
-            return _verdict_to_result(text, parsed, verdict, started)
+                    if not near_miss or result.verdict == SUPPORTED:
+                        result.evidence = [d.to_dict() for d in verdict.evidence]
+                        result.notes.append("structured lookup ran first and did not settle it")
+                        return result
+                if near_miss:
+                    kept = _verdict_to_result(text, parsed, base, started)
+                    kept.model_calls = g.model_calls
+                    if g.ok:
+                        kept.notes.append("AI search found no official figure the claim "
+                                          "matches exactly")
+                    return kept
+            return _verdict_to_result(text, parsed, fallback, started)
 
     # A series that exists but has no row for the requested period is a
     # different situation from having no series at all, and the caller can act

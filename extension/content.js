@@ -41,6 +41,7 @@
       .verdict.supported { color: #008000; }
       .verdict.contradicted { color: #CC0000; }
       .verdict.inconclusive { color: #B8860B; }
+      .verdict.mostly-accurate { color: #4F7A00; }
       .verdict.misleading { color: #D2691E; }
       .verdict.no-verdict, .verdict.degraded { color: #666; }
       .suggestions { margin-top: 6px; }
@@ -136,7 +137,7 @@
       }
 
       const r = resp.result;
-      // v2 engine: verdict_detail carries Misleading / No verdict.
+      // v2 engine: verdict_detail carries Mostly accurate / Misleading / No verdict.
       const verdictRaw = (r.verdict_detail || r.verdict || "Inconclusive").toLowerCase();
       const verdict = document.createElement("div");
       verdict.className = `verdict ${r.degraded ? "degraded" : verdictRaw.replace(/\s+/g, "-")}`;
