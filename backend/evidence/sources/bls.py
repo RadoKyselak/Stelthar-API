@@ -48,6 +48,29 @@ def series_permalink(series_id: str) -> str:
     return f"https://data.bls.gov/timeseries/{series_id}"
 
 
+def annual_series_for(series_id: str) -> str:
+    """The series BLS computes official annual averages from."""
+    sid = (series_id or "").upper()
+    if sid.startswith("LNS14"):
+        return "LNU04" + sid[5:]
+    return series_id
+
+
+def geography_for_series(series_id: str) -> Geography:
+    """Where a BLS series measures, read from the series id itself.
+
+    LAUS state series encode the state FIPS code in positions 5-6
+    (LAUST48… / LASST48… = Texas). Everything else wired up here is national.
+    """
+    sid = (series_id or "").upper()
+    if sid.startswith(("LAUST", "LASST")) and len(sid) >= 7 and sid[5:7].isdigit():
+        from claims.geography import _STATE_FIPS
+        fips = sid[5:7]
+        name = next((n for n, f in _STATE_FIPS.items() if f == fips), f"FIPS {fips}")
+        return Geography(name=name.title(), level="state", fips=fips)
+    return Geography.national()
+
+
 async def _fetch_raw(series_id: str, start_year: int, end_year: int) -> List[Dict[str, Any]]:
     """Cached. Keyless BLS allows 25 requests/day, which a single eval run
     exhausts; a closed year's observations never change, so re-fetching them is
@@ -149,6 +172,10 @@ async def fetch_annual(
     old behaviour — was to return the latest monthly value under the requested
     year's label, which reads as an annual figure and is not one.
     """
+    # BLS publishes CPS annual averages from the NOT seasonally adjusted series
+    # (LNU04…), not the adjusted one (LNS14…) quoted monthly. Averaging the
+    # adjusted months can land 0.1 point off the official annual figure.
+    series_id = annual_series_for(series_id)
     rows = await _fetch_raw(series_id, year, year)
     value, basis, n = _annual_value(rows, year)
     if value is None:
@@ -158,7 +185,7 @@ async def fetch_annual(
         quantity=Quantity(magnitude=_scale_for(series_id, value), family=family),
         metric=metric, label=label,
         observed=Period(year=year, kind=ANNUAL, basis=basis),
-        geography=Geography.national(),
+        geography=geography_for_series(series_id),
         source="BLS", source_url=series_permalink(series_id),
         series_id=series_id, raw_value=f"{value}",
         extra={"months_observed": n},
@@ -180,7 +207,7 @@ async def fetch_monthly(
                 metric=metric, label=label,
                 observed=Period(year=year, kind=MONTHLY, month=month,
                                 basis=f"{r.get('periodName', target)} monthly observation"),
-                geography=Geography.national(),
+                geography=geography_for_series(series_id),
                 source="BLS", source_url=series_permalink(series_id),
                 series_id=series_id, raw_value=str(r.get("value")),
             )]
@@ -230,7 +257,7 @@ async def fetch_inflation(
         quantity=Quantity(magnitude=pct, family=PERCENT),
         metric=metric, label=label,
         observed=period,
-        geography=Geography.national(),
+        geography=geography_for_series(series_id),
         source="BLS", source_url=series_permalink(series_id),
         series_id=series_id, raw_value=f"{pct:.2f}",
         extra={"index_current": cur, "index_prior": prev},
@@ -252,9 +279,34 @@ async def fetch_series(
             quantity=Quantity(magnitude=_scale_for(series_id, value), family=family),
             metric=metric, label=label,
             observed=Period(year=year, kind=ANNUAL, basis=basis),
-            geography=Geography.national(),
+            geography=geography_for_series(series_id),
             source="BLS", source_url=series_permalink(series_id),
             series_id=series_id, raw_value=f"{value}",
             extra={"months_observed": n},
         ))
     return out
+
+
+async def fetch_latest_monthly(
+    metric: str, label: str, series_id: str, family: str,
+) -> List[Datapoint]:
+    """The most recent monthly observation — what a present-tense price claim
+    ("gas is $3 a gallon") is about. Searches this year and last."""
+    year = _dt.now(_tz.utc).year
+    rows = await _fetch_raw(series_id, year - 1, year)
+    monthly = [r for r in rows if str(r.get("period", "")).startswith("M")
+               and r.get("period") != "M13" and parse_number(r.get("value")) is not None]
+    if not monthly:
+        return []
+    latest = max(monthly, key=lambda r: (int(r["year"]), r["period"]))
+    y, mth = int(latest["year"]), int(latest["period"][1:])
+    v = parse_number(latest["value"])
+    return [Datapoint(
+        quantity=Quantity(magnitude=_scale_for(series_id, v), family=family),
+        metric=metric, label=label,
+        observed=Period(year=y, kind=MONTHLY, month=mth,
+                        basis="latest monthly observation"),
+        geography=geography_for_series(series_id),
+        source="BLS", source_url=series_permalink(series_id),
+        series_id=series_id, raw_value=str(latest.get("value")),
+    )]

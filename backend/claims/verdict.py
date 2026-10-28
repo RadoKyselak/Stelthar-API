@@ -217,6 +217,9 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
     # inside that margin cannot be called wrong on sampling noise, so the
     # equality band is widened to it — and the caveat says so.
     tolerance = claimed.tolerance()
+    if parsed.metric is not None and parsed.metric.min_relative_tolerance and parsed.comparator == "equals":
+        floor = abs(official.quantity.magnitude) * parsed.metric.min_relative_tolerance
+        tolerance = max(tolerance or 0.0, floor)
     moe = official.extra.get("margin_of_error") if official.extra else None
     if moe and parsed.comparator == "equals":
         tolerance = max(tolerance or 0.0, float(moe))

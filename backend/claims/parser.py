@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from claims.geography import resolve_geography
-from claims.metrics import MetricSpec, match_metric
+from claims.metrics import VARIANTS, MetricSpec, match_metric
 from evidence.datapoint import Geography
 from evidence.units import Quantity, parse_quantity
 import evidence.units as _units
@@ -125,23 +125,71 @@ _NOMINAL_RE = re.compile(r"\bnominal\b|\bcurrent[- ]dollars?\b", re.IGNORECASE)
 
 
 _AGE_BOUND_RE = re.compile(
-    r"\b\d{1,2}\s+(?:years?\s+)?(?:and|or)\s+(?:older|over|above)\b"
+    r"\b\d{1,2}\s*(?:to|-|through)\s*\d{1,2}[- ]?(?:year[- ]olds?|years?(?:\s+old)?)\b"
+    r"|\b\d{1,2}\s+(?:years?\s+)?(?:and|or)\s+(?:older|over|above)\b"
     r"|\b(?:aged?|ages)\s+\d{1,2}\s*\+?(?:\s*(?:to|-)\s*\d{1,2})?"
     r"|\b\d{1,2}\s*\+\s*(?=\s*(?:year|adult|population|people))",
     re.IGNORECASE,
 )
 
 
-def structured_blocker(text: str, spec: Optional[MetricSpec]) -> str:
+# Quarters as people write them: "Q2 2026", "2026 Q2", "2026Q2",
+# "the second quarter of 2026".
+_ORDINAL_Q = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3,
+              "fourth": 4, "4th": 4}
+_QUARTER_YEAR_RE = re.compile(
+    r"\bq([1-4])\s*(?:of\s+)?['’]?(\d{4})\b"
+    r"|\b(\d{4})\s*[-:]?\s*q([1-4])\b"
+    r"|\b(first|second|third|fourth|1st|2nd|3rd|4th)[- ]quarter(?:\s+of)?\s+(\d{4})\b",
+    re.IGNORECASE,
+)
+_QUARTER_TOKEN_RE = re.compile(r"\bq[1-4]\b|\b(\d{4})q[1-4]\b", re.IGNORECASE)
+
+# Metrics that have a quarterly series wired up, and the phrasing that goes
+# with quarterly figures ("at an annual rate") is then expected, not a blocker.
+_QUARTERLY_METRICS = {"real_gdp_growth"}
+
+
+def _extract_quarter(text: str):
+    """(quarter, year) for an explicit quarter, else (None, None)."""
+    m = _QUARTER_YEAR_RE.search(text or "")
+    if not m:
+        return None, None
+    if m.group(1):
+        return int(m.group(1)), int(m.group(2))
+    if m.group(3):
+        return int(m.group(4)), int(m.group(3))
+    return _ORDINAL_Q[m.group(5).lower()], int(m.group(6))
+
+
+def _select_variant(text: str, spec: Optional[MetricSpec]) -> Optional[MetricSpec]:
+    """Switch "unemployment rate" to "unemployment rate, Black" when the claim
+    says so. Exactly one variant must match; two ("Black women") is a
+    subgroup no series covers, and the blocker below declines it."""
+    if spec is None:
+        return None
+    hits = [v for v in VARIANTS.get(spec.metric, [])
+            if v.qualifier and re.search(v.qualifier, text, re.IGNORECASE)]
+    return hits[0] if len(hits) == 1 else spec
+
+
+def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[int] = None) -> str:
     """Why the matched series cannot answer this claim, or "" if it can."""
     if spec is None or not text:
         return ""
-    m = _SUBGROUP_RE.search(text)
-    if m:
-        ok = _UNIVERSE_OK.get(spec.metric)
-        if not (ok and ok.search(m.group(0))):
+    # A subgroup mention is fine when it overlaps the metric's own universe
+    # (its qualifier, or a defining age bound such as "25 and older").
+    allowed = []
+    for rx in (spec.qualifier and re.compile(spec.qualifier, re.IGNORECASE),
+               _UNIVERSE_OK.get(spec.metric), _UNIVERSE_OK.get(spec.parent or "")):
+        if rx:
+            allowed.extend(mm.span() for mm in rx.finditer(text))
+    for m in _SUBGROUP_RE.finditer(text):
+        covered = any(m.start() < e and s0 < m.end() for s0, e in allowed)
+        if not covered:
             return f"the claim is about a subgroup (\u201c{m.group(0).strip()}\u201d), not the total the series measures"
-    if _QUARTER_RE.search(text):
+    quarterly_ok = spec.metric in _QUARTERLY_METRICS and quarter is not None
+    if _QUARTER_RE.search(text) and not quarterly_ok:
         return "the claim is about a quarter or an annualised rate; only annual and monthly figures are wired up"
     if _PER_CAPITA_RE.search(text):
         return "the claim is a per-capita figure; the series is a total"
@@ -187,6 +235,10 @@ class ParsedClaim:
     # ("when he took office"), which this parser cannot resolve to a year.
     has_unresolved_period: bool = False
     unparsed_reason: str = ""
+    # Explicit calendar quarter (1-4), when the claim names one.
+    quarter: Optional[int] = None
+    # The claim said a plain year about a metric reported by fiscal year.
+    fiscal_year_assumed: bool = False
     # Set when the claim qualifies the metric in a way the series cannot
     # honour (subgroup, quarter, per-capita, real vs nominal).
     structured_blocker: str = ""
@@ -269,7 +321,8 @@ def parse_claim(text: str) -> ParsedClaim:
         return ParsedClaim(text="", metric=None, year=None, all_years=[],
                            unparsed_reason="empty claim")
 
-    spec = match_metric(raw)
+    spec = _select_variant(raw, match_metric(raw))
+    quarter, quarter_year = _extract_quarter(raw)
 
     fiscal_year = _extract_fiscal_year(raw)
     years = _extract_years(raw)
@@ -298,6 +351,8 @@ def parse_claim(text: str) -> ParsedClaim:
     # are not claimed values; left in, they made a one-number claim look like
     # a two-number trend claim.
     value_text = _AGE_BOUND_RE.sub(" ", _strip_years_for_value(raw, years))
+    # "Q2" must not be read as the number 2.
+    value_text = _QUARTER_TOKEN_RE.sub(" ", value_text)
     claimed = parse_quantity(value_text)
     # A percent claim whose metric is a percent metric: keep as-is. A bare
     # number with no unit against a USD metric is dollars.
@@ -310,7 +365,14 @@ def parse_claim(text: str) -> ParsedClaim:
     all_values = _all_quantities(value_text)
     has_unresolved = bool(_RELATIVE_PERIOD_RE.search(raw)) and year is None
 
-    year_is_future = bool(year and basis == "calendar" and year > _current_year())
+    if quarter is not None and quarter_year:
+        year, basis = quarter_year, "calendar"
+
+    fiscal_assumed = False
+    if spec is not None and spec.fiscal_year_default and basis == "calendar" and year:
+        basis, fiscal_assumed = "fiscal", True
+
+    year_is_future = bool(year and year > _current_year())
 
     reason = ""
     if spec is None:
@@ -330,5 +392,7 @@ def parse_claim(text: str) -> ParsedClaim:
         all_values=all_values,
         has_unresolved_period=has_unresolved,
         unparsed_reason=reason,
-        structured_blocker=structured_blocker(raw, spec),
+        structured_blocker=structured_blocker(raw, spec, quarter),
+        quarter=quarter,
+        fiscal_year_assumed=fiscal_assumed,
     )

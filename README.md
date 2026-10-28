@@ -233,12 +233,17 @@ Response (abridged — `sources`, `evidence`, `citations` and `parsed` are also 
 `search_suggestions_html` is set when the grounded tier answered. Any UI that
 shows grounded citations **must** render it (Google Search grounding terms).
 
-**Coverage (tier 1):** unemployment, labor-force participation, payrolls,
-hourly earnings, CPI/core CPI/PPI inflation (BLS); national debt (Treasury);
-GDP, real GDP growth, personal income (BEA); population, median household
-income, poverty rate, uninsured rate, median home value, bachelor's degree
-attainment — national or by state (Census ACS 1-year). Everything else goes
-to tier 2.
+**Coverage (tier 1, exact figures, no AI):**
+
+| Area | Claims it answers | Source |
+|---|---|---|
+| Jobs | Unemployment rate — national, **by state**, and for Black, White, Hispanic, Asian, women, men, teens (16–19), youth (16–24), veterans; labor-force participation; payrolls; hourly earnings | BLS (CPS, LAUS, CES) |
+| Prices | Inflation, core inflation, PPI; **average prices of gas, eggs, milk, ground beef, coffee, electricity** (latest month for "is…" claims) | BLS (CPI, Average Price Data) |
+| Federal budget | **Deficit, revenue, spending** by fiscal year; national debt | Treasury (Monthly Treasury Statement, Debt to the Penny) |
+| Economy | GDP, real GDP growth (annual and **quarterly, annual rate**), personal income | BEA (NIPA) |
+| People | Population, median household income, poverty, uninsured, home value, bachelor's degree — national or by state | Census ACS 1-year |
+
+Also checked exactly: **two-point claims** ("unemployment fell from 8.1% in 2020 to 3.6% in 2023" — each value against its own year). Everything else goes to tier 2 (AI search with citations, behind spend limits); an AI verdict with no source behind it is never shown.
 
 ---
 

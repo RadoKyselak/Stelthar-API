@@ -142,3 +142,87 @@ async def fetch_debt_series(start_year: int, end_year: int) -> List[Datapoint]:
     for y in range(start_year, end_year + 1):
         out.extend(await fetch_national_debt(year=y))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Federal budget totals — Monthly Treasury Statement, Table 1
+# ---------------------------------------------------------------------------
+# The September statement of each fiscal year carries a "Year-to-Date" row
+# under "FY <year>": the official full-year receipts, outlays and deficit
+# (FY2024: $4.919T, $6.752T, $1.833T). The same report also repeats the prior
+# year, so the row is chosen by its parent ("FY <year>"), never by position.
+_MTS_ENDPOINT = "/v1/accounting/mts/mts_table_1"
+_MTS_FIELDS = {
+    "receipts": ("current_month_gross_rcpt_amt", "Federal receipts (revenue)"),
+    "outlays": ("current_month_gross_outly_amt", "Federal outlays (spending)"),
+    "deficit": ("current_month_dfct_sur_amt", "Federal budget deficit"),
+}
+_MTS_METRIC = {"receipts": "federal_receipts", "outlays": "federal_outlays",
+               "deficit": "federal_deficit"}
+
+
+def _mts_permalink() -> str:
+    return "https://fiscaldata.treasury.gov/datasets/monthly-treasury-statement/summary-of-receipts-outlays-and-the-deficit-surplus-of-the-u-s-government"
+
+
+async def fetch_budget_total(kind: str, fiscal_year: Optional[int]) -> List[Datapoint]:
+    """Full-fiscal-year receipts, outlays or deficit. `fiscal_year=None` means
+    the latest completed fiscal year that has been published."""
+    if kind not in _MTS_FIELDS:
+        return []
+    from datetime import datetime as _dt, timezone as _tz
+    if fiscal_year is not None:
+        years = [fiscal_year]
+    else:
+        now = _dt.now(_tz.utc)
+        # FY N ends Sep 30 of year N. Newest first; an unpublished year simply
+        # has no September record and the next one is tried.
+        years = [now.year, now.year - 1, now.year - 2]
+
+    url = f"{TREASURY_FISCAL_BASE_URL}{_MTS_ENDPOINT}"
+    for fy in years:
+        query = {"filter": f"record_date:eq:{fy}-09-30", "page[size]": "100", "format": "json"}
+
+        async def _load(q=query):
+            await _limiter.acquire()
+            async with httpx.AsyncClient(timeout=API_TIMEOUTS.TREASURY) as client:
+                r = await client.get(url, params=q)
+                r.raise_for_status()
+                return {"payload": r.json(), "url": public_url(r.url)}
+
+        try:
+            blob = await cached("treasury", f"mts1:{fy}", TTL_IMMUTABLE, _load)
+        except httpx.HTTPError as e:
+            from evidence.sources import SourceUnavailable
+            raise SourceUnavailable("TREASURY", f"request failed: {e}") from e
+        rows = (blob or {}).get("payload", {}).get("data", []) if blob else []
+        dp = _mts_row_to_datapoint(rows, fy, kind)
+        if dp:
+            return [dp]
+    return []
+
+
+def _mts_row_to_datapoint(rows, fy: int, kind: str) -> Optional[Datapoint]:
+    parent = next((r for r in rows if str(r.get("classification_desc", "")).strip() == f"FY {fy}"), None)
+    if parent is None:
+        return None
+    ytd = next((r for r in rows if r.get("parent_id") == parent.get("classification_id")
+                and str(r.get("classification_desc", "")).strip() == "Year-to-Date"), None)
+    if ytd is None:
+        return None
+    field, label = _MTS_FIELDS[kind]
+    value = parse_number(ytd.get(field))
+    if value is None:
+        return None
+    record_date = str(ytd.get("record_date") or f"{fy}-09-30")
+    return Datapoint(
+        quantity=Quantity(magnitude=value, family=USD, raw=str(ytd.get(field))),
+        metric=_MTS_METRIC[kind], label=label,
+        observed=Period(year=fy, kind=FISCAL_YEAR, basis="full fiscal year",
+                        record_date=record_date),
+        geography=Geography.national(),
+        source="TREASURY", source_url=_mts_permalink(),
+        series_id="MTS Table 1", as_of=record_date, raw_value=str(ytd.get(field)),
+        extra={"caveat": (f"Federal budget totals are reported by fiscal year: FY{fy} ran "
+                          f"from October 1, {fy - 1} to September 30, {fy}.")},
+    )

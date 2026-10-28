@@ -123,7 +123,8 @@ class TestLookupDeclines:
         assert "BEA" in r.headline
 
     async def test_geography_below_series_level(self):
-        r = await lookup("unemployment in Ohio 2023")
+        # States are covered (BLS LAUS); cities are not.
+        r = await lookup("unemployment in Kansas City 2023")
         assert not r.ok and r.reason == GEOGRAPHY_UNSUPPORTED
 
     async def test_future_year(self):

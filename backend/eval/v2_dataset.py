@@ -91,7 +91,7 @@ async def build() -> List[V2Claim]:
             id=f"bls-unemp-{year}-true",
             claim=f"The unemployment rate in {year} was {shown}%.",
             expected_verdict="Supported", domain="labor",
-            truth_source="BLS", truth_series="LNS14000000",
+            truth_source="BLS", truth_series="LNU04000000",
             truth_period=f"{year} annual average", truth_value=true_v,
             notes="States the published annual average to one decimal place.",
         ))
@@ -101,7 +101,7 @@ async def build() -> List[V2Claim]:
             id=f"bls-unemp-{year}-false",
             claim=f"The unemployment rate in {year} was {_fmt_pct(wrong)}%.",
             expected_verdict="Contradicted", domain="labor",
-            truth_source="BLS", truth_series="LNS14000000",
+            truth_source="BLS", truth_series="LNU04000000",
             truth_period=f"{year} annual average", truth_value=true_v,
             notes="Same claim shape, value moved 2.5 points off the published figure.",
         ))

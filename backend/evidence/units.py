@@ -182,7 +182,7 @@ _NUMBER_RE = re.compile(
     \s*
     (?P<closeparen>\))?
     \s*
-    (?P<unit>%|percent|percentage\s+points?|pp|dollars?|usd|people|persons?|jobs?)?
+    (?P<unit>%|percent|percentage\s+points?|pp|dollars?|usd|cents?|¢|people|persons?|jobs?)?
     """,
     re.IGNORECASE | re.VERBOSE,
 )
@@ -250,7 +250,7 @@ def _family_from_unit_word(word: Optional[str], had_currency: bool) -> str:
         return PERCENT
     if w in ("pp", "percentage point", "percentage points"):
         return PERCENT
-    if w in ("dollar", "dollars", "usd"):
+    if w in ("dollar", "dollars", "usd", "cent", "cents", "¢"):
         return USD
     if w in ("people", "person", "persons"):
         return PERSONS
@@ -301,8 +301,17 @@ def parse_quantity(text: str) -> Optional[Quantity]:
     if family == PERCENT:
         magnitude = base
 
+    # "17 cents" is $0.17.
+    if (m.group("unit") or "").strip().lower() in ("cent", "cents", "¢"):
+        multiplier /= 100.0
+        magnitude = base * multiplier
+
     # Percentages are never rescaled, so their precision is not scaled either.
     precision = written_precision(m.group("number"), 1.0 if family == PERCENT else multiplier)
+    # Trailing zeros are insignificant for "$73,000", but "10%" asserts to the
+    # whole point: read that way, "unemployment was 10%" would agree with 8.1%.
+    if family == PERCENT and "." not in m.group("number") and precision and precision > 1.0:
+        precision = 1.0
 
     return Quantity(
         magnitude=magnitude,
@@ -335,5 +344,9 @@ def humanize(magnitude: float, family: str) -> str:
             return f"{sign}${a / 1e9:.2f} billion"
         if a >= 1e6:
             return f"{sign}${a / 1e6:.2f} million"
+        if a < 1:
+            return f"{sign}${a:.3f}"   # electricity per kWh: $0.169
+        if a < 100:
+            return f"{sign}${a:,.2f}"  # prices and wages: $3.52, $33.82
         return f"{sign}${a:,.0f}"
     return f"{magnitude:,.2f}".rstrip("0").rstrip(".")

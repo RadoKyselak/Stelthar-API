@@ -550,14 +550,13 @@ class TestQualifierBlockers:
         "In 2023 the median household income for Black households was $56,490",
         "The child poverty rate in 2023 was 13.7%",
         "The poverty rate for children under 18 was 13.7% in 2023",
-        "The unemployment rate for women was 3.5% in 2023",
-        "Youth unemployment was 8% in 2023",
         "Nominal GDP grew 6.6% in 2023",
-        "GDP grew 4.9% in the third quarter of 2023",
-        "GDP grew at a 4.9% annual rate in Q3 2023",
         "Real GDP was $22.7 trillion in 2023",
         "GDP per capita was $82,000 in 2023",
         "Real median household income was $80,610 in 2023",
+        "The unemployment rate for Black women was 5% in 2023",
+        "Nominal GDP grew 6% in Q3 2023",
+        "Personal income grew 5% in Q2 2024",
     ])
     def test_blocked_from_structured_tier(self, claim):
         from services.verify_v2 import _structured_is_applicable
