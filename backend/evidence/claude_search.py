@@ -134,7 +134,13 @@ async def ground_claim(claim: str, context_hint: str = "") -> GroundedAnswer:
         logger.error("ANTHROPIC_API_KEY was rejected")
         return GroundedAnswer(ok=False, error="AI search is misconfigured", model=model)
     except anthropic.APIStatusError as e:
-        logger.warning("Claude search HTTP %s: %s", e.status_code, str(e.message)[:300])
+        msg = str(getattr(e, "message", "") or e)
+        logger.warning("Claude search HTTP %s: %s", e.status_code, msg[:300])
+        if "usage limit" in msg.lower() or "spend limit" in msg.lower():
+            # The Anthropic Console spend limit — the backstop — has been hit.
+            return GroundedAnswer(ok=False, model=model, limited=True, skipped=True, model_calls=0,
+                                  error="The AI search budget for this month is used up. "
+                                        "Exact-figure checks still work.")
         return GroundedAnswer(ok=False, error=f"AI search error (HTTP {e.status_code})", model=model)
     except (anthropic.APIConnectionError, anthropic.APITimeoutError) as e:
         logger.warning("Claude search connection failed: %s", e)

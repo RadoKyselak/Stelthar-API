@@ -27,6 +27,18 @@ from utils import spend_guard
 _CACHE_TTL = 24 * 3600
 _MAX_WORDS = 60
 _DIGIT_RE = re.compile(r"\d")
+# A claim is a statement about the world. Text that instructs the model
+# ("ignore…", "write…", "pretend…") is not a claim, whatever numbers it
+# contains, and is declined before anything is spent.
+_INSTRUCTION_RE = re.compile(
+    r"^\s*(?:please\s+)?(?:ignore|disregard|forget|write|compose|generate|create|draft|"
+    r"translate|summari[sz]e|explain|tell me|give me|list|pretend|act as|roleplay|"
+    r"role-play|you are|you're|imagine|repeat|print|output|reveal|show me|describe|"
+    r"help me|can you|could you|would you)\b"
+    r"|\b(?:ignore|disregard)\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier)\b"
+    r"|\bsystem prompt\b|\byour instructions\b",
+    re.IGNORECASE,
+)
 
 
 def gate(claim: str, names_a_metric: bool) -> Optional[str]:
@@ -37,6 +49,10 @@ def gate(claim: str, names_a_metric: bool) -> Optional[str]:
                 f"{config.AI_MAX_CLAIM_CHARS}). Highlight a single sentence with one figure.")
     if len(text.split()) > _MAX_WORDS:
         return "The claim is too long to check. Highlight a single sentence with one figure."
+    if _INSTRUCTION_RE.search(text) or text.endswith("?"):
+        return ("That reads as a question or an instruction, not a claim. Highlight a "
+                "statement of fact with a figure in it, e.g. \u201cThe unemployment rate "
+                "was 3.6% in 2023.\u201d")
     if not _DIGIT_RE.search(text) and not names_a_metric:
         return ("The claim states no figure or official statistic that can be checked "
                 "against published data.")
