@@ -62,22 +62,22 @@ def fake_bls(table):
 
 class TestUnemploymentBySubgroupAndState:
     @pytest.mark.parametrize("claim,series,verdict", [
-        ("Black unemployment was 5.5% in 2023", "LNS14000006", SUPPORTED),
-        ("The unemployment rate for Black workers was 5.5% in 2023", "LNS14000006", SUPPORTED),
-        ("The unemployment rate for Black Americans was 9% in 2023", "LNS14000006", CONTRADICTED),
-        ("Hispanic unemployment was 4.6% in 2023", "LNS14000009", SUPPORTED),
-        ("The unemployment rate for women was 3.4% in 2023", "LNS14000002", SUPPORTED),
-        ("Teen unemployment was 11.2% in 2023", "LNS14000012", SUPPORTED),
-        ("Unemployment among people aged 16-24 was 8% in 2023", "LNS14024887", SUPPORTED),
+        ("Black unemployment was 5.5% in 2023", "LNU04000006", SUPPORTED),
+        ("The unemployment rate for Black workers was 5.5% in 2023", "LNU04000006", SUPPORTED),
+        ("The unemployment rate for Black Americans was 9% in 2023", "LNU04000006", CONTRADICTED),
+        ("Hispanic unemployment was 4.6% in 2023", "LNU04000009", SUPPORTED),
+        ("The unemployment rate for women was 3.4% in 2023", "LNU04000002", SUPPORTED),
+        ("Teen unemployment was 11.2% in 2023", "LNU04000012", SUPPORTED),
+        ("Unemployment among people aged 16-24 was 8% in 2023", "LNU04024887", SUPPORTED),
         ("Veteran unemployment was 3% in 2023", "LNU04049526", SUPPORTED),
     ])
     async def test_subgroup_series(self, claim, series, verdict):
         table = {
-            "LNS14000006": {2023: [5.4, 5.7, 5.0, 4.7, 5.6, 6.0, 5.8, 5.3, 5.7, 5.7, 5.8, 5.2]},
-            "LNS14000009": {2023: [4.9, 5.0, 4.6, 4.4, 4.0, 4.3, 4.4, 4.9, 4.6, 4.8, 4.7, 5.0]},
-            "LNS14000002": {2023: [3.4, 3.5, 3.4, 3.2, 3.5, 3.5, 3.4, 3.6, 3.5, 3.6, 3.4, 3.4]},
-            "LNS14000012": {2023: [10.9, 10.7, 9.8, 9.2, 11.3, 11.0, 11.2, 13.1, 12.6, 11.8, 11.4, 11.8]},
-            "LNS14024887": {2023: [7.8, 7.5, 7.5, 6.8, 7.8, 7.5, 7.7, 8.5, 8.2, 8.2, 8.0, 8.0]},
+            "LNU04000006": {2023: [5.4, 5.7, 5.0, 4.7, 5.6, 6.0, 5.8, 5.3, 5.7, 5.7, 5.8, 5.2]},
+            "LNU04000009": {2023: [4.9, 5.0, 4.6, 4.4, 4.0, 4.3, 4.4, 4.9, 4.6, 4.8, 4.7, 5.0]},
+            "LNU04000002": {2023: [3.4, 3.5, 3.4, 3.2, 3.5, 3.5, 3.4, 3.6, 3.5, 3.6, 3.4, 3.4]},
+            "LNU04000012": {2023: [10.9, 10.7, 9.8, 9.2, 11.3, 11.0, 11.2, 13.1, 12.6, 11.8, 11.4, 11.8]},
+            "LNU04024887": {2023: [7.8, 7.5, 7.5, 6.8, 7.8, 7.5, 7.7, 8.5, 8.2, 8.2, 8.0, 8.0]},
             "LNU04049526": {2023: [3.4, 3.1, 2.9, 2.1, 2.3, 2.9, 2.8, 2.9, 2.8, 2.8, 2.8, 3.0]},
         }
         fetch, calls = fake_bls(table)
@@ -225,7 +225,7 @@ class TestQuarterlyGDP:
 # --------------------------------------------------------------- two-point claims
 
 class TestTwoPointClaims:
-    TABLE = {"LNS14000000": {
+    TABLE = {"LNU04000000": {
         2020: [3.5, 3.5, 4.4, 14.8, 13.2, 11.0, 10.2, 8.4, 7.8, 6.8, 6.7, 6.7],
         2023: [3.4, 3.6, 3.5, 3.4, 3.6, 3.6, 3.5, 3.7, 3.8, 3.9, 3.7, 3.7],
     }}
@@ -288,3 +288,29 @@ async def test_other_official_census_figures_are_not_called_wrong(claim, monkeyp
     monkeypatch.setattr(v2.census_source, "fetch", fake_census)
     r = await verify(claim, allow_grounding=False)
     assert r.verdict == NO_VERDICT and r.reason == "agency_publishes_more_than_one_official_figure"
+
+
+class TestLiveFindings:
+    def test_annual_cps_uses_the_published_unadjusted_series(self):
+        assert bls_source.annual_series_for("LNS14000002") == "LNU04000002"
+        assert bls_source.annual_series_for("LAUST480000000000003") == "LAUST480000000000003"
+
+    @pytest.mark.parametrize("claim,metric", [
+        ("Eggs cost $4.82 a dozen in January 2023", "egg_price"),
+        ("Milk was $4 a gallon in 2023", "milk_price"),
+        ("Electricity costs 17 cents per kWh", "electricity_price"),
+    ])
+    def test_everyday_price_phrasing(self, claim, metric):
+        assert parse_claim(claim).metric.metric == metric
+
+    async def test_revised_gdp_estimate_is_not_called_wrong(self, monkeypatch):
+        rows = [{"TableName": "T10101", "LineNumber": "1", "LineDescription": "Gross domestic product",
+                 "TimePeriod": "2023Q3", "UNIT_MULT": "0", "DataValue": "4.5"}]
+
+        async def fetch_table(table, years, frequency="A"):
+            return {"rows": rows, "url": "x"}
+        monkeypatch.setattr(bea_source, "_fetch_table", fetch_table)
+        r = await verify("GDP grew 4.9% in Q3 2023", allow_grounding=False)
+        assert r.verdict == NO_VERDICT and r.reason == "agency_publishes_more_than_one_official_figure"
+        r2 = await verify("GDP grew 15% in Q3 2023", allow_grounding=False)
+        assert r2.verdict == CONTRADICTED

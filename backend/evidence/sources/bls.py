@@ -48,6 +48,14 @@ def series_permalink(series_id: str) -> str:
     return f"https://data.bls.gov/timeseries/{series_id}"
 
 
+def annual_series_for(series_id: str) -> str:
+    """The series BLS computes official annual averages from."""
+    sid = (series_id or "").upper()
+    if sid.startswith("LNS14"):
+        return "LNU04" + sid[5:]
+    return series_id
+
+
 def geography_for_series(series_id: str) -> Geography:
     """Where a BLS series measures, read from the series id itself.
 
@@ -164,6 +172,10 @@ async def fetch_annual(
     old behaviour — was to return the latest monthly value under the requested
     year's label, which reads as an annual figure and is not one.
     """
+    # BLS publishes CPS annual averages from the NOT seasonally adjusted series
+    # (LNU04…), not the adjusted one (LNS14…) quoted monthly. Averaging the
+    # adjusted months can land 0.1 point off the official annual figure.
+    series_id = annual_series_for(series_id)
     rows = await _fetch_raw(series_id, year, year)
     value, basis, n = _annual_value(rows, year)
     if value is None:
