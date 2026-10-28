@@ -55,13 +55,27 @@ def _get_client() -> anthropic.AsyncAnthropic:
     return _client
 
 
+# National statistics offices and intergovernmental statistical bodies whose
+# domains do not carry a "gov" label. Matched as the registrable domain, so
+# "insee.fr" covers "www.insee.fr" but not "insee.fr.example.com".
+_OFFICIAL_DOMAINS = frozenset("""
+insee.fr destatis.de istat.it ine.es ine.pt cbs.nl statbel.fgov.be scb.se ssb.no
+dst.dk stat.fi cso.ie statistik.at bfs.admin.ch nisra.gov.uk stats.govt.nz
+statcan.gc.ca abs.gov.au inegi.org.mx ibge.gov.br indec.gob.ar stat.go.jp
+kostat.go.kr mospi.gov.in stats.gov.cn europa.eu ecb.europa.eu oecd.org imf.org
+worldbank.org un.org who.int ilo.org bis.org wto.org federalreserve.gov
+""".split())
+
+
 def _is_official_host(host: str) -> bool:
-    host = (host or "").lower().split(":")[0]
+    host = (host or "").lower().split(":")[0].rstrip(".")
     if host.endswith((".gov", ".mil", ".fed.us")):
         return True
-    # National government domains such as gov.uk, gouv.fr, gc.ca, gov.au.
+    if any(host == d or host.endswith("." + d) for d in _OFFICIAL_DOMAINS):
+        return True
+    # National government domains such as gov.uk, gouv.fr, gc.ca, go.jp.
     labels = host.split(".")
-    return any(l in ("gov", "gouv", "gob", "govt", "gc") for l in labels[:-1])
+    return any(l in ("gov", "gouv", "gob", "govt", "gc", "go", "admin") for l in labels[:-1])
 
 
 def _citations_and_segments(content: List[Any]):
@@ -183,7 +197,7 @@ async def ground_claim(claim: str, context_hint: str = "") -> GroundedAnswer:
         # Official sources first, then the rest; at most 6.
         citations=sorted(citations, key=lambda c: not c.official)[:6],
         segments=segments,
-        span_attribution=any(seg.citation_indices for seg in segments),
+        span_attribution=False,
         search_queries=queries,
         model=model,
         cost_usd=cost,

@@ -341,3 +341,13 @@ class TestConfidenceWithoutSpanCitations:
         assert body["confidence_tier"] == "Medium"
         assert "0%" not in body["summary"]
         assert body["sources"][0]["url"].startswith("https://www.dol.gov")
+
+
+@pytest.mark.parametrize("host,official", [
+    ("www.insee.fr", True), ("www.dol.gov", True), ("www.ons.gov.uk", True),
+    ("www.stat.go.jp", True), ("ec.europa.eu", True), ("www.bfs.admin.ch", True),
+    ("www.governing.com", False), ("insee.fr.evil.com", False),
+    ("en.wikipedia.org", False), ("www.recordinglaw.com", False),
+])
+def test_official_hosts(host, official):
+    assert claude_search._is_official_host(host) is official
