@@ -22,7 +22,7 @@ explicitly — which the pipeline treats as a mismatch, not as a pass.
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from evidence.units import PERCENT, Quantity, humanize
+from evidence.units import JOBS, PERCENT, PERSONS, USD, Quantity, humanize
 
 # Period kinds.
 ANNUAL = "annual"
@@ -255,17 +255,28 @@ class Datapoint:
         return self.mismatch_against(request) is None
 
     def display_value(self) -> str:
-        # A rate keeps the precision the agency published it at: BLS writes
-        # "4.0", and "4%" beside a claim of "4.1%" would hide that precision.
-        if self.quantity.family == PERCENT and self.raw_value:
-            raw = str(self.raw_value).strip()
-            try:
-                same = abs(float(raw) - self.quantity.magnitude) < 1e-9
-            except ValueError:
-                same = False
-            if same and "." in raw and len(raw.split(".")[1]) <= 2:
-                return f"{raw}%"
-        return humanize(self.quantity.magnitude, self.quantity.family)
+        """The figure as the agency published it, digit for digit.
+
+        BLS writes "4.0" (a rate), "4.823" (eggs, dollars) and "304.702" (the
+        CPI index). Rounding those to "4%", "$4.82" or "304.7" quotes the
+        agency with less precision than it published, which matters most
+        beside a claim that differs in exactly that digit.
+        """
+        raw = str(self.raw_value or "").strip().replace(",", "")
+        mag, fam = self.quantity.magnitude, self.quantity.family
+        try:
+            same = bool(raw) and abs(float(raw) - mag) < 1e-9
+        except ValueError:
+            same = False
+        if same and "." in raw:
+            places = len(raw.split(".")[1])
+            if fam == PERCENT and places <= 2:
+                return f"{float(raw):.{places}f}%"
+            if fam == USD and abs(mag) < 100 and places <= 3:
+                return f"{'-' if mag < 0 else ''}${abs(mag):,.{places}f}"
+            if fam not in (USD, PERSONS, JOBS, PERCENT) and places <= 3:
+                return f"{mag:,.{places}f}"
+        return humanize(mag, fam)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialise for the API response — provenance is part of the payload."""
@@ -286,5 +297,6 @@ class Datapoint:
             "source": self.source,
             "source_url": self.source_url,
             "series_id": self.series_id,
+            "table": (self.extra or {}).get("table"),
             "as_of": self.as_of,
         }

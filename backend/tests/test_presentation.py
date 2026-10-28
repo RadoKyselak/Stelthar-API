@@ -55,10 +55,15 @@ class TestStructuredDisplay:
         [s] = d["sources"]
         assert s["agency"] == "U.S. Bureau of Labor Statistics"
         assert s["dataset"] == "Local Area Unemployment Statistics"
-        assert s["series_id"] == TEXAS and s["url"].startswith("https://data.bls.gov/")
+        assert s["identifier"] == f"series {TEXAS}" and s["url"].startswith("https://data.bls.gov/")
         assert d["method"]["kind"] == "official_data" and "No AI was used" in d["method"]["text"]
         assert d["confidence"]["tier"] in ("High", "Medium") and d["confidence"]["text"]
         assert TEXAS in d["share_text"] and "Mostly accurate" in d["share_text"]
+        cite = d["citation"]
+        for part in ("U.S. Bureau of Labor Statistics", "\"Unemployment rate,\"",
+                     "Local Area Unemployment Statistics", f"series {TEXAS}", "Texas", "4.0%.",
+                     f"https://data.bls.gov/timeseries/{TEXAS}", "(accessed "):
+            assert part in cite, part
         assert d["status"] == "ok" and d["reason"] is None
 
     async def test_two_point_has_one_comparison_per_year(self):
@@ -72,7 +77,7 @@ class TestStructuredDisplay:
         v = await structured("Unemployment in Texas was over 5% in 2023", {TEXAS: {2023: [4.0] * 12}})
         [c] = build_display(v)["comparisons"]
         assert c["claim"] == "more than 5%"
-        assert c["note"] == "The official figure does not meet the claim's threshold."
+        assert c["note"] == "4.0% is not more than 5%."
 
     async def test_no_verdict_says_what_to_try(self):
         v = await verify("Unemployment in Chicago was 5% in 2023", allow_grounding=False)
@@ -136,7 +141,7 @@ class TestFormatting:
                           "period_basis": "daily figure, as of 2026-10-27"})
         assert s["url"].startswith("https://fiscaldata.treasury.gov/datasets/debt-to-the-penny")
         assert s["period"] == "October 27, 2026" and s["basis"] == "daily figure"
-        assert s["dataset"] == "Debt to the Penny" and s["series_id"] == ""
+        assert s["dataset"] == "Debt to the Penny" and s["identifier"] == ""
 
 
 class TestWebPage:
@@ -149,7 +154,7 @@ class TestWebPage:
     def test_api_clients_still_get_json(self, test_client):
         assert test_client.get("/").json()["status"] == "ok"
 
-    @pytest.mark.parametrize("name", ["app.js", "result-view.js", "site.css", "icon.svg"])
+    @pytest.mark.parametrize("name", ["app.js", "result-view.js", "site.css", "logo.png", "favicon.png"])
     def test_static_files(self, test_client, name):
         r = test_client.get(f"/static/{name}")
         assert r.status_code == 200 and r.headers["x-content-type-options"] == "nosniff"
@@ -179,3 +184,82 @@ class TestWebPage:
         unemp = next(m for m in bls if m["metric"] == "unemployment_rate")
         assert "Black" in unemp["groups"] and unemp["places"] == "U.S. and every state"
         assert r["metric_count"] == sum(len(a["metrics"]) for a in r["agencies"])
+
+
+class TestCitations:
+    def _dp(self, **kw):
+        from evidence.datapoint import MONTHLY, POINT_IN_TIME, FISCAL_YEAR
+        base = dict(quantity=Quantity(9.1, PERCENT), metric="inflation_rate", label="CPI-U inflation rate",
+                    observed=Period(2022, MONTHLY, month=6,
+                                    basis="12-month change from June 2021, not seasonally adjusted"),
+                    geography=Geography.national(), source="BLS",
+                    source_url="https://data.bls.gov/timeseries/CUUR0000SA0", series_id="CUUR0000SA0",
+                    raw_value="9.1")
+        base.update(kw)
+        return Datapoint(**base)
+
+    def test_inflation_cites_the_published_figure_without_codes(self):
+        from datetime import date
+        from evidence.citation import render
+        c = render(self._dp(), accessed=date(2026, 10, 28))
+        assert c["note"] == ('U.S. Bureau of Labor Statistics, "CPI-U inflation rate," Consumer Price '
+                             "Index, series CUUR0000SA0, United States, June 2022 (12-month change from "
+                             "June 2021, not seasonally adjusted): 9.1%. "
+                             "https://data.bls.gov/timeseries/CUUR0000SA0 (accessed October 28, 2026).")
+        assert c["inline"] == "9.1% (BLS, June 2022)"
+        assert "M06" not in c["note"]
+
+    def test_treasury_and_census_identifiers(self):
+        from evidence.citation import identifier, dataset_name
+        assert identifier("TREASURY", "MTS Table 1") == "Table 1"
+        assert dataset_name("TREASURY", "MTS Table 1") == "Monthly Treasury Statement"
+        assert identifier("TREASURY", "debt_to_penny") == ""
+        assert identifier("CENSUS", "S1701_C03_001E") == "table S1701"
+
+    def test_basis_cleanup(self):
+        from evidence.citation import clean_basis
+        assert clean_basis("BLS published annual average") == "annual average"
+        assert clean_basis("January monthly observation") == ""
+        assert clean_basis("latest monthly observation") == "latest month"
+        assert clean_basis("daily figure, as of 2026-10-27") == "daily figure"
+
+
+class TestAuditFixes:
+    """Findings from a line-by-line audit against agency publications, 2026-10-28."""
+
+    def test_annual_figures_come_from_the_series_bls_publishes_averages_for(self):
+        from evidence.sources.bls import annual_series_for
+        assert annual_series_for("LNS14000000") == "LNU04000000"
+        assert annual_series_for("LNS11300000") == "LNU01300000"   # participation
+        assert annual_series_for("CES0000000001") == "CEU0000000001"  # payrolls
+        assert annual_series_for("CES0500000003") == "CEU0500000003"  # hourly earnings
+        assert annual_series_for("LAUST480000000000003") == "LAUST480000000000003"
+
+    def test_bls_links_open_on_the_cited_figure(self):
+        from evidence.sources.bls import series_permalink
+        assert series_permalink("LNU04000000", annual=True, year=2023).endswith(
+            "LNU04000000?annualAveragesRequested=true")
+        assert "output_view=pct_12mths" in series_permalink("CUUR0000SA0", pct12=True, year=2022)
+        assert "from_year=2008&to_year=2009" in series_permalink("LNU04000000", annual=True, year=2009)
+
+    @pytest.mark.parametrize("raw,family,shown", [
+        ("4.0", PERCENT, "4.0%"), ("4.823", "usd", "$4.823"), ("304.702", "index", "304.702"),
+        ("0.168", "usd", "$0.168"),
+    ])
+    def test_figures_keep_the_published_digits(self, raw, family, shown):
+        dp = Datapoint(quantity=Quantity(float(raw), family), metric="m", label="x",
+                       observed=Period(2023, ANNUAL), geography=Geography.national(),
+                       source="BLS", source_url="https://x", raw_value=raw)
+        assert dp.display_value() == shown
+
+    def test_identifiers_name_the_table_and_statement(self):
+        from evidence.citation import identifier
+        assert identifier("BEA", "A191RC", table="T10105") == "NIPA Table 1.1.5, series A191RC"
+        assert identifier("TREASURY", "MTS Table 1", as_of="2024-09-30") == \
+            "September 2024 statement, Table 1"
+
+    def test_bea_links_open_the_table(self):
+        from evidence.sources.bea import table_permalink
+        assert "nipa_table_list=5" in table_permalink("T10105")
+        assert "nipa_table_list=1" in table_permalink("T10101")
+        assert "nipa_table_list=58" in table_permalink("T20100")

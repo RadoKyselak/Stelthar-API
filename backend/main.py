@@ -152,7 +152,8 @@ _STATIC_TYPES = {
     "app.js": "text/javascript; charset=utf-8",
     "result-view.js": "text/javascript; charset=utf-8",
     "site.css": "text/css; charset=utf-8",
-    "icon.svg": "image/svg+xml",
+    "logo.png": "image/png",
+    "favicon.png": "image/png",
 }
 # The page loads only its own files and talks only to this API.
 _PAGE_HEADERS = {
@@ -163,7 +164,7 @@ _PAGE_HEADERS = {
     ),
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Cache-Control": "public, max-age=300",
+    "Cache-Control": "no-cache",
 }
 
 
@@ -181,8 +182,9 @@ async def static_file(name: str):
     # A fixed allow-list, so no path can reach anything else on disk.
     if name not in _STATIC_TYPES:
         raise HTTPException(status_code=404, detail="Not found")
+    # no-cache = revalidate each time (cheap: ETag), so a deploy shows at once.
     return FileResponse(_STATIC / name, media_type=_STATIC_TYPES[name],
-                        headers={"Cache-Control": "public, max-age=300",
+                        headers={"Cache-Control": "no-cache",
                                  "X-Content-Type-Options": "nosniff"})
 
 

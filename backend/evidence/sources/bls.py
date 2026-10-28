@@ -41,18 +41,42 @@ from datetime import datetime as _dt, timezone as _tz
 _CURRENT_YEAR = _dt.now(_tz.utc).year
 
 # BLS publishes employment levels in thousands.
-_THOUSANDS_SERIES = {"CES0000000001"}
+_THOUSANDS_SERIES = {"CES0000000001", "CEU0000000001"}
 
 
-def series_permalink(series_id: str) -> str:
-    return f"https://data.bls.gov/timeseries/{series_id}"
+def series_permalink(series_id: str, *, annual: bool = False, pct12: bool = False,
+                     year: Optional[int] = None) -> str:
+    """A data.bls.gov link that opens on the figure being cited.
+
+    The default series page shows monthly values for the last ten years only:
+    no annual average, no 12-month change. A reader following a citation for
+    "2023 annual average" or "12-month change, June 2022" has to see that
+    number, so the view is requested explicitly.
+    """
+    params = []
+    if pct12:
+        params.append("output_view=pct_12mths")
+    if annual:
+        params.append("annualAveragesRequested=true")
+    if year and year < _dt.now(_tz.utc).year - 9:
+        params.append(f"years_option=specific_years&from_year={year - 1}&to_year={year}")
+    base = f"https://data.bls.gov/timeseries/{series_id}"
+    return base + ("?" + "&".join(params) if params else "")
 
 
 def annual_series_for(series_id: str) -> str:
-    """The series BLS computes official annual averages from."""
+    """The series BLS publishes official annual averages for.
+
+    BLS publishes annual averages of the CPS (LNS1… → LNU0…) and of payroll
+    employment and earnings (CES… → CEU…) from the NOT seasonally adjusted
+    series. The mean of the adjusted months can be off: $33.70 against the
+    published $33.72 for 2023 average hourly earnings.
+    """
     sid = (series_id or "").upper()
-    if sid.startswith("LNS14"):
-        return "LNU04" + sid[5:]
+    if sid.startswith("LNS1"):
+        return "LNU0" + sid[4:]
+    if sid.startswith("CES"):
+        return "CEU" + sid[3:]
     return series_id
 
 
@@ -186,10 +210,14 @@ async def fetch_annual(
         metric=metric, label=label,
         observed=Period(year=year, kind=ANNUAL, basis=basis),
         geography=geography_for_series(series_id),
-        source="BLS", source_url=series_permalink(series_id),
+        source="BLS", source_url=series_permalink(series_id, annual=True, year=year),
         series_id=series_id, raw_value=f"{value}",
         extra={"months_observed": n},
     )]
+
+
+_MONTH_NAMES = ("January", "February", "March", "April", "May", "June", "July",
+                "August", "September", "October", "November", "December")
 
 
 async def fetch_monthly(
@@ -208,7 +236,7 @@ async def fetch_monthly(
                 observed=Period(year=year, kind=MONTHLY, month=month,
                                 basis=f"{r.get('periodName', target)} monthly observation"),
                 geography=geography_for_series(series_id),
-                source="BLS", source_url=series_permalink(series_id),
+                source="BLS", source_url=series_permalink(series_id, year=year),
                 series_id=series_id, raw_value=str(r.get("value")),
             )]
     return []
@@ -239,7 +267,7 @@ async def fetch_inflation(
         if cur is None or not prev:
             return []
         pct = (cur - prev) / prev * 100.0
-        basis = f"{target} {year} vs {target} {year - 1}, not seasonally adjusted"
+        basis = f"12-month change from {_MONTH_NAMES[month - 1]} {year - 1}, not seasonally adjusted"
         period = Period(year=year, kind=MONTHLY, month=month, basis=basis)
     else:
         cur, cur_basis, _ = _annual_value(rows, year)
@@ -250,17 +278,22 @@ async def fetch_inflation(
         pct = (cur - prev) / prev * 100.0
         period = Period(
             year=year, kind=ANNUAL,
-            basis=f"annual average vs {year - 1} annual average ({cur_basis})",
+            basis=f"change in annual average from {year - 1}",
         )
 
+    # BLS publishes 12-month changes to one decimal, computed from the index
+    # exactly as here ("9.1 percent" for June 2022). The comparison and the
+    # citation use that published figure, not an unrounded 9.06 BLS never wrote.
+    published = round(pct + 0.0, 1)
     return [Datapoint(
-        quantity=Quantity(magnitude=pct, family=PERCENT),
+        quantity=Quantity(magnitude=published, family=PERCENT),
         metric=metric, label=label,
         observed=period,
         geography=geography_for_series(series_id),
-        source="BLS", source_url=series_permalink(series_id),
-        series_id=series_id, raw_value=f"{pct:.2f}",
-        extra={"index_current": cur, "index_prior": prev},
+        source="BLS", source_url=series_permalink(series_id, pct12=True, annual=month is None,
+                                                  year=year),
+        series_id=series_id, raw_value=f"{published:.1f}",
+        extra={"index_current": cur, "index_prior": prev, "unrounded_change": round(pct, 4)},
     )]
 
 
@@ -280,7 +313,7 @@ async def fetch_series(
             metric=metric, label=label,
             observed=Period(year=year, kind=ANNUAL, basis=basis),
             geography=geography_for_series(series_id),
-            source="BLS", source_url=series_permalink(series_id),
+            source="BLS", source_url=series_permalink(series_id, annual=True),
             series_id=series_id, raw_value=f"{value}",
             extra={"months_observed": n},
         ))

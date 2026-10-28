@@ -4,140 +4,96 @@
   <title>Project Mirador</title>
   <meta charset="UTF-8">
   <style>
-    :root { --bg:#faf9f6; --card:#ffffff; --ink:#15181d; --muted:#5a6170; --faint:#868c98;
-      --line:#e3e1db; --sub:#f3f1ec; --focus:#2563eb; --btn:#15181d; --btn-ink:#fff; --link:#1d4ed8;
-      --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    :root { --bg:#fafaf9; --card:#ffffff; --ink:#121314; --muted:#6b6f76; --faint:#9a9ea5; --line:#e9e9e6;
+      --focus:#2563eb;
+      --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       color-scheme: light dark; }
     @media (prefers-color-scheme: dark) {
-      :root { --bg:#0f1114; --card:#17191e; --ink:#eceef1; --muted:#a6adb9; --faint:#7d8491;
-        --line:#2d3139; --sub:#1f2228; --focus:#8ab4ff; --btn:#eceef1; --btn-ink:#0f1114; --link:#8ab4ff; }
+      :root { --bg:#0e0f10; --card:#161718; --ink:#f1f1f0; --muted:#a3a7ae; --faint:#71757c; --line:#2a2b2e; --focus:#8ab4ff; }
     }
     * { box-sizing: border-box; }
-    body { width: 390px; margin: 0; background: var(--bg); color: var(--ink);
-      font: 14px/1.5 var(--sans);
-      -webkit-font-smoothing: antialiased; }
-    a { color: var(--link); text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    body { width: 380px; margin: 0; padding: 14px 16px 16px; background: var(--bg); color: var(--ink);
+      font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
     :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-    .top { display:flex; align-items:center; justify-content:space-between; padding: 12px 14px 10px; }
-    .brand { display:flex; align-items:center; gap:9px; }
-    .brand b { font-size: 15px; letter-spacing: -0.01em; }
-    .brand small { display:block; font-size: 11.5px; color: var(--muted); line-height: 1.2; }
-    .web { font-size: 12px; color: var(--muted); }
-    .tabs { display:flex; gap:4px; margin: 0 14px; padding: 3px; background: var(--sub);
-      border: 1px solid var(--line); border-radius: 10px; }
-    .tab { flex:1; font: 600 13px var(--sans); padding: 6px 8px; border: 0; border-radius: 7px;
-      background: transparent; color: var(--muted); cursor: pointer; }
-    .tab[aria-selected="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-    .pane { padding: 12px 14px 4px; }
-    .pane[hidden] { display: none; }
-    .box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
-    .box:focus-within { border-color: var(--focus); }
-    textarea, input[type="search"] { display:block; width:100%; border:0; background:transparent;
-      color:var(--ink); font: 15px/1.45 var(--sans); padding: 9px 10px; resize: none; }
-    textarea { min-height: 66px; }
-    textarea:focus, input:focus { outline: none; }
-    .row { display:flex; align-items:center; justify-content:space-between; padding: 2px 4px 4px 10px; }
-    .count { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
-    .count.over { color: #b42318; font-weight: 600; }
-    .primary { font: 600 13.5px var(--sans); background: var(--btn); color: var(--btn-ink);
-      border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
-    .primary:disabled { opacity: .4; cursor: default; }
-    .hint { font-size: 12px; color: var(--muted); margin: 8px 2px 0; }
-    #result { margin-top: 12px; }
-    #result:empty { display: none; }
-    #result > .mv { border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-    details { margin-top: 12px; border-top: 1px solid var(--line); }
-    summary { cursor: pointer; padding: 10px 2px 6px; font-size: 12px; font-weight: 650; letter-spacing: .05em;
-      text-transform: uppercase; color: var(--faint); list-style: none; }
-    summary::-webkit-details-marker { display: none; }
-    summary::after { content: " ▾"; }
-    details[open] summary::after { content: " ▴"; }
-    #history-list { list-style: none; margin: 0; padding: 0 0 4px; }
-    #history-list li { display:flex; gap:9px; align-items:flex-start; padding: 7px 6px; border-radius: 8px; cursor: pointer; }
-    #history-list li:hover { background: var(--sub); }
-    .hdot { width: 9px; height: 9px; border-radius: 50%; flex: none; margin-top: 6px; background: #9aa1ab; }
-    .hdot.supported { background:#1f9d48; } .hdot.mostly-accurate { background:#8aa800; }
-    .hdot.contradicted { background:#d93a2b; } .hdot.misleading { background:#e08a1e; }
-    .htext { min-width: 0; }
-    .hverdict { font-size: 11.5px; font-weight: 650; color: var(--muted); }
-    .hclaim { display:block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    /* lookup */
-    #lookup-result { display:none; margin-top: 12px; background: var(--card); border: 1px solid var(--line);
-      border-radius: 12px; padding: 14px; }
-    #lookup-value { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-    #lookup-attribution { color: var(--muted); font-size: 13px; }
-    #lookup-caveat { color: var(--muted); font-size: 12px; margin-top: 4px; }
-    #lookup-cite { margin-top: 10px; padding: 8px 10px; background: var(--sub); border-radius: 8px;
-      font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
-    #lookup-source-link { font-size: 12.5px; margin-top: 8px; }
-    .copy-row { display:flex; gap:6px; margin-top: 10px; flex-wrap: wrap; }
-    .copy-btn { font: 600 12px var(--sans); padding: 6px 10px; border-radius: 7px;
-      border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
-    .copy-btn:hover { background: var(--sub); }
-    .copy-btn.copied { color: #146c2e; border-color: #b5dcc0; }
-    #lookup-miss { display:none; margin-top: 12px; font-size: 13px; color: var(--muted); }
-    .sugg { display:inline-block; margin: 6px 6px 0 0; padding: 3px 9px; border: 1px solid var(--line);
-      border-radius: 999px; cursor: pointer; font-size: 12px; background: var(--card); color: var(--ink); }
-    .sugg:hover { border-color: var(--faint); }
-    .foot { padding: 8px 14px 12px; font-size: 11.5px; color: var(--faint); }
-    kbd { font: 11px ui-monospace, Menlo, monospace; padding: 0 4px; border: 1px solid var(--line);
-      border-radius: 4px; background: var(--card); color: var(--muted); }
+    .top { display:flex; align-items:center; justify-content:space-between; margin-bottom: 14px; }
+    .brand { display:flex; align-items:center; gap:9px; font-weight: 750; font-size: 15px; letter-spacing: -0.01em; }
+    .brand img { width: 26px; height: 26px; border-radius: 7px; display:block; }
+    .web { font-size: 12.5px; color: var(--muted); text-decoration: none; }
+    .web:hover { color: var(--ink); }
+    .modes { display:inline-flex; gap:2px; padding:3px; border-radius:999px; background:var(--card);
+      border:1px solid var(--line); margin-bottom: 10px; }
+    .mode { font: 600 12.5px var(--sans); color: var(--muted); background:none; border:0; border-radius:999px;
+      padding: 5px 12px; cursor:pointer; }
+    .mode[aria-selected="true"] { background: var(--ink); color: var(--card); }
+    .ask { display:flex; align-items:flex-end; gap:6px; background:var(--card); border:1.5px solid var(--line);
+      border-radius:14px; padding:5px 5px 5px 13px; }
+    .ask:focus-within { border-color: var(--ink); }
+    textarea { flex:1; min-width:0; border:0; background:none; color:var(--ink); font: 15px/1.4 var(--sans);
+      padding: 8px 0; resize:none; height: 38px; max-height: 120px; }
+    textarea:focus { outline:none; }
+    textarea::placeholder { color: var(--faint); }
+    #go { flex:none; width:38px; height:38px; border-radius:10px; border:0; background:var(--ink); color:var(--card);
+      cursor:pointer; display:grid; place-items:center; }
+    #go:disabled { opacity:.35; cursor:default; }
+    #go svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+    .row { display:flex; justify-content:space-between; align-items:center; margin-top: 8px; }
+    .surprise { display:inline-flex; align-items:center; gap:6px; font: 600 12.5px var(--sans); color:var(--muted);
+      background:none; border:0; padding:2px; cursor:pointer; }
+    .surprise:hover { color: var(--ink); }
+    .surprise svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8; }
+    .surprise svg circle { fill: currentColor; stroke: none; }
+    .count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+    .count.over { color: #c4281c; font-weight: 600; }
+    #out { margin-top: 12px; }
+    #out:empty { display:none; }
+    #out > .mv { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
+    #out .mv-single .mv-n.mv-official { font-size: 34px; }
+    details.recent { margin-top: 12px; }
+    details.recent summary { cursor:pointer; list-style:none; font-size:12.5px; font-weight:600; color:var(--muted); }
+    details.recent summary::-webkit-details-marker { display:none; }
+    details.recent summary::after { content:" +"; color:var(--faint); }
+    details.recent[open] summary::after { content:" \2212"; }
+    #history { list-style:none; margin:6px 0 0; padding:0; }
+    #history li { display:flex; gap:8px; align-items:baseline; padding:6px 4px; border-radius:8px; cursor:pointer; }
+    #history li:hover { background: var(--card); }
+    .dot { width:8px; height:8px; border-radius:50%; flex:none; background:#9aa1ab; transform: translateY(-1px); }
+    .dot.supported { background:#12813a; } .dot.mostly-accurate { background:#8aa800; }
+    .dot.contradicted { background:#c4281c; } .dot.misleading { background:#d97706; }
+    .hclaim { min-width:0; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   </style>
 </head>
 <body>
   <header class="top">
-    <div class="brand" id="brand">
-      <div><b>Project Mirador</b><small>Fact-check with official U.S. data</small></div>
-    </div>
+    <div class="brand"><img src="icons/icon48.png" alt="">Mirador</div>
     <a class="web" href="https://stelthar-api.vercel.app/" target="_blank" rel="noopener">Web app ↗</a>
   </header>
 
-  <div class="tabs" role="tablist">
-    <button class="tab" role="tab" id="tab-check" aria-selected="true" aria-controls="pane-check">Check a claim</button>
-    <button class="tab" role="tab" id="tab-lookup" aria-selected="false" aria-controls="pane-lookup">Look up a figure</button>
+  <div class="modes" role="tablist" aria-label="Mode">
+    <button class="mode" role="tab" id="mode-check" aria-selected="true">Check a claim</button>
+    <button class="mode" role="tab" id="mode-find" aria-selected="false">Find a number</button>
   </div>
 
-  <section class="pane" id="pane-check" role="tabpanel" aria-labelledby="tab-check">
-    <div class="box">
-      <label for="manual-claim-input" hidden>Claim</label>
-      <textarea id="manual-claim-input" placeholder="Paste a claim with a number, e.g. “The federal deficit was $1.8 trillion in 2024”"></textarea>
-      <div class="row">
-        <span id="char-count" class="count"></span>
-        <button id="verifyBtn" class="primary" type="button">Check claim</button>
-      </div>
-    </div>
-    <p class="hint" id="claim-hint"></p>
-    <div id="result" aria-live="polite"></div>
-    <details id="history-dropdown" hidden>
-      <summary>Recent checks</summary>
-      <ul id="history-list"></ul>
-    </details>
-  </section>
+  <form id="form" class="ask" autocomplete="off">
+    <label for="q" hidden id="q-label">Claim to check</label>
+    <textarea id="q" rows="1" spellcheck="false" placeholder="Paste or type a claim with a number"></textarea>
+    <button id="go" type="submit" aria-label="Check">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+  </form>
+  <div class="row">
+    <button type="button" id="surprise" class="surprise">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/></svg>
+      Surprise me
+    </button>
+    <span id="count" class="count"></span>
+  </div>
 
-  <section class="pane" id="pane-lookup" role="tabpanel" aria-labelledby="tab-lookup" hidden>
-    <div class="box">
-      <label for="lookup-input" hidden>Figure to look up</label>
-      <input id="lookup-input" type="search" placeholder="unemployment texas 2023" autocomplete="off" spellcheck="false">
-    </div>
-    <p class="hint">Get an official figure with a citation ready to paste. From any tab: type <kbd>mir</kbd>, then Tab.</p>
-    <div id="lookup-result">
-      <div id="lookup-value"></div>
-      <div id="lookup-attribution"></div>
-      <div id="lookup-caveat"></div>
-      <div id="lookup-cite"></div>
-      <div class="copy-row">
-        <button class="copy-btn" data-format="note">Copy citation</button>
-        <button class="copy-btn" data-format="inline">Copy inline</button>
-        <button class="copy-btn" data-format="markdown">Copy Markdown</button>
-        <button class="copy-btn" data-format="value">Copy number</button>
-      </div>
-      <div id="lookup-source-link"></div>
-    </div>
-    <div id="lookup-miss"></div>
-  </section>
+  <div id="out" aria-live="polite"></div>
 
-  <div class="foot">Highlight text on any page to check it, or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Y</kbd> (<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>Y</kbd> on Mac).</div>
+  <details class="recent" id="recent" hidden>
+    <summary>Recent checks</summary>
+    <ul id="history"></ul>
+  </details>
 
   <script src="result-view.js"></script>
   <script src="popup.js"></script>

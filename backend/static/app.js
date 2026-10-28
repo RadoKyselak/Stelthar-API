@@ -1,26 +1,27 @@
-/* Project Mirador web page: check a claim, look up a figure, show coverage. */
+/* Project Mirador web app: check a claim, or find a number. */
 (function () {
   "use strict";
   const V = window.MiradorView;
-  const AI_CHAR_LIMIT = 300;
 
   const style = document.createElement("style");
   style.textContent = V.css;
   document.head.appendChild(style);
 
   const $ = (id) => document.getElementById(id);
-  const form = $("check-form");
-  const input = $("claim");
-  const btn = $("check-btn");
-  const count = $("count");
-  const out = $("result");
-
-  function el(tag, cls, text) {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text) e.textContent = text;
-    return e;
-  }
+  const form = $("form");
+  const q = $("q");
+  const go = $("go");
+  const out = $("out");
+  const MODES = {
+    check: { tab: $("mode-check"), label: "Claim to check", button: "Check",
+      placeholder: "Unemployment in Texas was 4.1% in 2023" },
+    find: { tab: $("mode-find"), label: "Number to find", button: "Find",
+      placeholder: "unemployment rate texas 2023" },
+  };
+  let mode = "check";
+  let ticket = 0;
+  let debounce = null;
+  let lastSurprise = "";
 
   async function postJSON(path, body) {
     const r = await fetch(path, {
@@ -29,174 +30,142 @@
       body: JSON.stringify(body),
     });
     let data = null;
-    try { data = await r.json(); } catch (e) { /* non-JSON error page */ }
+    try { data = await r.json(); } catch (e) { /* not JSON */ }
     if (!r.ok) {
       const detail = data && (typeof data.detail === "string" ? data.detail
         : Array.isArray(data.detail) ? data.detail.map((d) => d.msg).join("; ") : "");
-      throw new Error(r.status === 429
-        ? "Too many checks from this connection. Please wait a moment."
+      throw new Error(r.status === 429 ? "Too many checks from this connection. Try again in a minute."
         : detail || `The service answered with an error (${r.status}).`);
     }
     return data;
   }
 
-  // ------------------------------------------------------------------ check
-  function updateCount() {
-    const n = input.value.trim().length;
-    count.textContent = n ? `${n} / ${AI_CHAR_LIMIT}` : "";
-    count.classList.toggle("over", n > AI_CHAR_LIMIT);
-    btn.disabled = n === 0;
+  function setMode(next, { keepText = false } = {}) {
+    mode = next;
+    Object.entries(MODES).forEach(([k, m]) => m.tab.setAttribute("aria-selected", String(k === next)));
+    q.placeholder = MODES[next].placeholder;
+    $("q-label").textContent = MODES[next].label;
+    go.setAttribute("aria-label", MODES[next].button);
+    if (!keepText) { q.value = ""; out.replaceChildren(); }
+    syncButton();
+    q.focus();
   }
 
-  function autosize() {
-    input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, 220)}px`;
+  function syncButton() { go.disabled = q.value.trim().length < 2; }
+
+  function remember(text) {
+    const url = new URL(location.href);
+    url.searchParams.delete("claim");
+    url.searchParams.delete("find");
+    url.searchParams.set(mode === "check" ? "claim" : "find", text);
+    history.replaceState(null, "", url);
   }
 
-  let running = 0;
-  async function check(claim) {
-    claim = (claim || "").trim();
-    if (!claim) return;
-    const ticket = ++running;
-    btn.disabled = true;
+  async function check(text) {
+    text = (text || "").trim();
+    if (!text) return;
+    const mine = ++ticket;
+    go.disabled = true;
     out.replaceChildren(V.loading());
     try {
-      const result = await postJSON("/v2/verify", { claim });
-      if (ticket !== running) return;
-      const head = el("p", "result-claim");
-      head.appendChild(document.createTextNode("Claim checked: "));
-      head.appendChild(el("q", "", claim));
-      const card = V.render(result, { onRecheck: () => check(claim) });
-      card.prepend(head);
-      out.replaceChildren(card);
-      const url = new URL(location.href);
-      url.searchParams.set("claim", claim);
-      history.replaceState(null, "", url);
+      const result = await postJSON("/v2/verify", { claim: text });
+      if (mine !== ticket) return;
+      out.replaceChildren(V.render(result));
+      remember(text);
     } catch (e) {
-      if (ticket !== running) return;
-      out.replaceChildren(V.error(e.message, { onRetry: () => check(claim) }));
+      if (mine === ticket) out.replaceChildren(V.error(e.message, { onRetry: () => check(text) }));
     } finally {
-      if (ticket === running) updateCount();
+      if (mine === ticket) syncButton();
     }
   }
 
-  form.addEventListener("submit", (e) => { e.preventDefault(); check(input.value); });
-  input.addEventListener("input", () => { updateCount(); autosize(); });
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); check(input.value); }
-  });
-  document.querySelectorAll(".ex").forEach((b) => b.addEventListener("click", () => {
-    input.value = b.textContent;
-    updateCount(); autosize();
-    check(b.textContent);
-  }));
-
-  // ------------------------------------------------------------------ lookup
-  const q = $("lookup-q");
-  const lookOut = $("lookup-out");
-  let debounce = null;
-  let lookTicket = 0;
-
-  function copyButton(label, getText) {
-    const b = el("button", "lk-btn", label);
-    b.type = "button";
-    b.addEventListener("click", async () => {
-      const ok = await V.copyText(getText());
-      b.textContent = ok ? "Copied" : "Copy failed";
-      b.classList.toggle("done", ok);
-      setTimeout(() => { b.textContent = label; b.classList.remove("done"); }, 1400);
-    });
-    return b;
-  }
-
-  function showLookup(r) {
-    if (!r.ok) {
-      const box = el("div", "lk-miss", r.headline || "No official series matches that yet.");
-      const s = el("div", "lk-sugg");
-      (r.suggestions || []).slice(0, 6).forEach((x) => {
-        const b = el("button", "ex", x.example);
-        b.type = "button";
-        b.addEventListener("click", () => { q.value = x.example; runLookup(x.example); });
-        s.appendChild(b);
-      });
-      if (s.childNodes.length) box.appendChild(s);
-      lookOut.replaceChildren(box);
-      return;
-    }
-    const c = r.citations || {};
-    const box = el("div", "lk");
-    box.appendChild(el("div", "lk-v", c.value || r.value));
-    box.appendChild(el("div", "lk-a", [r.label, c.attribution].filter(Boolean).join(" · ")));
-    if (c.caveat) box.appendChild(el("div", "lk-c", `Basis: ${c.caveat}`));
-    box.appendChild(el("div", "lk-cite", c.note || c.inline || ""));
-    const row = el("div", "lk-row");
-    row.appendChild(copyButton("Copy citation", () => c.note || c.inline || ""));
-    row.appendChild(copyButton("Copy inline", () => c.inline || ""));
-    row.appendChild(copyButton("Copy Markdown", () => c.markdown || c.inline || ""));
-    const url = V.safeUrl(c.url);
-    if (url) {
-      const a = el("a", "lk-btn", "Open source ↗");
-      a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
-      row.appendChild(a);
-    }
-    box.appendChild(row);
-    lookOut.replaceChildren(box);
-  }
-
-  async function runLookup(query) {
-    query = (query || "").trim();
-    const ticket = ++lookTicket;
-    if (query.length < 2) { lookOut.replaceChildren(); return; }
+  async function find(text) {
+    text = (text || "").trim();
+    const mine = ++ticket;
+    if (text.length < 2) { out.replaceChildren(); return; }
     try {
-      const r = await postJSON("/v2/lookup", { query });
-      if (ticket === lookTicket) showLookup(r);
+      const r = await postJSON("/v2/lookup", { query: text });
+      if (mine !== ticket) return;
+      out.replaceChildren(V.renderLookup(r, {
+        onSuggest: (s) => { q.value = s; syncButton(); find(s); },
+      }));
+      if (r.ok) remember(text);
     } catch (e) {
-      if (ticket === lookTicket) lookOut.replaceChildren(el("div", "lk-miss", e.message));
+      if (mine === ticket) out.replaceChildren(V.error(e.message, { onRetry: () => find(text) }));
     }
   }
 
-  q.addEventListener("input", () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => runLookup(q.value), 280);
-  });
-  q.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { clearTimeout(debounce); runLookup(q.value); }
-  });
+  const run = (text) => (mode === "check" ? check(text) : find(text));
 
-  // ---------------------------------------------------------------- coverage
-  async function loadCoverage() {
-    const grid = $("coverage-grid");
+  // Types the example in, then runs it: a little theatre, skipped for reduced motion.
+  function surprise() {
+    const list = mode === "check" ? V.examples.claims : V.examples.lookups;
+    const text = V.pick(list, lastSurprise);
+    lastSurprise = text;
+    const instant = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (instant) { q.value = text; syncButton(); run(text); return; }
+    const mine = ++ticket;
+    let i = 0;
+    q.value = "";
+    const tick = () => {
+      if (mine !== ticket) return;
+      i = Math.min(text.length, i + Math.max(1, Math.round(text.length / 22)));
+      q.value = text.slice(0, i);
+      if (i < text.length) setTimeout(tick, 18);
+      else { syncButton(); run(text); }
+    };
+    tick();
+  }
+
+  form.addEventListener("submit", (e) => { e.preventDefault(); run(q.value); });
+  q.addEventListener("input", () => {
+    syncButton();
+    if (mode === "find") {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => find(q.value), 280);
+    }
+  });
+  MODES.check.tab.addEventListener("click", () => mode !== "check" && setMode("check"));
+  MODES.find.tab.addEventListener("click", () => mode !== "find" && setMode("find"));
+  $("surprise").addEventListener("click", surprise);
+
+  // What can I check?
+  $("coverage").addEventListener("toggle", async function load() {
+    $("coverage").removeEventListener("toggle", load);
+    const box = $("coverage-list");
     try {
       const r = await fetch("/v2/coverage").then((x) => x.json());
-      grid.replaceChildren(...r.agencies.map((a) => {
-        const card = el("div", "cov");
-        card.appendChild(el("h3", "", a.agency));
-        const ul = el("ul");
+      box.replaceChildren(...r.agencies.map((a) => {
+        const sec = document.createElement("section");
+        const h = document.createElement("h3");
+        h.textContent = a.agency;
+        const ul = document.createElement("ul");
         a.metrics.forEach((m) => {
-          const li = el("li", "", m.label);
-          const extra = [m.places];
-          if (m.groups && m.groups.length) extra.push(`also by group: ${m.groups.join(", ")}`);
-          li.appendChild(el("small", "", extra.join(" · ")));
+          const li = document.createElement("li");
+          li.textContent = m.label + (m.places.includes("state") ? " · by state" : "");
+          if (m.groups && m.groups.length) li.title = `Also by group: ${m.groups.join(", ")}`;
           ul.appendChild(li);
         });
-        card.appendChild(ul);
-        return card;
+        sec.append(h, ul);
+        return sec;
       }));
-      $("coverage-sub").textContent =
-        `${r.metric_count} measures, answered with the agency's own published figure and no AI. ` +
-        "Anything else is checked by searching published sources, official ones first.";
     } catch (e) {
-      grid.replaceChildren(el("p", "sub", "Coverage could not be loaded."));
+      box.textContent = "Coverage could not be loaded.";
     }
-  }
+  });
 
-  // ------------------------------------------------------------------ start
-  updateCount();
-  loadCoverage();
-  const initial = new URL(location.href).searchParams.get("claim");
-  if (initial) {
-    input.value = initial.slice(0, 1000);
-    updateCount(); autosize();
-    check(initial);
+  // Deep links: ?claim=… or ?find=…
+  const params = new URL(location.href).searchParams;
+  if (params.get("find")) {
+    setMode("find", { keepText: true });
+    q.value = params.get("find").slice(0, 200);
+    syncButton();
+    find(q.value);
+  } else if (params.get("claim")) {
+    q.value = params.get("claim").slice(0, 1000);
+    syncButton();
+    check(q.value);
+  } else {
+    syncButton();
   }
 })();

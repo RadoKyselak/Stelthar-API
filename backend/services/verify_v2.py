@@ -325,20 +325,25 @@ def _parsed_summary(parsed: ParsedClaim) -> Dict[str, Any]:
 
 def _point(v: Verdict, label: Optional[str] = None) -> Dict[str, Any]:
     """The claim's figure beside the official one, for display."""
+    from evidence.citation import clean_basis, render as render_citation, when
     dp = v.evidence[0]
     phrase = _phrase_for(v.comparator)
     claim = f"{phrase} {v.claimed_display}".strip() if v.claimed_display else ""
+    cite = render_citation(dp)
     return {
         "label": label,
         "verdict": v.verdict,
         "claim": claim,
         "official": dp.display_value(),
-        "period": dp.observed.label(),
-        "basis": dp.observed.basis or "",
+        "period": when(dp.observed),
+        "basis": clean_basis(dp.observed.basis or ""),
         "place": dp.geography.name,
         "source": dp.source,
         "gap": v.gap_display,
         "comparator": v.comparator,
+        "citation": cite["note"],
+        "citation_inline": cite["inline"],
+        "url": cite["url"],
     }
 
 

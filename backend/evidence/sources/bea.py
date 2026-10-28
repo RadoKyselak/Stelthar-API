@@ -38,11 +38,15 @@ _AUTH_ERROR_HINTS = ("userid", "user id", "not registered", "invalid api", "inac
 
 # Reader-facing pages for each table. The API URL carries the key, so it is
 # never the citation; it is kept in `extra["api_url"]` (redacted) for audit.
+# Each opens BEA's interactive table itself (verified 2026-10-28), not a
+# topic page showing only the latest quarter.
 _TABLE_PAGES = {
-    "T10105": "https://www.bea.gov/data/gdp/gross-domestic-product",
-    "T10101": "https://www.bea.gov/data/gdp/gross-domestic-product",
-    "T20100": "https://www.bea.gov/data/income-saving/personal-income",
+    "T10105": "https://apps.bea.gov/iTable/?reqid=19&step=3&isuri=1&nipa_table_list=5&categories=survey",
+    "T10101": "https://apps.bea.gov/iTable/?reqid=19&step=3&isuri=1&nipa_table_list=1&categories=survey",
+    "T20100": "https://apps.bea.gov/iTable/?reqid=19&step=3&isuri=1&nipa_table_list=58&categories=survey",
 }
+# "T10105" -> "1.1.5", the number BEA prints on the table.
+TABLE_NUMBERS = {"T10105": "1.1.5", "T10101": "1.1.1", "T20100": "2.1"}
 
 
 def table_permalink(table: str) -> str:

@@ -52,7 +52,7 @@ class TestCitationCarriesTheBasis:
     def test_note_carries_agency_series_period_and_access_date(self):
         c = render(_unemployment(), accessed=ACCESSED)
         for fragment in ("U.S. Bureau of Labor Statistics", "LNS14000000",
-                         "United States", "2023", "3.6%", "accessed 27 August 2026"):
+                         "United States", "2023", "3.6%", "accessed August 27, 2026"):
             assert fragment in c["note"], fragment
 
     def test_html_form_is_escaped_and_linked(self):
@@ -80,7 +80,7 @@ class TestCitationCarriesTheBasis:
         )
         assert "Texas" in render(dp, accessed=ACCESSED)["inline"]
 
-    def test_point_in_time_reads_as_of(self):
+    def test_point_in_time_reads_as_a_date(self):
         dp = Datapoint(
             quantity=Quantity(magnitude=34.0e12, family=USD),
             metric="national_debt", label="Total public debt outstanding",
@@ -88,7 +88,7 @@ class TestCitationCarriesTheBasis:
             geography=Geography.national(), source="TREASURY",
             source_url="https://fiscaldata.treasury.gov/",
         )
-        assert "as of 2023-12-29" in render(dp, accessed=ACCESSED)["inline"]
+        assert "December 29, 2023" in render(dp, accessed=ACCESSED)["inline"]
 
     def test_agency_names(self):
         assert agency_name("BLS") == "U.S. Bureau of Labor Statistics"

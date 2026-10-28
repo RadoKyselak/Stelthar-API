@@ -9,45 +9,55 @@
   let shadow = null;
   let bubbleTimer = null;
 
+  // The Mirador logo, from the extension's own icons.
+  const logo = (size) => {
+    const img = document.createElement("img");
+    img.src = chrome.runtime.getURL("icons/icon48.png");
+    img.alt = "";
+    img.width = size;
+    img.height = size;
+    img.className = "logo";
+    return img;
+  };
+
   const PANEL_CSS = `
     :host { all: initial; }
+    .logo { border-radius: 5px; display: block; flex: none; }
     .bubble {
       position: absolute; display: inline-flex; align-items: center; gap: 7px;
-      background: #15181d; color: #fff; padding: 6px 12px 6px 7px; border-radius: 999px;
-      font: 600 13px/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      cursor: pointer; white-space: nowrap; user-select: none; border: 1px solid rgba(255,255,255,.08);
+      background: #121314; color: #fff; padding: 5px 13px 5px 5px; border-radius: 999px; border: 0;
+      font: 650 13px/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      cursor: pointer; white-space: nowrap; user-select: none;
       box-shadow: 0 6px 20px rgba(0,0,0,.22), 0 1px 3px rgba(0,0,0,.2);
-      animation: pop .14s ease-out;
+      animation: pop .16s cubic-bezier(.2,1.4,.45,1);
     }
-    .bubble:hover { background: #2a2f38; }
+    .bubble:hover { background: #2a2c30; }
     .bubble:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 2px; }
-    @keyframes pop { from { opacity: 0; transform: translateY(3px) scale(.98); } to { opacity: 1; transform: none; } }
+    @keyframes pop { from { opacity: 0; transform: translateY(4px) scale(.94); } to { opacity: 1; transform: none; } }
     .panel {
-      --p-card: #ffffff; --p-line: #e3e1db; --p-muted: #5a6170; --p-ink: #15181d;
+      --p-card: #ffffff; --p-line: #ebebe8; --p-muted: #6b6f76; --p-ink: #121314;
       position: absolute; width: ${PANEL_WIDTH}px; max-width: calc(100vw - 24px);
-      max-height: min(78vh, 680px); overflow: auto; overscroll-behavior: contain;
-      background: var(--p-card); color: var(--p-ink); border: 1px solid var(--p-line); border-radius: 14px;
-      box-shadow: 0 18px 48px rgba(16,24,40,.18), 0 2px 8px rgba(16,24,40,.08);
+      max-height: min(80vh, 640px); overflow: auto; overscroll-behavior: contain;
+      background: var(--p-card); color: var(--p-ink); border: 1px solid var(--p-line); border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.16), 0 2px 8px rgba(0,0,0,.06);
       font: 14px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      animation: pop .16s ease-out;
+      animation: pop .18s ease-out;
     }
     @media (prefers-color-scheme: dark) {
-      .panel { --p-card: #17191e; --p-line: #2d3139; --p-muted: #a6adb9; --p-ink: #eceef1;
-        box-shadow: 0 18px 48px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.4); }
+      .panel { --p-card: #161718; --p-line: #2a2b2e; --p-muted: #a3a7ae; --p-ink: #f1f1f0;
+        box-shadow: 0 20px 50px rgba(0,0,0,.55); }
     }
     @media (prefers-reduced-motion: reduce) { .bubble, .panel { animation: none; } }
-    .panel-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center;
-      justify-content: space-between; gap: 8px; padding: 9px 10px 9px 14px;
-      background: var(--p-card); border-bottom: 1px solid var(--p-line); }
-    .panel-brand { display: flex; align-items: center; gap: 8px; font-weight: 680; font-size: 13px; }
-    .panel-brand small { font-weight: 500; color: var(--p-muted); font-size: 12px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 12px 12px 0 16px; }
+    .panel-brand { display: flex; align-items: center; gap: 8px; font-weight: 750; font-size: 13.5px; }
     .panel-close { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px;
-      border: 0; background: transparent; color: var(--p-muted); cursor: pointer; font-size: 16px; }
+      border: 0; background: transparent; color: var(--p-muted); cursor: pointer; font-size: 15px; }
     .panel-close:hover { background: rgba(127,127,127,.14); color: var(--p-ink); }
     .panel-close:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
-    .panel-claim { margin: 12px 14px 0; padding-left: 10px; border-left: 3px solid var(--p-line);
-      color: var(--p-muted); font-size: 13px; font-style: italic; max-height: 4.6em; overflow: hidden; }
-    .panel-body { padding: 12px 14px 14px; }
+    .panel-claim { margin: 10px 16px 0; color: var(--p-muted); font-size: 13px; font-style: italic;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .panel-body { padding: 14px 16px 16px; }
   `;
 
   const ensureShadowHost = () => {
@@ -97,11 +107,8 @@
     header.className = "panel-head";
     const brand = document.createElement("div");
     brand.className = "panel-brand";
-    brand.appendChild(View.logo(20));
-    brand.appendChild(document.createTextNode("Project Mirador"));
-    const sub = document.createElement("small");
-    sub.textContent = "· official U.S. data";
-    brand.appendChild(sub);
+    brand.appendChild(logo(20));
+    brand.appendChild(document.createTextNode("Mirador"));
     const close = document.createElement("button");
     close.className = "panel-close";
     close.type = "button";
@@ -178,10 +185,10 @@
       const bubble = document.createElement("button");
       bubble.type = "button";
       bubble.className = "bubble";
-      bubble.appendChild(View.logo(18));
-      bubble.appendChild(document.createTextNode("Check this claim"));
+      bubble.appendChild(logo(18));
+      bubble.appendChild(document.createTextNode("Check"));
       bubble.style.top = `${window.scrollY + rect.top - 38}px`;
-      bubble.style.left = `${clampLeft(window.scrollX + rect.left, 170)}px`;
+      bubble.style.left = `${clampLeft(window.scrollX + rect.left, 100)}px`;
       bubble.onclick = () => showPanel(text, rect);
       root.appendChild(bubble);
 
