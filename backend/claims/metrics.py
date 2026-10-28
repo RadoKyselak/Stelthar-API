@@ -51,6 +51,15 @@ class MetricSpec:
     # False when the metric is recognised but no typed adapter can fetch it
     # yet; such claims go straight to grounded search.
     structured: bool = True
+    # Earliest year the configured series means what the label says. ACS
+    # subject-table columns were renumbered in 2015 (S2701 C05 was "percent
+    # insured", S1501 C02 was male-only), so earlier years are not answered
+    # from them.
+    min_year: Optional[int] = None
+    # Census publishes a second official figure for some metrics (CPS ASEC
+    # vs ACS). A claim quoting the other one is not wrong, so a mismatch
+    # against ACS alone must not be reported as Contradicted.
+    alternate_measure: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -136,8 +145,9 @@ _SPECS: List[MetricSpec] = [
                  "growth rate of the economy", "how fast the economy grew",
                  "gdp grew", "real gdp grew", "economy grew", "gdp rose",
                  "gdp increased", "gdp expanded", "economy expanded",
-                 "gdp shrank", "economy shrank", "gdp contracted",
-                 "economy contracted", "gdp growth rate", "growth in gdp"),
+                 "gdp growth rate", "growth in gdp"),
+        # Contraction verbs are deliberately absent: "GDP shrank 2.2%" asserts
+        # -2.2%, and the value parser reads magnitudes unsigned.
     ),
     MetricSpec(
         metric="personal_income", label="Personal income", source="BEA",
@@ -164,14 +174,16 @@ _SPECS: List[MetricSpec] = [
     # ---- Demographics (Census ACS) ---------------------------------------
     MetricSpec(
         metric="population", label="Total population", source="CENSUS",
-        family=PERSONS, census_variable="B01003_001E",
+        family=PERSONS, census_variable="B01003_001E", min_year=2005,
         geo_levels=("nation", "state"),
         phrases=("population", "how many people live", "total population",
                  "number of residents", "number of people"),
     ),
     MetricSpec(
         metric="median_household_income", label="Median household income",
-        source="CENSUS", family=USD, census_variable="B19013_001E",
+        source="CENSUS", family=USD, census_variable="B19013_001E", min_year=2005,
+        alternate_measure=("the CPS ASEC estimate Census headlines in its annual "
+                           "Income in the United States report"),
         geo_levels=("nation", "state"),
         phrases=("median household income", "median income", "typical household income",
                  "household income"),
@@ -179,7 +191,8 @@ _SPECS: List[MetricSpec] = [
     MetricSpec(
         metric="poverty_rate", label="Poverty rate", source="CENSUS",
         family=PERCENT, census_variable="S1701_C03_001E",
-        census_dataset="acs/acs1/subject",
+        census_dataset="acs/acs1/subject", min_year=2010,
+        alternate_measure="the official poverty rate from CPS ASEC (and the Supplemental Poverty Measure)",
         geo_levels=("nation", "state"),
         phrases=("poverty rate", "rate of poverty", "people in poverty",
                  "living in poverty", "poverty level"),
@@ -187,14 +200,15 @@ _SPECS: List[MetricSpec] = [
     MetricSpec(
         metric="uninsured_rate", label="Uninsured rate", source="CENSUS",
         family=PERCENT, census_variable="S2701_C05_001E",
-        census_dataset="acs/acs1/subject",
+        census_dataset="acs/acs1/subject", min_year=2015,
+        alternate_measure="the CPS ASEC uninsured rate",
         geo_levels=("nation", "state"),
         phrases=("uninsured rate", "without health insurance", "uninsured",
                  "lack health insurance", "health insurance coverage"),
     ),
     MetricSpec(
         metric="median_home_value", label="Median home value", source="CENSUS",
-        family=USD, census_variable="B25077_001E",
+        family=USD, census_variable="B25077_001E", min_year=2005,
         geo_levels=("nation", "state"),
         phrases=("median home value", "median house price", "home values",
                  "typical home value", "house prices"),
@@ -202,7 +216,7 @@ _SPECS: List[MetricSpec] = [
     MetricSpec(
         metric="bachelors_or_higher", label="Bachelor's degree or higher",
         source="CENSUS", family=PERCENT, census_variable="S1501_C02_015E",
-        census_dataset="acs/acs1/subject",
+        census_dataset="acs/acs1/subject", min_year=2015,
         geo_levels=("nation", "state"),
         phrases=("bachelor's degree or higher", "college graduates", "college educated",
                  "with a college degree", "bachelors degree"),

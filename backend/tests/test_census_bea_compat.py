@@ -32,6 +32,9 @@ def isolated_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(cache_mod, "_CACHE_DIR", tmp_path / "cache")
     # config reads keys at import, before conftest sets the env.
     monkeypatch.setattr(bea_source, "BEA_API_KEY", "test_bea_key")
+    import config
+    monkeypatch.setattr(config, "BEA_API_KEY", "test_bea_key")
+    monkeypatch.setattr(config, "CENSUS_API_KEY", "test_census_key")
     gemini_models._reset_for_tests()
     yield
     gemini_models._reset_for_tests()
@@ -266,7 +269,9 @@ class TestEngineNowAnswersCensusAndBEA:
         ("Median household income was $77,700 in 2023", SUPPORTED),
         # 13.5% is outside written precision (0.1) but inside the ±0.3 MOE.
         ("The poverty rate in Texas was 13.5% in 2023", SUPPORTED),
-        ("The poverty rate in Texas was 16% in 2023", CONTRADICTED),
+        # Census also publishes the CPS official poverty rate, so a mismatch
+        # with ACS alone is not a contradiction.
+        ("The poverty rate in Texas was 16% in 2023", NO_VERDICT),
     ])
     async def test_claim(self, claim, verdict):
         from services.verify_v2 import verify
@@ -279,7 +284,7 @@ class TestEngineNowAnswersCensusAndBEA:
         ctx, _ = fake_client(get=route)
         with patch("httpx.AsyncClient", return_value=ctx), \
              patch("services.verify_v2.ground_claim", AsyncMock(side_effect=AssertionError("no LLM"))):
-            r = await verify(claim)
+            r = await verify(claim, allow_grounding=False)
         assert r.verdict == verdict, r.headline
         assert r.tier == "structured" and r.model_calls == 0
 
@@ -452,3 +457,138 @@ class TestVerifyBridge:
         body = test_client.get("/health").json()
         assert body["llm_model"] and "gemini-2.5-flash" not in body["llm_model_candidates"]
         assert set(body["sources_configured"]) >= {"gemini", "bls", "bea", "census"}
+
+
+# ---------------------------------------------------------------- review regressions
+#
+# Each case below was a confident wrong verdict found by the pre-PR review:
+# the claim asserts something about a DIFFERENT number than the series holds.
+# They must never be settled by the structured tier.
+
+from claims.geography import resolve_geography
+from claims.verdict import ALTERNATE_MEASURE
+
+
+class TestGeographyReviewFixes:
+    @pytest.mark.parametrize("text", [
+        "Washington, D.C.'s poverty rate was 15% in 2023",
+        "median household income in Washington DC was $101,000",
+        "Median income in Washington D.C. was $101,000",
+    ])
+    def test_dc_is_not_washington_state(self, text):
+        g = resolve_geography(text)
+        assert g.fips == "11", g
+
+    def test_washington_state_still_resolves(self):
+        assert resolve_geography("Washington's population was 7.8 million").fips == "53"
+
+    @pytest.mark.parametrize("text", [
+        "The population of Paris is 2 million",
+        "Chicago's population is 2.7 million in 2023",
+        "The world population is 8 billion",
+        "World GDP is $105 trillion",
+        "London's GDP is $800 billion",
+        "The EU's GDP is $18 trillion",
+        "Global GDP grew 3% in 2023",
+    ])
+    def test_non_us_scopes_decline(self, text):
+        g = resolve_geography(text)
+        assert g is not None and not g.is_known, (text, g)
+
+    @pytest.mark.parametrize("text", [
+        "The unemployment rate was 3.6% in 2023, according to the Bureau of Labor Statistics",
+        "America's GDP was $27 trillion in 2023",
+        "The population of the United States was 335 million",
+        "The Fed's preferred inflation measure rose 3%",
+        "Texas's population was 30 million in 2023",
+    ])
+    def test_us_and_agency_mentions_are_not_foreign(self, text):
+        g = resolve_geography(text)
+        assert g is None or g.is_known, (text, g)
+
+
+class TestQualifierBlockers:
+    @pytest.mark.parametrize("claim", [
+        "The Black population of the United States was 47 million in 2023",
+        "In 2023 the median household income for Black households was $56,490",
+        "The child poverty rate in 2023 was 13.7%",
+        "The poverty rate for children under 18 was 13.7% in 2023",
+        "The unemployment rate for women was 3.5% in 2023",
+        "Youth unemployment was 8% in 2023",
+        "Nominal GDP grew 6.6% in 2023",
+        "GDP grew 4.9% in the third quarter of 2023",
+        "GDP grew at a 4.9% annual rate in Q3 2023",
+        "Real GDP was $22.7 trillion in 2023",
+        "GDP per capita was $82,000 in 2023",
+        "Real median household income was $80,610 in 2023",
+    ])
+    def test_blocked_from_structured_tier(self, claim):
+        from services.verify_v2 import _structured_is_applicable
+        p = parse_claim(claim)
+        assert p.metric is not None
+        assert p.structured_blocker, claim
+        assert _structured_is_applicable(p) is not None
+
+    @pytest.mark.parametrize("claim", [
+        "The population of Texas was under 5 million in 2023",
+        "U.S. GDP was more than $25 trillion in 2023",
+        "Real GDP grew 2.9% in 2023",
+        "The national debt is over $33 trillion",
+        "The unemployment rate for people 16 and older was 3.6% in 2023",
+        "35% of adults 25 and older had a bachelor's degree or higher in 2023",
+        "The White House said unemployment was 3.6% in 2023",
+    ])
+    def test_plain_totals_are_not_blocked(self, claim):
+        assert parse_claim(claim).structured_blocker == "", claim
+
+    @pytest.mark.parametrize("claim", [
+        "GDP shrank 2.2% in 2020", "The economy contracted by 2.5% in 2022",
+    ])
+    def test_contraction_is_never_settled_unsigned(self, claim):
+        """'shrank 2.2%' asserts -2.2%; the value parser reads it unsigned."""
+        p = parse_claim(claim)
+        assert p.metric is None or p.metric.metric != "real_gdp_growth"
+
+
+@pytest.mark.asyncio
+class TestReviewFixesEndToEnd:
+    async def test_pre_2015_uninsured_and_education_route_away(self):
+        from services.verify_v2 import _structured_is_applicable
+        for claim in ("The uninsured rate in 2014 was 11.7%",
+                      "In 2013, 30% of adults had a bachelor's degree or higher"):
+            assert _structured_is_applicable(parse_claim(claim)) is not None, claim
+
+    async def test_alternate_measure_softens_contradiction(self):
+        from services.verify_v2 import verify
+        ctx, _ = fake_client(get=census_get())
+        with patch("httpx.AsyncClient", return_value=ctx):
+            # $80,610 is the CPS figure Census headlines; ACS says $77,719.
+            r = await verify("Median household income was $80,610 in 2023", allow_grounding=False)
+        assert r.verdict == NO_VERDICT and r.reason == ALTERNATE_MEASURE
+        assert r.evidence and r.evidence[0]["value"] == 77719
+
+    async def test_missing_census_key_routes_to_grounding_not_outage(self, monkeypatch):
+        import config
+        from services.verify_v2 import verify
+        monkeypatch.setattr(config, "CENSUS_API_KEY", None)
+        r = await verify("U.S. population was about 335 million in 2023", allow_grounding=False)
+        assert r.reason != "source_unavailable"
+        assert r.tier == "none"
+
+    async def test_grounding_exception_is_degraded_not_500(self, test_client):
+        with patch("services.verify_v2.ground_claim", AsyncMock(side_effect=ValueError("bad json"))):
+            r = test_client.post("/verify", json={"claim": "Bananas are the best fruit"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["degraded"] is True and body["degraded_reason"] == "llm_unavailable"
+
+    async def test_non_json_grounding_body(self):
+        from evidence import grounded
+
+        async def post(url, headers=None, json=None):
+            return FakeResponse(200, None, text="<html>proxy error</html>")
+        ctx, _ = fake_client(post=post)
+        with patch("evidence.grounded.httpx.AsyncClient", return_value=ctx), \
+             patch("evidence.grounded.GEMINI_API_KEY", "k"):
+            g = await grounded.ground_claim("x is y")
+        assert not g.ok and "JSON" in g.error

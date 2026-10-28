@@ -84,13 +84,15 @@ def _sources(v: VerificationV2) -> List[Dict[str, Any]]:
 
 def to_legacy_shape(v: VerificationV2) -> Dict[str, Any]:
     """v1 field names first, v2 fields alongside."""
-    degraded = v.reason in _DEGRADED_REASONS or any(
-        n.startswith("degraded") for n in v.notes
-    )
-    # Grounding failed outright (model or quota problem): not a judgment.
-    if v.verdict == NO_VERDICT and v.tier == "none" and v.model_calls > 0 \
+    degraded_reason = None
+    if v.reason in _DEGRADED_REASONS or any(n.startswith("degraded") for n in v.notes):
+        degraded_reason = "source_unavailable"
+    # Grounding failed outright (model, key or quota problem): not a judgment,
+    # and the routing reason v2 carries would misname the cause.
+    elif v.verdict == NO_VERDICT and v.tier == "none" and v.model_calls > 0 \
             and v.headline.startswith("Could not retrieve evidence"):
-        degraded = True
+        degraded_reason = "llm_unavailable"
+    degraded = degraded_reason is not None
 
     confidence = 0.0 if v.verdict == NO_VERDICT else _TIER_TO_SCORE.get(v.confidence, 0.4)
     v2 = to_response_dict(v)
@@ -101,7 +103,7 @@ def to_legacy_shape(v: VerificationV2) -> Dict[str, Any]:
         "claim_normalized": v.claim,
         "claim_type": (v.parsed or {}).get("metric") or "other",
         "degraded": degraded,
-        "degraded_reason": (v.reason or "llm_unavailable") if degraded else None,
+        "degraded_reason": degraded_reason,
         "verdict": _legacy_verdict(v),
         "confidence": confidence,
         "confidence_tier": v.confidence,
@@ -126,4 +128,16 @@ def to_legacy_shape(v: VerificationV2) -> Dict[str, Any]:
 
 
 async def verify(claim: str) -> Dict[str, Any]:
-    return to_legacy_shape(await verify_v2(claim))
+    """Never raises: the old client shows a raw 500 as a failure banner, where a
+    degraded response at least says the outage is ours."""
+    try:
+        return to_legacy_shape(await verify_v2(claim))
+    except Exception:  # noqa: BLE001
+        from config import logger
+        logger.exception("verify_compat failed for %r", (claim or "")[:120])
+        return to_legacy_shape(VerificationV2(
+            claim=claim, verdict=NO_VERDICT, confidence="Low",
+            headline=("Verification could not be completed due to an internal error. "
+                      "This is not a judgment about the claim."),
+            reason="source_unavailable", notes=["degraded: internal error"],
+        ))

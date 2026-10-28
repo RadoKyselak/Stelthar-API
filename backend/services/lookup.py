@@ -37,6 +37,7 @@ from services.verify_v2 import fetch_structured, has_structured_adapter
 # problem and must not read the same.
 METRIC_UNKNOWN = "metric_not_recognised"
 METRIC_NOT_WIRED = "metric_recognised_but_not_yet_wired"
+QUALIFIER_UNSUPPORTED = "qualifier_not_covered_by_series"
 GEOGRAPHY_UNSUPPORTED = "no_official_series_at_that_geography"
 PERIOD_UNAVAILABLE = "not_published_for_that_period"
 SOURCE_DOWN = "source_unavailable"
@@ -196,6 +197,21 @@ async def lookup(query: str, accessed: Optional[date] = None) -> LookupResult:
                 f"for lookup yet."
             ),
             suggestions=_suggest(text),
+        ))
+
+    if parsed.structured_blocker:
+        return done(LookupResult(
+            query=text, ok=False, reason=QUALIFIER_UNSUPPORTED,
+            metric=spec.metric, label=spec.label,
+            headline=f"{spec.label} is only wired up as a total: {parsed.structured_blocker}.",
+            suggestions=_suggest(text),
+        ))
+
+    if parsed.year is not None and spec.min_year and parsed.year < spec.min_year:
+        return done(LookupResult(
+            query=text, ok=False, reason=PERIOD_UNAVAILABLE,
+            metric=spec.metric, label=spec.label,
+            headline=f"{spec.label} is only wired up from {spec.min_year}.",
         ))
 
     if parsed.geography is not None and parsed.geography.level not in spec.geo_levels:

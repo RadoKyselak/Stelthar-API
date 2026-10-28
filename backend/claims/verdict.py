@@ -44,6 +44,7 @@ NOT_EMPIRICAL = "claim_is_not_empirically_testable"
 NO_VALUE_IN_CLAIM = "claim_states_no_checkable_value"
 TREND_CLAIM = "claim_describes_a_trend_and_needs_a_series"
 UNRESOLVED_PERIOD = "claim_names_a_period_that_cannot_be_resolved_to_a_date"
+ALTERNATE_MEASURE = "agency_publishes_more_than_one_official_figure"
 
 HIGH, MEDIUM, LOW = "High", "Medium", "Low"
 

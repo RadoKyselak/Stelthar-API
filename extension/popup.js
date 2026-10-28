@@ -240,9 +240,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 const verdictSpan = document.createElement("span");
                 const verdictRaw = (entry.verdict || "inconclusive").toLowerCase();
                 verdictSpan.className = `hist-verdict ${verdictRaw.replace(/\s+/g, "-")}`;
-                const conf = entry.confidence_tier && verdictRaw !== "no verdict"
-                    ? entry.confidence_tier
-                    : formatConfidence(entry.confidence);
+                // "No verdict" is no judgment at all; "0%" would read as "almost
+                // certainly false".
+                const conf = verdictRaw === "no verdict"
+                    ? "—"
+                    : (entry.confidence_tier || formatConfidence(entry.confidence));
                 verdictSpan.textContent = `${verdictRaw.toUpperCase()} · ${conf}`;
                 const claimSpan = document.createElement("span");
                 claimSpan.className = "hist-claim";

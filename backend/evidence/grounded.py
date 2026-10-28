@@ -247,6 +247,10 @@ async def ground_claim(
     except httpx.HTTPError as e:
         logger.warning("Grounded search request failed: %s", e)
         return GroundedAnswer(ok=False, error=f"request failed: {e}")
+    except ValueError as e:
+        # A 200 whose body is not JSON (proxy error page, truncated stream).
+        logger.warning("Grounded search returned a non-JSON body: %s", e)
+        return GroundedAnswer(ok=False, error="non-JSON response")
 
     candidates = payload.get("candidates") or []
     if not candidates:

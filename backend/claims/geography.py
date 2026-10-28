@@ -141,6 +141,47 @@ def looks_like_substate_place(text: str, state_name: str, match: re.Match) -> bo
     return False
 
 
+# "Washington, D.C." must win over the state of Washington. The state loop
+# below would otherwise match "washington" first and answer a DC claim with
+# Washington State's figures.
+_DC_RE = re.compile(r"\bwashington,?\s+d\.?\s?c\b\.?|\bdistrict of columbia\b")
+
+# Scopes that are explicitly not the United States, but are not countries
+# either. Every structured series here is U.S.-only, so these must decline.
+_SUPRANATIONAL = (
+    "the world", "world", "worldwide", "global", "globally", "planet", "earth",
+    "eu", "the eu", "euro area", "eurozone", "oecd", "g7", "g20",
+    "developing countries", "emerging markets",
+)
+
+# A capitalised name directly before "'s" ("Chicago's population") or after a
+# metric noun + "of" ("the population of Paris") names a place we must resolve
+# or decline. Restricting "of" to metric nouns keeps "Bureau of Labor
+# Statistics" and "Department of Defense" from being read as places.
+_POSSESSIVE_RE = re.compile(r"\b([A-Z][A-Za-z.-]+(?:\s+[A-Z][A-Za-z.-]+){0,2})['’]s\b")
+_METRIC_OF_RE = re.compile(
+    r"\b(?i:population|gdp|economy|output|income|poverty(?: rate)?|unemployment(?: rate)?|"
+    r"inflation(?: rate)?|residents|people|debt|wages|earnings|home values?|house prices)"
+    r"\s+(?i:of)\s+(?:(?i:the)\s+)?([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})"
+)
+# Capitalised possessives that are not places. Declining them would only cost
+# a structured answer, so the list covers the frequent cases, not every one.
+_NOT_A_PLACE_POSSESSIVE = frozenset("""
+fed federal reserve treasury congress senate house president administration
+government bls bea census cbo omb irs america nation country
+""".split())
+
+
+def _proper_noun_is_unresolved(candidate: str) -> bool:
+    c = " ".join(candidate.split()).lower().strip(".")
+    if len(c) < 3 or c in _NOT_A_PLACE or c in _NOT_A_PLACE_POSSESSIVE:
+        return False
+    first = c.split()[0]
+    if first in ("the", "this", "that", "its", "their", "his", "her"):
+        return False
+    return True
+
+
 def resolve_geography(text: str) -> Optional[Geography]:
     """Return the geography a claim is about, or None if it names no place.
 
@@ -151,6 +192,10 @@ def resolve_geography(text: str) -> Optional[Geography]:
     if not text:
         return None
     lowered = " ".join(text.lower().split())
+
+    if _DC_RE.search(lowered):
+        return Geography(name="District Of Columbia", level="state",
+                         fips=_STATE_FIPS["district of columbia"])
 
     for state in _STATES_BY_LENGTH:
         m = _word_bounded(lowered, state)
@@ -174,9 +219,27 @@ def resolve_geography(text: str) -> Optional[Geography]:
         if _word_bounded(lowered, country):
             return Geography.unknown(country.title())
 
-    for phrase in _NATIONAL_PHRASES:
-        if _word_bounded(lowered, phrase):
-            return Geography.national()
+    for scope in _SUPRANATIONAL:
+        if _word_bounded(lowered, scope):
+            return Geography.unknown(scope.title() if scope != "eu" else "the EU")
+
+    national = any(_word_bounded(lowered, phrase) for phrase in _NATIONAL_PHRASES)
+
+    # A named place that is neither a state nor a known country ("Chicago's",
+    # "the population of Paris") is checked even when the claim also says
+    # "American" somewhere — otherwise it would be answered with the national
+    # series.
+    for rx in (_POSSESSIVE_RE, _METRIC_OF_RE):
+        for match in rx.finditer(text):
+            candidate = " ".join(match.group(1).split())
+            low = candidate.lower()
+            if any(_word_bounded(low, p) for p in _NATIONAL_PHRASES):
+                continue
+            if _proper_noun_is_unresolved(candidate):
+                return Geography.unknown(candidate)
+
+    if national:
+        return Geography.national()
 
     # Nothing resolved. If the claim still names a proper noun in a locative
     # position ("on Mars", "in Springfield"), that is a place we cannot check,
