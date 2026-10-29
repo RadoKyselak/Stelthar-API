@@ -161,6 +161,9 @@ _STATIC_TYPES = {
     "site.css": "text/css; charset=utf-8",
     "logo.png": "image/png",
     "favicon.png": "image/png",
+    # Self-hosted, so no visitor's browser contacts a font service.
+    "instrument-sans.woff2": "font/woff2",
+    "instrument-serif.woff2": "font/woff2",
 }
 
 

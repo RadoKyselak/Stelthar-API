@@ -60,6 +60,7 @@
     q.placeholder = MODES[next].placeholder;
     $("q-label").textContent = MODES[next].label;
     go.setAttribute("aria-label", MODES[next].button);
+    $("go-text").textContent = MODES[next].button;
     if (!keepText) { q.value = ""; out.replaceChildren(); }
     syncButton();
     q.focus();

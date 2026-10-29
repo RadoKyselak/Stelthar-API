@@ -18,7 +18,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 # The web page: its own scripts, styles and images, its own API, nothing else.
 PAGE_CSP = (
-    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; "
     "connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; "
     "object-src 'none'; upgrade-insecure-requests"
 )

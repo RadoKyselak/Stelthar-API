@@ -37,6 +37,21 @@ class TestPage:
             assert directive in csp, directive
         assert "unsafe-inline" not in csp and "unsafe-eval" not in csp and "*" not in csp
 
+    def test_fonts_are_self_hosted(self, test_client):
+        """No visitor's browser contacts a font service."""
+        assert "font-src 'self'" in test_client.get("/", headers=HTML).headers["content-security-policy"]
+        css = (STATIC / "site.css").read_text()
+        assert "googleapis" not in css and "gstatic" not in css
+        r = test_client.get("/static/instrument-serif.woff2")
+        assert r.headers["content-type"] == "font/woff2" and r.content[:4] == b"wOF2"
+
+    def test_says_it_is_not_a_government_site(self, test_client):
+        """Government-style design, never a government claim."""
+        page = " ".join(test_client.get("/", headers=HTML).text.split())
+        assert "Not a government website" in page and "not affiliated" in page
+        for word in ("official website", ".gov", "seal", "An official"):
+            assert word not in page, word
+
     def test_page_cannot_be_framed(self, test_client):
         """Clickjacking."""
         h = test_client.get("/", headers=HTML).headers
@@ -81,7 +96,8 @@ class TestPage:
 
 
 class TestFiles:
-    @pytest.mark.parametrize("name", ["app.js", "result-view.js", "site.css", "logo.png", "favicon.png"])
+    @pytest.mark.parametrize("name", ["app.js", "result-view.js", "site.css", "logo.png", "favicon.png",
+                                      "instrument-sans.woff2", "instrument-serif.woff2"])
     def test_allowed_files(self, test_client, name):
         r = test_client.get(f"/static/{name}")
         assert r.status_code == 200 and r.headers["cross-origin-resource-policy"] == "same-origin"
