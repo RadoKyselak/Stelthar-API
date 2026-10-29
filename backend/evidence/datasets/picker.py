@@ -52,14 +52,50 @@ def _client():
     return claude_search._get_client()
 
 
+_NUM = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def shape(claim: str, figure: str = "") -> str:
+    """The claim with its stated figure blanked: which series a claim is about
+    does not depend on the number it states, so "17%" and "18%" of the same
+    thing share one pick. Only that one figure is blanked; other numbers
+    ("aged 65 and over", the year) name the measure and are kept."""
+    text = " ".join((claim or "").split())
+    figure = " ".join((figure or "").split())
+    i = text.find(figure) if figure else -1
+    if i < 0:
+        return text
+    return text[:i] + _NUM.sub("#", figure, count=1) + text[i + len(figure):]
+
+
+async def _cached_pick(key: str) -> Optional[dict]:
+    # Shared across serverless instances when Redis is configured; disk otherwise.
+    try:
+        raw = await spend_guard.get_store().get_str(f"ai:pick:{key}")
+        if raw:
+            return json.loads(raw)
+    except Exception as e:  # a cache problem must never cost money or fail a request
+        logger.debug("Pick cache read (shared) failed: %s", e)
+    return cache_read("dataset_pick", key, _WEEK)
+
+
+async def _store_pick(key: str, data: dict) -> None:
+    try:
+        await spend_guard.get_store().set_str(f"ai:pick:{key}", json.dumps(data), _WEEK)
+    except Exception as e:
+        logger.debug("Pick cache write (shared) failed: %s", e)
+    cache_write("dataset_pick", key, data)
+
+
 async def pick(claim: str, where: str, when: str, cands: List[Candidate],
-               client_ip: Optional[str]) -> Pick:
+               client_ip: Optional[str], figure: str = "") -> Pick:
     if not cands:
         return Pick(None, "value", 0, 0.0, "no candidates")
     keyed = {f"S{i + 1}": c for i, c in enumerate(cands)}
     listing = "\n".join(c.line(k) for k, c in keyed.items())
-    cache_key = hashlib.sha256(f"{_PROMPT_VERSION}|{claim}|{where}|{when}|{listing}".encode()).hexdigest()
-    hit = cache_read("dataset_pick", cache_key, _WEEK)
+    cache_key = hashlib.sha256(
+        f"{_PROMPT_VERSION}|{shape(claim, figure).lower()}|{where}|{when}|{listing}".encode()).hexdigest()
+    hit = await _cached_pick(cache_key)
     if hit:
         return Pick(keyed.get(hit.get("pick")), hit.get("stat", "value"), 0, 0.0, "cached")
 
@@ -102,5 +138,5 @@ async def pick(claim: str, where: str, when: str, cands: List[Candidate],
     chosen = keyed.get(key)
     logger.info("Dataset pick: %s (%s) of %d candidates, $%.5f; model said %r",
                 chosen.id if chosen else "NONE", stat, len(cands), cost, text[:120])
-    cache_write("dataset_pick", cache_key, {"pick": key if chosen else "NONE", "stat": stat})
+    await _store_pick(cache_key, {"pick": key if chosen else "NONE", "stat": stat})
     return Pick(chosen, stat, 1, cost, "picked" if chosen else "none fit")

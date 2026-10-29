@@ -23,6 +23,7 @@ from evidence.cache import TTL_IMMUTABLE, TTL_VOLATILE, cached
 from evidence.datapoint import (
     FISCAL_YEAR, POINT_IN_TIME, Datapoint, Geography, Period,
 )
+from evidence.excerpt import make as make_excerpt, row as ex_row
 from evidence.units import USD, Quantity, parse_number
 from utils.rate_limiter import get_quota_limiter
 from utils.urls import public_url
@@ -32,6 +33,13 @@ _limiter = get_quota_limiter("TREASURY", *RATE_LIMIT_QUOTAS.TREASURY)
 _ENDPOINT = "/v2/accounting/od/debt_to_penny"
 _VALUE_FIELD = "tot_pub_debt_out_amt"
 _LABEL = "Total public debt outstanding"
+
+
+def _us_date(iso: str) -> str:
+    """"2023-12-29" -> "12/29/2023", as Fiscal Data's own tables print it."""
+    y, _, rest = (iso or "").partition("-")
+    m, _, d = rest.partition("-")
+    return f"{m}/{d}/{y}" if y and m and d else iso
 
 
 def _row_to_datapoint(row: Dict[str, Any], url: str, want_fiscal: bool) -> Optional[Datapoint]:
@@ -71,7 +79,9 @@ def _row_to_datapoint(row: Dict[str, Any], url: str, want_fiscal: bool) -> Optio
         series_id="debt_to_penny",
         as_of=record_date or None,
         raw_value=str(row.get(_VALUE_FIELD)),
-        extra={"api_url": url},
+        extra={"api_url": url, "excerpt": make_excerpt(
+            [ex_row(_us_date(record_date), row.get(_VALUE_FIELD), cited=True)],
+            units="Total Public Debt Outstanding, dollars")},
     )
 
 
@@ -159,6 +169,7 @@ _MTS_FIELDS = {
     "outlays": ("current_month_gross_outly_amt", "Federal outlays (spending)"),
     "deficit": ("current_month_dfct_sur_amt", "Federal budget deficit"),
 }
+_MTS_COLUMN = {"receipts": "Receipts", "outlays": "Outlays", "deficit": "Deficit/Surplus (-)"}
 _MTS_METRIC = {"receipts": "federal_receipts", "outlays": "federal_outlays",
                "deficit": "federal_deficit"}
 
@@ -226,5 +237,10 @@ def _mts_row_to_datapoint(rows, fy: int, kind: str) -> Optional[Datapoint]:
         source="TREASURY", source_url=_mts_permalink(),
         series_id="MTS Table 1", as_of=record_date, raw_value=str(ytd.get(field)),
         extra={"caveat": (f"FY{fy} is the fiscal year Oct 1, {fy - 1} to Sep 30, {fy}. Year-end total; "
-                          f"later statements can revise it slightly.")},
+                          f"later statements can revise it slightly."),
+               # The statement's Year-to-Date line for the fiscal year, all three columns.
+               "excerpt": make_excerpt(
+                   [ex_row(_MTS_COLUMN[k], ytd.get(_MTS_FIELDS[k][0]), cited=k == kind)
+                    for k in ("receipts", "outlays", "deficit") if ytd.get(_MTS_FIELDS[k][0])],
+                   units=f"FY {fy} Year-to-Date line, dollars")},
     )

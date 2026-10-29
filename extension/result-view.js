@@ -75,6 +75,20 @@
 .mv-status { font-size: 12.5px; color: var(--muted); }
 .mv-how { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 .mv-loading { margin: 0; font-size: 13px; color: var(--muted); }
+
+.mv { --mark:#fef3c7; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { .mv { --mark:#3b3112; } }
+.mv-ex { margin: 12px 0 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.mv-ex-h { margin: 0; padding: 6px 10px; font-size: 11.5px; color: var(--muted); background: var(--subtle);
+  border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.mv-ex-t { width: 100%; border-collapse: collapse; font: 12px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
+.mv-ex-t td { padding: 5px 10px; border-top: 1px solid var(--line); color: var(--ink2); vertical-align: top; }
+.mv-ex-t tr:first-child td { border-top: 0; }
+.mv-ex-t td:last-child { text-align: right; white-space: nowrap; }
+.mv-ex-t tr.mv-cited td { background: var(--mark); color: var(--ink); font-weight: 700; }
+.mv-ex-n { margin: 0; padding: 6px 10px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); }
+.mv-quote { margin: 12px 0 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--line); font-size: 13px; color: var(--ink2); }
+.mv-quote-by { display: block; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
 `;
 
   function el(tag, cls, text) {
@@ -203,6 +217,36 @@
   }
 
   // Older API responses carry no `display`; build the minimum from v1 fields.
+  /** The published rows a figure was read from, the cited one marked. */
+  function excerptBox(ex) {
+    if (!ex || !Array.isArray(ex.rows) || !ex.rows.length) return null;
+    const box = el("figure", "mv-ex");
+    const head = [ex.heading, ex.units].filter(Boolean).join(" · ");
+    if (head) box.appendChild(el("figcaption", "mv-ex-h", head));
+    const table = el("table", "mv-ex-t");
+    ex.rows.forEach((r) => {
+      const tr = el("tr", r.cited ? "mv-cited" : "");
+      if (r.cited) tr.setAttribute("aria-label", `Cited: ${r.label}, ${r.value}`);
+      tr.append(el("td", "", r.label), el("td", "", r.value));
+      table.appendChild(tr);
+    });
+    box.appendChild(table);
+    if (ex.note) box.appendChild(el("p", "mv-ex-n", ex.note));
+    return box;
+  }
+
+  /** For a web-search answer: the sentence on the official page it rests on. */
+  function quoteBox(d) {
+    const s = (d.sources || []).find((x) => x && x.kind === "web" && x.quote && safeUrl(x.url)
+      && x.official) || (d.sources || []).find((x) => x && x.kind === "web" && x.quote && safeUrl(x.url));
+    if (!s) return null;
+    const q = el("blockquote", "mv-quote", `“${s.quote}”`);
+    const by = el("span", "mv-quote-by");
+    by.appendChild(link(s.url, s.domain || s.title));
+    q.appendChild(by);
+    return q;
+  }
+
   function displayOf(r) {
     if (r && r.display && r.display.verdict) return r.display;
     const label = (r && (r.verdict_detail || r.verdict)) || "Can't verify";
@@ -239,6 +283,8 @@
       sec.append(el("div", "mv-label", "Official figure"),
         el("p", c.official.length > 16 ? "mv-fig mv-long" : "mv-fig", c.official),
         el("p", "mv-what", describe(c)));
+      const ex = excerptBox(c.excerpt);
+      if (ex) sec.appendChild(ex);
       root.appendChild(sec);
     } else if (comps.length > 1) {
       const sec = el("div", "mv-sec");
@@ -253,6 +299,7 @@
       });
       const first = comps[0];
       sec.append(table, el("p", "mv-what", [first.measure, first.place, first.basis].filter(Boolean).join(", ")));
+      comps.slice(0, 2).forEach((c) => { const ex = excerptBox(c.excerpt); if (ex) sec.appendChild(ex); });
       root.appendChild(sec);
     } else if (d.reported_value) {
       const sec = el("div", "mv-sec");
@@ -261,6 +308,10 @@
       sec.append(el("div", "mv-label", "Figure found by web search"),
         el("p", d.reported_value.length > 16 ? "mv-fig mv-long" : "mv-fig", d.reported_value));
       root.appendChild(sec);
+    }
+    if (!comps.length) {
+      const q = quoteBox(d);
+      if (q) root.appendChild(q);
     }
 
     (d.notes || []).slice(0, 2).forEach((n) => root.appendChild(el("p", "mv-note", n)));

@@ -31,6 +31,7 @@ from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from evidence.cache import TTL_IMMUTABLE, cached
 from evidence.datapoint import ANNUAL, Datapoint, Geography, Period
 from evidence.sources import SourceUnavailable
+from evidence.excerpt import moe_excerpt, units_for
 from evidence.units import Quantity, parse_number
 from utils.rate_limiter import get_quota_limiter
 from utils.urls import public_url
@@ -161,6 +162,8 @@ def _row_to_datapoint(spec, year: int, dataset: str, blob: Dict[str, Any]) -> Op
         notes.append(f"American Community Survey figure. Census also publishes {other}.")
     if notes:
         extra["caveat"] = " ".join(notes)
+    extra["excerpt"] = moe_excerpt(raw, rec.get(moe_name) if moe else None,
+                                   units_for(spec.family))
 
     return Datapoint(
         quantity=Quantity(magnitude=value, family=spec.family, raw=str(raw)),

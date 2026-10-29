@@ -6,7 +6,7 @@ free check has passed:
   1. Provider switched off            -> no call
   2. Input gate (length, word count, must name a figure or an official
      statistic)                       -> no call
-  3. Answer cache (24h, keyed by the normalised claim) -> no call
+  3. Answer cache (shared; a week for a past year, else 24h) -> no call
   4. Spend guard (daily $ cap incl. worst case of this call, daily call cap,
      per-client cap)                  -> no call
   5. One capped provider call
@@ -59,9 +59,32 @@ def gate(claim: str, names_a_metric: bool) -> Optional[str]:
     return None
 
 
+_QUOTES = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'",
+                         "\u2013": "-", "\u2014": "-", "\u00a0": " "})
+_YEAR_RE = re.compile(r"\b(19[0-9]{2}|20[0-9]{2})\b")
+_NOW_RE = re.compile(r"\b(now|today|currently|current|this year|this month|so far|latest)\b", re.I)
+_WEEK = 7 * 24 * 3600
+
+
+def normalise(claim: str) -> str:
+    """The same sentence copied from two pages: curly or straight quotes, a
+    trailing period or not, surrounding quote marks. One answer serves both."""
+    t = " ".join((claim or "").translate(_QUOTES).lower().split())
+    return t.strip(" \"'").rstrip(".;:!").strip(" \"'")
+
+
+def ttl_for(claim: str) -> int:
+    """A week for a claim about a closed past year (its answer will not
+    change), a day for anything that may be about the present."""
+    from datetime import datetime, timezone
+    years = [int(y) for y in _YEAR_RE.findall(claim or "")]
+    if years and max(years) < datetime.now(timezone.utc).year and not _NOW_RE.search(claim or ""):
+        return _WEEK
+    return _CACHE_TTL
+
+
 def _cache_key(claim: str, hint: str) -> str:
-    norm = " ".join((claim or "").lower().split())
-    return hashlib.sha256(f"{config.AI_SEARCH_PROVIDER}|{norm}|{hint}".encode()).hexdigest()
+    return hashlib.sha256(f"{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
 
 
 def _from_dict(d: dict) -> GroundedAnswer:
@@ -71,10 +94,10 @@ def _from_dict(d: dict) -> GroundedAnswer:
     return GroundedAnswer(**d)
 
 
-async def _cache_get(key: str) -> Optional[GroundedAnswer]:
+async def _cache_get(key: str, ttl: int = _CACHE_TTL) -> Optional[GroundedAnswer]:
     try:
         raw = await spend_guard.get_store().get_str(f"ai:answer:{key}")
-        data = json.loads(raw) if raw else disk_cache.read("ai_answers", key, _CACHE_TTL)
+        data = json.loads(raw) if raw else disk_cache.read("ai_answers", key, ttl)
         if data:
             g = _from_dict(data)
             g.model_calls, g.cost_usd = 0, 0.0
@@ -84,10 +107,10 @@ async def _cache_get(key: str) -> Optional[GroundedAnswer]:
     return None
 
 
-async def _cache_put(key: str, g: GroundedAnswer) -> None:
+async def _cache_put(key: str, g: GroundedAnswer, ttl: int = _CACHE_TTL) -> None:
     data = asdict(g)
     try:
-        await spend_guard.get_store().set_str(f"ai:answer:{key}", json.dumps(data), _CACHE_TTL)
+        await spend_guard.get_store().set_str(f"ai:answer:{key}", json.dumps(data), ttl)
     except Exception as e:
         logger.debug("AI answer cache write (shared) failed: %s", e)
     disk_cache.write("ai_answers", key, data)
@@ -103,8 +126,8 @@ async def search(claim: str, hint: str = "", *, client_ip: Optional[str] = None,
     if why_not:
         return GroundedAnswer(ok=False, error=why_not, model_calls=0, skipped=True)
 
-    key = _cache_key(claim, hint)
-    hit = await _cache_get(key)
+    key, ttl = _cache_key(claim, hint), ttl_for(claim)
+    hit = await _cache_get(key, ttl)
     if hit is not None:
         return hit
 
@@ -121,5 +144,5 @@ async def search(claim: str, hint: str = "", *, client_ip: Optional[str] = None,
         g = await gemini_ground_claim(claim, context_hint=hint)
 
     if g.ok:
-        await _cache_put(key, g)
+        await _cache_put(key, g, ttl)
     return g

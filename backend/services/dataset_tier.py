@@ -90,7 +90,8 @@ async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], start
     where = (census_geo.name if census_geo else (geo.name if geo else "United States"))
     when = (f"{_MONTHS[parsed.month - 1].title()} {parsed.year}" if parsed.month and parsed.year
             else str(parsed.year or census_year or "latest available"))
-    choice = await picker.pick(text, where, when, cands, client_ip)
+    choice = await picker.pick(text, where, when, cands, client_ip,
+                               figure=parsed.claimed_value.raw or "")
     c = choice.candidate
     if c is None:
         return None

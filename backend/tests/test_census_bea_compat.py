@@ -639,3 +639,43 @@ def test_universe_age_bound_is_not_a_second_value(claim, value):
     p = parse_claim(claim)
     assert not p.is_trend_claim, p.all_values
     assert p.claimed_value.magnitude == value
+
+
+# ---------------------------------------------------------------- excerpts
+
+@pytest.mark.asyncio
+class TestSourceExcerpts:
+    """The card shows the cell a figure came from, as the agency printed it."""
+
+    async def test_census_estimate_and_margin(self):
+        ctx, _ = fake_client(get=census_get())
+        tx = Geography(name="Texas", level="state", fips="48")
+        with patch("evidence.sources.census.httpx.AsyncClient", return_value=ctx):
+            out = await census_source.fetch(BY_METRIC["poverty_rate"], 2023, tx)
+        ex = out[0].extra["excerpt"]
+        assert ex["rows"] == [{"label": "Estimate", "value": "13.7", "cited": True},
+                              {"label": "Margin of Error", "value": "±0.3"}]
+        assert ex["units"] == "percent"
+
+    async def test_controlled_census_estimate_has_no_margin_row(self):
+        ctx, _ = fake_client(get=census_get())
+        with patch("evidence.sources.census.httpx.AsyncClient", return_value=ctx):
+            out = await census_source.fetch(BY_METRIC["population"], 2023, None)
+        assert out[0].extra["excerpt"]["rows"] == [
+            {"label": "Estimate", "value": "334,914,895", "cited": True}]
+
+    async def test_bea_line_as_published_with_units(self):
+        ctx, _ = fake_client(get=bea_get())
+        with patch("evidence.sources.bea.httpx.AsyncClient", return_value=ctx):
+            out = await bea_source.fetch(BY_METRIC["gdp"], 2023)
+        ex = out[0].extra["excerpt"]
+        assert ex["rows"] == [{"label": "Line 1 · Gross domestic product · 2023",
+                               "value": "27,720,709", "cited": True}]
+        assert ex["units"] == "millions of dollars"
+
+    async def test_bea_growth_rate_units(self):
+        ctx, _ = fake_client(get=bea_get())
+        with patch("evidence.sources.bea.httpx.AsyncClient", return_value=ctx):
+            out = await bea_source.fetch(BY_METRIC["real_gdp_growth"], 2023)
+        assert out[0].extra["excerpt"]["units"] == "percent"
+        assert out[0].extra["excerpt"]["rows"][0]["value"] == "2.9"

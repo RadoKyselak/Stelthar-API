@@ -32,6 +32,7 @@ from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from evidence.cache import TTL_IMMUTABLE, TTL_VOLATILE, cached
 from evidence.sources import SourceUnavailable
 from evidence.datapoint import ANNUAL, MONTHLY, Datapoint, Geography, Period
+from evidence.excerpt import make as make_excerpt, row as ex_row, units_for
 from evidence.units import INDEX, JOBS, PERCENT, USD, Quantity, parse_number
 from utils.rate_limiter import get_quota_limiter
 
@@ -187,6 +188,50 @@ def _scale_for(series_id: str, value: float) -> float:
     return value * 1000.0 if series_id in _THOUSANDS_SERIES else value
 
 
+# ---- Excerpts: the cells a figure was read from, laid out as BLS tables are.
+_MON = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _units(series_id: str, family: str) -> str:
+    return "thousands of jobs" if series_id in _THOUSANDS_SERIES else units_for(family)
+
+
+def _month_row(rows: List[Dict[str, Any]], year: int, month: int) -> Optional[Dict[str, Any]]:
+    target = f"M{month:02d}"
+    return next((r for r in rows if r.get("year") == str(year) and r.get("period") == target), None)
+
+
+def _decimals(rows: List[Dict[str, Any]], year: int) -> int:
+    raws = [str(m.get("value") or "") for m in _monthly_points(rows, year)]
+    return max((len(r.split(".", 1)[1]) for r in raws if "." in r), default=1)
+
+
+def _annual_excerpt(rows, year: int, value: float, series_id: str, family: str):
+    out = []
+    dec = _month_row(rows, year, 12)
+    if dec is not None:
+        out.append(ex_row(f"{year} Dec", dec.get("value")))
+    pub = _published_annual(rows, year)
+    note = ""
+    if pub is not None:
+        out.append(ex_row(f"{year} Annual", pub.get("value"), cited=True))
+    else:
+        out.append(ex_row(f"{year} Annual average", f"{value:.{_decimals(rows, year)}f}", cited=True))
+        note = ("BLS returned the 12 monthly values; the annual average is their mean, "
+                "rounded as BLS rounds.")
+    return make_excerpt(out, _units(series_id, family), note)
+
+
+def _monthly_excerpt(rows, year: int, month: int, series_id: str, family: str):
+    out = []
+    for m in (month - 1, month, month + 1):
+        if 1 <= m <= 12:
+            r = _month_row(rows, year, m)
+            if r is not None and r.get("value") not in (None, "", "-"):
+                out.append(ex_row(f"{year} {_MON[m - 1]}", r.get("value"), cited=m == month))
+    return make_excerpt(out, _units(series_id, family))
+
+
 async def fetch_annual(
     metric: str, label: str, series_id: str, family: str, year: int,
 ) -> List[Datapoint]:
@@ -212,7 +257,8 @@ async def fetch_annual(
         geography=geography_for_series(series_id),
         source="BLS", source_url=series_permalink(series_id, annual=True, year=year),
         series_id=series_id, raw_value=f"{value}",
-        extra={"months_observed": n},
+        extra={"months_observed": n,
+               "excerpt": _annual_excerpt(rows, year, value, series_id, family)},
     )]
 
 
@@ -238,6 +284,7 @@ async def fetch_monthly(
                 geography=geography_for_series(series_id),
                 source="BLS", source_url=series_permalink(series_id, year=year),
                 series_id=series_id, raw_value=str(r.get("value")),
+                extra={"excerpt": _monthly_excerpt(rows, year, month, series_id, family)},
             )]
     return []
 
@@ -256,19 +303,21 @@ async def fetch_inflation(
 
     if month is not None:
         cur = prev = None
+        cur_raw = prev_raw = ""
         target = f"M{month:02d}"
         for r in rows:
             if r.get("period") != target:
                 continue
             if r.get("year") == str(year):
-                cur = parse_number(r.get("value"))
+                cur, cur_raw = parse_number(r.get("value")), str(r.get("value"))
             elif r.get("year") == str(year - 1):
-                prev = parse_number(r.get("value"))
+                prev, prev_raw = parse_number(r.get("value")), str(r.get("value"))
         if cur is None or not prev:
             return []
         pct = (cur - prev) / prev * 100.0
         basis = f"12-month change from {_MONTH_NAMES[month - 1]} {year - 1}, not seasonally adjusted"
         period = Period(year=year, kind=MONTHLY, month=month, basis=basis)
+        labels = (f"Index, {_MON[month - 1]} {year - 1}", f"Index, {_MON[month - 1]} {year}")
     else:
         cur, cur_basis, _ = _annual_value(rows, year)
         prev, _, _ = _annual_value(rows, year - 1)
@@ -280,11 +329,20 @@ async def fetch_inflation(
             year=year, kind=ANNUAL,
             basis=f"change in annual average from {year - 1}",
         )
+        cur_raw = f"{cur:.{_decimals(rows, year)}f}"
+        prev_raw = f"{prev:.{_decimals(rows, year - 1)}f}"
+        labels = (f"Index, {year - 1} annual average", f"Index, {year} annual average")
 
     # BLS publishes 12-month changes to one decimal, computed from the index
     # exactly as here ("9.1 percent" for June 2022). The comparison and the
     # citation use that published figure, not an unrounded 9.06 BLS never wrote.
     published = round(pct + 0.0, 1)
+    excerpt = make_excerpt(
+        [ex_row(labels[0], prev_raw), ex_row(labels[1], cur_raw),
+         ex_row("Change (%)", f"{published:.1f}", cited=True)],
+        note=(f"({cur_raw} − {prev_raw}) ÷ {prev_raw} × 100 = {pct:.2f}, "
+              f"rounded to one decimal as BLS publishes it."),
+    )
     return [Datapoint(
         quantity=Quantity(magnitude=published, family=PERCENT),
         metric=metric, label=label,
@@ -293,7 +351,8 @@ async def fetch_inflation(
         source="BLS", source_url=series_permalink(series_id, pct12=True, annual=month is None,
                                                   year=year),
         series_id=series_id, raw_value=f"{published:.1f}",
-        extra={"index_current": cur, "index_prior": prev, "unrounded_change": round(pct, 4)},
+        extra={"index_current": cur, "index_prior": prev, "unrounded_change": round(pct, 4),
+               "excerpt": excerpt},
     )]
 
 
@@ -342,4 +401,5 @@ async def fetch_latest_monthly(
         geography=geography_for_series(series_id),
         source="BLS", source_url=series_permalink(series_id),
         series_id=series_id, raw_value=str(latest.get("value")),
+        extra={"excerpt": _monthly_excerpt(rows, y, mth, series_id, family)},
     )]

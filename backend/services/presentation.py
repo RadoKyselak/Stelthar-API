@@ -147,6 +147,8 @@ def _web_source(c: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "title": (c.get("title") or domain)[:200],
         "domain": domain,
         "url": url,
+        # The sentence on that page the answer rests on, word for word.
+        "quote": " ".join(str(c.get("quote") or "").split())[:300],
     }
 
 
@@ -212,7 +214,25 @@ def _comparison(p: Dict[str, Any]) -> Dict[str, Any]:
         "citation": p.get("citation") or "",
         "citation_html": p.get("citation_html") or "",
         "url": _safe_url(p.get("url")),
+        "excerpt": _clean_excerpt(p.get("excerpt")),
     }
+
+
+def _clean_excerpt(ex: Any) -> Optional[Dict[str, Any]]:
+    """Plain strings only, a few rows, exactly one cited: the card renders it
+    as text, and a malformed excerpt is dropped rather than half-shown."""
+    if not isinstance(ex, dict) or not isinstance(ex.get("rows"), list):
+        return None
+    rows = []
+    for r in ex["rows"][:6]:
+        if not isinstance(r, dict):
+            return None
+        rows.append({"label": str(r.get("label") or "")[:80], "value": str(r.get("value") or "")[:40],
+                     "cited": bool(r.get("cited"))})
+    if sum(r["cited"] for r in rows) != 1:
+        return None
+    return {"heading": str(ex.get("heading") or "")[:160], "units": str(ex.get("units") or "")[:60],
+            "rows": rows, "note": str(ex.get("note") or "")[:240]}
 
 
 def _status(v) -> str:

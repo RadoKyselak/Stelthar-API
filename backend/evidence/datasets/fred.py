@@ -21,6 +21,7 @@ from config import logger
 from evidence.cache import cached
 from evidence.datapoint import ANNUAL, MONTHLY, POINT_IN_TIME, Datapoint, Geography, Period
 from evidence.datasets import Candidate, query_tokens
+from evidence.excerpt import make as make_excerpt, row as ex_row
 from evidence.sources import SourceUnavailable
 from evidence.units import PERCENT, PERSONS, USD, Quantity
 
@@ -168,5 +169,9 @@ async def fetch(c: Candidate, year: Optional[int], month: Optional[int], stat: s
         series_id=sid,
         as_of=date or None,
         raw_value=str(o["value"]),
-        extra={"original_source": source, "units": c.units},
+        extra={"original_source": source, "units": c.units,
+               # FRED's own observation row: its date and value, as FRED lists them.
+               "excerpt": make_excerpt([ex_row(date, o["value"], cited=True)], units=c.units,
+                                       note=(f"Aggregated by FRED: {basis} of the {c.frequency} series."
+                                             if basis and kind != POINT_IN_TIME else ""))},
     )

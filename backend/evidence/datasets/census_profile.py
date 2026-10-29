@@ -17,6 +17,7 @@ from config import API_TIMEOUTS, CENSUS_API_KEY, logger
 from evidence.cache import cached
 from evidence.datapoint import ANNUAL, Datapoint, Geography, Period
 from evidence.datasets import Candidate, query_tokens, tokens
+from evidence.excerpt import moe_excerpt
 from evidence.sources import SourceUnavailable
 from evidence.units import PERCENT, PERSONS, USD, Quantity
 
@@ -305,6 +306,8 @@ async def fetch(c: Candidate, year: int, geo: Optional[Geography]) -> Optional[D
     extra["caveat"] = " ".join(notes) if notes else None
     if not extra["caveat"]:
         extra.pop("caveat")
+    extra["excerpt"] = moe_excerpt(raw, row.get(_moe_var(var)) if moe is not None else None,
+                                   c.units)
     measure = c.title if not c.detail else f"{c.title} ({c.detail.split(';')[0]})"
     return Datapoint(
         quantity=Quantity(magnitude=value * scale, family=family, raw=str(raw)),
