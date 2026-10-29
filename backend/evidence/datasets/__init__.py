@@ -73,6 +73,8 @@ PHRASES = [
     (re.compile(r"\bhealth (insurance|coverage)", re.I), ["insurance", "coverage"]),
     (re.compile(r"\bwork from home|\bremote work", re.I), ["worked", "home"]),
     (re.compile(r"\bat home\b", re.I), ["home"]),
+    # "people" is too common to score on, but a count of people is a population.
+    (re.compile(r"\b(people|persons|residents|inhabitants)\b", re.I), ["population"]),
 ]
 
 

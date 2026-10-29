@@ -66,6 +66,7 @@ class TestCandidates:
         ("The average commute in New York was 33 minutes in 2023", "DP03_0025E"),
         ("90% of households had broadband internet in 2023", "DP02_0154PE"),
         ("Chicago's population was 2.7 million in 2023", "DP05_0001E"),
+        ("Cook County had 5.1 million people in 2023", "DP05_0001E"),
         ("There were 16 million veterans in 2023", "DP02_0070E"),
         ("The median home value in Colorado was $560,000 in 2023", "DP04_0089E"),
     ])
