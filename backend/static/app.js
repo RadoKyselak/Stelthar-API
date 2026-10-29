@@ -69,6 +69,11 @@
 
   form.addEventListener("submit", (e) => { e.preventDefault(); run(q.value); });
   q.addEventListener("input", syncButton);
+  // Examples: a click fills the box and looks it up (every one is answered
+  // from official data, at no AI cost).
+  document.querySelectorAll(".chip[data-q]").forEach((chip) => {
+    chip.addEventListener("click", () => { q.value = chip.dataset.q; syncButton(); run(q.value); });
+  });
 
   // Deep links (?q=…) fill the box but never run on their own. A shared link
   // must not make every visitor's browser send a check (each could cost a

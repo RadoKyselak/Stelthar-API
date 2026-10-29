@@ -60,8 +60,9 @@ class TestPage:
         text = re.sub(r'<label[^>]*class="sr"[^>]*>.*?</label>|<script.*?</script>|<[^>]+>', " ",
                       body, flags=re.S)
         words = text.split()
-        assert len(words) <= 14, words
-        assert "<details" not in html and 'role="tab"' not in html
+        # Name, question, example chips, one nav link, source names, disclaimer.
+        assert len(words) <= 40, words
+        assert "<details" not in html and 'role="tab"' not in html and not re.search(r"<p[\s>]", html)
 
     def test_page_cannot_be_framed(self, test_client):
         """Clickjacking."""
