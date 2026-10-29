@@ -87,10 +87,10 @@ class _MemoryStore:
             self._data.pop(k, None)
             self._expiry.pop(k, None)
 
-    async def incr(self, key: str, by: int = 1) -> int:
+    async def incr(self, key: str, by: int = 1, ttl: int = _DAY_TTL) -> int:
         self._gc()
         self._data[key] = self._data.get(key, 0) + by
-        self._expiry.setdefault(key, time.time() + _DAY_TTL)
+        self._expiry.setdefault(key, time.time() + ttl)
         return self._data[key]
 
     async def get(self, key: str) -> int:
@@ -125,8 +125,8 @@ class _RedisStore:
             raise StoreUnavailable(f"bad pipeline reply: {str(out)[:200]}")
         return [x.get("result") if isinstance(x, dict) else x for x in out]
 
-    async def incr(self, key: str, by: int = 1) -> int:
-        res = await self._pipeline([["INCRBY", key, str(by)], ["EXPIRE", key, str(_DAY_TTL)]])
+    async def incr(self, key: str, by: int = 1, ttl: int = _DAY_TTL) -> int:
+        res = await self._pipeline([["INCRBY", key, str(by)], ["EXPIRE", key, str(ttl)]])
         return int(res[0])
 
     async def get(self, key: str) -> int:

@@ -156,9 +156,10 @@ class TestRenderer:
         src = (ROOT / "extension" / "result-view.js").read_text()
         assert "requestAnimationFrame" not in src
 
-    def test_no_website_is_served(self, test_client):
-        assert test_client.get("/", headers={"accept": "text/html"}).json()["status"] == "ok"
-        assert test_client.get("/static/app.js").status_code == 404
+    def test_web_page_renders_with_the_extension_card(self):
+        """One renderer: the page serves the extension's own result-view.js."""
+        assert (ROOT / "backend" / "static" / "result-view.js").read_text() == \
+            (ROOT / "extension" / "result-view.js").read_text()
 
 
 class TestCitations:

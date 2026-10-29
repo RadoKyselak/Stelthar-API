@@ -44,6 +44,15 @@ def mock_env_vars(monkeypatch):
     return env_vars
 
 
+@pytest.fixture(autouse=True)
+def generous_request_limits(monkeypatch):
+    """The suite sends many requests from one test client; per-visitor limits
+    are tested on their own in test_web_security."""
+    import config
+    for name in ("VERIFY_PER_MINUTE", "VERIFY_PER_DAY", "LOOKUP_PER_MINUTE", "LOOKUP_PER_DAY"):
+        monkeypatch.setattr(config, name, 10**6)
+
+
 @pytest.fixture
 def test_client():
     """Create a TestClient for FastAPI app."""
