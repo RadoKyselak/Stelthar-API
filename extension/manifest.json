@@ -1,19 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Project Mirador",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Look up official U.S. statistics and copy them with a full citation. Also verifies highlighted claims against BLS, BEA, Census and Treasury data.",
   "permissions": [
-    "scripting",
     "activeTab",
+    "scripting",
     "storage",
-    "contextMenus",
-    "offscreen",
-    "notifications",
-    "clipboardWrite"
-  ],
-  "host_permissions": [
-    "https://stelthar-api.vercel.app/*"
+    "contextMenus"
   ],
   "background": {
     "service_worker": "background.js"
@@ -28,27 +22,9 @@
         "default": "Ctrl+Shift+Y",
         "mac": "Command+Shift+Y"
       },
-      "description": "Verify the highlighted text"
+      "description": "Check the highlighted text"
     }
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "result-view.js",
-        "content.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["icons/icon48.png"],
-      "matches": ["<all_urls>"]
-    }
-  ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

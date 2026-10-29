@@ -116,6 +116,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   loadRecent();
   q.focus();
+  // Opened from the address bar ("mir unemployment 2023", Enter) as a tab.
+  const linked = new URL(location.href).searchParams.get("q");
+  if (linked) {
+    document.documentElement.classList.add("as-tab");
+    run(linked.slice(0, MAX_CLAIM_LEN), true);
+    return;
+  }
   selectionOnPage().then((sel) => {
     if (!sel || text() || sel.length > MAX_CLAIM_LEN) return;
     q.value = sel;

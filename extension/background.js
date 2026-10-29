@@ -119,44 +119,47 @@ async function openPopupWithClaim(claim) {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "stelthar-verify",
-    title: "Verify with Project Mirador",
+    title: "Check with Project Mirador",
     contexts: ["selection"],
   });
 });
 
+// Nothing of Mirador runs on a page until it is asked to. The right-click
+// item and the keyboard shortcut grant temporary access to that one tab
+// (activeTab), and only then is the card injected. So the extension needs
+// no access to any website, and installs with no permission warning.
+async function showOnPage(tab, claim) {
+  await storageSet({ stelthar_last_claim: claim });
+  if (!tab?.id) return openPopupWithClaim(claim);
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["result-view.js", "content.js"],
+    });
+    await chrome.tabs.sendMessage(tab.id, { type: "showPanel", claim });
+  } catch (e) {
+    // Pages no extension may touch (chrome://, the Web Store, the PDF viewer).
+    openPopupWithClaim(claim);
+  }
+}
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== "stelthar-verify" || !info.selectionText) return;
-  const claim = info.selectionText.trim();
-  storageSet({ stelthar_last_claim: claim }).then(() => {
-    if (tab?.id) {
-      chrome.tabs.sendMessage(tab.id, { type: "showPanel", claim }, () => {
-        // Content script may not be injected (chrome:// pages, PDFs) —
-        // fall back to the popup.
-        if (chrome.runtime.lastError) openPopupWithClaim(claim);
-      });
-    } else {
-      openPopupWithClaim(claim);
-    }
-  });
+  showOnPage(tab, info.selectionText.trim());
 });
 
-chrome.commands.onCommand.addListener(async (command) => {
+chrome.commands.onCommand.addListener(async (command, tab) => {
   if (command !== "verify-selection") return;
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
   try {
     const [{ result: selection }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => window.getSelection().toString().trim(),
+      func: () => String(window.getSelection() || "").replace(/\s+/g, " ").trim(),
     });
-    if (selection) {
-      await storageSet({ stelthar_last_claim: selection });
-      chrome.tabs.sendMessage(tab.id, { type: "showPanel", claim: selection }, () => {
-        if (chrome.runtime.lastError) openPopupWithClaim(selection);
-      });
-    }
+    if (selection) await showOnPage(tab, selection);
   } catch (e) {
-    // Restricted page (chrome://, web store) — nothing we can do.
+    // Restricted page (chrome://, the Web Store): nothing can be read there.
   }
 });
 
@@ -183,8 +186,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Verification needs the user to already suspect something, which is rare.
 // Looking a figure up while writing is constant, so the fastest possible
 // surface matters more than the prettiest one: the omnibox needs no click, no
-// popup and no mouse. Type "mir", Tab, "unemployment 2023", Enter — the
-// citation is on the clipboard.
+// popup and no mouse. Type "mir", Tab, "unemployment 2023": the figure shows
+// in the dropdown, and Enter opens it with its citation in a tab.
 //
 // Suggestions carry the actual number as the user types, because seeing
 // "3.6% — BLS, 2023 annual average" in the dropdown is what tells them the
@@ -192,26 +195,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ===========================================================================
 
 const LOOKUP_URL = "https://stelthar-api.vercel.app/v2/lookup";
-
-// "unemployment 2023 /note" -> copy the full footnote instead of the inline form.
-const FORMAT_SUFFIXES = {
-  "/note": "note",
-  "/md": "markdown",
-  "/markdown": "markdown",
-  "/value": "value",
-  "/raw": "value",
-  "/html": "html",
-};
-
-function splitFormat(input) {
-  const trimmed = (input || "").trim();
-  for (const [suffix, format] of Object.entries(FORMAT_SUFFIXES)) {
-    if (trimmed.toLowerCase().endsWith(suffix)) {
-      return { query: trimmed.slice(0, -suffix.length).trim(), format };
-    }
-  }
-  return { query: trimmed, format: "inline" };
-}
 
 const lookupMemo = new Map(); // query -> result, best-effort across a keystroke burst
 
@@ -250,7 +233,7 @@ chrome.omnibox.setDefaultSuggestion({
 });
 
 chrome.omnibox.onInputChanged.addListener((input, suggest) => {
-  const { query, format } = splitFormat(input);
+  const query = (input || "").trim();
   if (query.length < 2) return;
 
   clearTimeout(inputDebounce);
@@ -262,8 +245,7 @@ chrome.omnibox.onInputChanged.addListener((input, suggest) => {
         chrome.omnibox.setDefaultSuggestion({
           description:
             `<match>${xmlEscape(c.value || r.value)}</match> ` +
-            `<dim>${xmlEscape(c.attribution || "")}</dim> — press Enter to copy` +
-            (format !== "inline" ? ` <dim>as ${xmlEscape(format)}</dim>` : ""),
+            `<dim>${xmlEscape(c.attribution || "")}</dim> — press Enter for the source`,
         });
         const rows = [];
         if (c.caveat) {
@@ -298,70 +280,21 @@ chrome.omnibox.onInputChanged.addListener((input, suggest) => {
   }, 220);
 });
 
-async function ensureClipboardDocument() {
-  const existing = await chrome.runtime.getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
-  });
-  if (existing && existing.length) return;
-  await chrome.offscreen.createDocument({
-    url: "offscreen.html",
-    reasons: ["CLIPBOARD"],
-    justification: "Copy a citation to the clipboard from the omnibox.",
-  });
-}
-
-async function copyCitation(plain, html) {
-  await ensureClipboardDocument();
-  const reply = await chrome.runtime.sendMessage({
-    target: "offscreen-clipboard",
-    plain,
-    html,
-  });
-  return Boolean(reply && reply.ok);
-}
-
-function notify(title, message) {
-  chrome.notifications.create({
-    type: "basic",
-    iconUrl: "icons/icon128.png",
-    title,
-    message,
-  });
-}
-
-chrome.omnibox.onInputEntered.addListener(async (input) => {
-  const { query, format } = splitFormat(input);
+// Enter opens the result in a tab of the extension's own page, where the card
+// and its Copy citation button work like in the popup. (Copying straight from
+// here would need clipboard, offscreen-document and notification permissions.)
+chrome.omnibox.onInputEntered.addListener((input, disposition) => {
+  const query = (input || "").trim();
   if (!query) return;
-  try {
-    const r = await runLookup(query);
-    if (!r.ok) {
-      notify("Mirador — no figure copied", r.headline || "No official series matches that.");
-      return;
-    }
-    const c = r.citations || {};
-    const plain = c[format] || c.inline || c.value || "";
-    // Only the inline form has a rich equivalent; a footnote pastes as text.
-    const html = format === "inline" ? c.html : "";
-    const copied = await copyCitation(plain, html);
-    notify(
-      copied ? "Copied to clipboard" : "Could not reach the clipboard",
-      copied ? plain + (c.caveat ? `\n\nNote: ${c.caveat}` : "") : plain
-    );
-  } catch (e) {
-    notify("Mirador — lookup failed", e.message);
-  }
+  const url = chrome.runtime.getURL(`popup.html?q=${encodeURIComponent(query.slice(0, 600))}`);
+  if (disposition === "currentTab") chrome.tabs.update({ url });
+  else chrome.tabs.create({ url, active: disposition !== "newBackgroundTab" });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "lookup") {
     runLookup(message.query)
       .then((result) => sendResponse({ ok: true, result }))
-      .catch((error) => sendResponse({ ok: false, error: error.message }));
-    return true;
-  }
-  if (message.type === "copyCitation") {
-    copyCitation(message.plain, message.html)
-      .then((ok) => sendResponse({ ok }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }

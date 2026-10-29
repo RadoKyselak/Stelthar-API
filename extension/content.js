@@ -1,29 +1,18 @@
 (() => {
-  // On-page checking: highlight a sentence with a number in it, and a small
-  // button appears where the selection ends. Clicking it opens a card right
-  // there. Right-click "Verify with Project Mirador" and Cmd/Ctrl+Shift+Y open
-  // the same card. Nothing appears for text without a figure in it.
-  const MIN_CLAIM_LEN = 12;
-  const MAX_CLAIM_LEN = 600;
-  const TRIGGER_TIMEOUT_MS = 6000;
+  // The on-page card. This script is not loaded on any page by itself: the
+  // right-click item "Check with Project Mirador" and Cmd/Ctrl+Shift+Y inject
+  // it into the current tab only, and then ask it to show the card beside
+  // the highlighted text.
+  if (window.__miradorCard) return;  // injected again: the first copy answers
+  window.__miradorCard = true;
   const CARD_WIDTH = 340;
   const View = window.MiradorView;
 
   let host = null;
   let shadow = null;
-  let triggerTimer = null;
 
   const CSS = `
     :host { all: initial; }
-    .trigger {
-      position: absolute; display: inline-flex; align-items: center; gap: 6px; height: 30px;
-      padding: 0 10px 0 7px; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer; user-select: none;
-      background: #ffffff; color: #111827; box-shadow: 0 4px 12px rgba(17,24,39,.12);
-      font: 600 13px/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    }
-    .trigger:hover { border-color: #d1d5db; background: #f9fafb; }
-    .trigger:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-    .trigger img { width: 18px; height: 18px; border-radius: 4px; display: block; flex: none; }
     .card {
       position: absolute; width: ${CARD_WIDTH}px; max-width: calc(100vw - 16px);
       max-height: min(70vh, 560px); overflow: auto; overscroll-behavior: contain;
@@ -36,8 +25,6 @@
     .close:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
     .close svg { width: 12px; height: 12px; }
     @media (prefers-color-scheme: dark) {
-      .trigger { background: #17181b; color: #f3f4f6; border-color: #2b2f36; box-shadow: 0 4px 12px rgba(0,0,0,.5); }
-      .trigger:hover { background: #1d1f23; border-color: #3a3f47; }
       .card { background: #17181b; border-color: #2b2f36; box-shadow: 0 12px 32px rgba(0,0,0,.55); }
       .close { color: #9ca3af; }
       .close:hover { color: #f3f4f6; background: #24262b; }
@@ -80,7 +67,6 @@
 
   const showCard = (claim, anchor) => {
     const root = ensureHost();
-    remove("trigger");
     closeCard();
 
     const card = document.createElement("div");
@@ -144,59 +130,10 @@
     run(false);
   };
 
-  const isEditable = (node) => {
-    const el = node instanceof Element ? node : node && node.parentElement;
-    return !!(el && el.closest("input, textarea, select, [contenteditable='true'], [contenteditable='']"));
-  };
-
   const ours = (e) => host && e.composedPath && e.composedPath().includes(host);
-
-  document.addEventListener("mouseup", (e) => {
-    if (ours(e)) return;
-    setTimeout(() => {
-      const sel = window.getSelection();
-      const text = (sel ? sel.toString() : "").replace(/\s+/g, " ").trim();
-      remove("trigger");
-      clearTimeout(triggerTimer);
-      // Only text that states a figure can be checked against official data.
-      if (text.length < MIN_CLAIM_LEN || text.length > MAX_CLAIM_LEN || !/\d/.test(text)
-          || !sel.rangeCount || isEditable(sel.anchorNode)) {
-        return;
-      }
-      const end = selectionEnd(sel.getRangeAt(0));
-      if (!end.width && !end.height) return;
-
-      const root = ensureHost();
-      const trigger = document.createElement("button");
-      trigger.type = "button";
-      trigger.className = "trigger";
-      trigger.title = "Check this claim against official data (⌘⇧Y)";
-      trigger.setAttribute("aria-label", "Check this claim");
-      const icon = document.createElement("img");
-      icon.src = chrome.runtime.getURL("icons/icon48.png");
-      icon.alt = "";
-      const label = document.createElement("span");
-      label.textContent = "Check";
-      trigger.append(icon, label);
-
-      // Just above where the selection ends, so it never covers the text;
-      // below it when the selection is at the top of the window.
-      const vp = viewport();
-      let top = window.scrollY + end.top - 36;
-      if (top < vp.top) top = window.scrollY + end.bottom + 6;
-      const left = Math.min(window.scrollX + end.right - 40, vp.right - 90);
-      trigger.style.top = `${top}px`;
-      trigger.style.left = `${Math.max(vp.left, left)}px`;
-      const anchor = sel.getRangeAt(0).getBoundingClientRect();
-      trigger.onclick = () => showCard(text, anchor);
-      root.appendChild(trigger);
-      triggerTimer = setTimeout(() => remove("trigger"), TRIGGER_TIMEOUT_MS);
-    }, 0);
-  });
 
   document.addEventListener("mousedown", (e) => {
     if (ours(e)) return;
-    remove("trigger");
     closeCard();
   });
 
