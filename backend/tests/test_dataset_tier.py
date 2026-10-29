@@ -207,3 +207,33 @@ class TestFred:
         assert fred._family("Billions of Dollars") == ("usd", 1e9)
         assert fred._family("Percent") == ("percent", 1.0)
         assert fred._family("Thousands of Persons") == ("persons", 1e3)
+
+
+class TestPlacesInClaims:
+    @pytest.mark.parametrize("claim,name,level", [
+        ("About 28% of Californians speak Spanish at home", "California", "state"),
+        ("Texans pay 1.6% in property taxes", "Texas", "state"),
+        ("Cook County had 5.1 million people in 2023", "Cook County", "county"),
+        ("Washington County had 600,000 people", "Washington County", "county"),
+        ("New Yorkers had a median income of $80,000", "New Yorkers", "unknown"),
+        ("Unemployment among Georgians was 3% in 2023", "Georgians", "unknown"),
+    ])
+    def test_people_and_counties_are_places(self, claim, name, level):
+        """A claim about Californians must never be checked against national data."""
+        g = parse_claim(claim).geography
+        assert (g.name, g.level) == (name, level)
+
+    async def test_a_state_claim_never_falls_back_to_national(self):
+        from services.verify_v2 import verify as v
+        r = await v("New Yorkers had a median income of $80,000 in 2023", allow_grounding=False)
+        assert r.verdict == "No verdict"
+
+    def test_one_entry_per_estimate_and_clear_names(self):
+        import asyncio
+        from evidence.datasets import census_profile as cpm
+        found = asyncio.get_event_loop().run_until_complete(
+            cpm.candidates("Chicago's population was 2.7 million", 2023, {"chicago"}, "persons", 30))
+        titles = [c.title for c in found if c.title.lower() == "total population"]
+        assert len(titles) == 1 and found[[c.title for c in found].index("Total population")].id == "DP05_0001E"
+        rent = cpm._title(CATALOG["DP04_0134E"]["label"])[0]
+        assert rent == "Gross rent: median (dollars)"

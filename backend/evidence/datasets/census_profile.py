@@ -79,6 +79,9 @@ def _title(label: str) -> Tuple[str, str]:
         return label, ""
     leaf = rest[-1]
     section = rest[0].capitalize() if rest[0].isupper() else rest[0]
+    # "Median (dollars)" alone does not say what it measures; its section does.
+    if re.fullmatch(r"(median|mean|total)(\s*\([^)]*\))?", leaf, re.I) and len(rest) > 1:
+        leaf = f"{section}: {leaf[0].lower()}{leaf[1:]}"
     universe = rest[1] if len(rest) > 2 else ""
     detail = []
     if kind == "percent" and universe:
@@ -147,6 +150,14 @@ async def candidates(claim: str, year: int, drop_words, want: str, limit: int = 
             score -= 1.0
         scored.append((score, var))
     scored.sort(reverse=True)
+    # The same estimate appears in more than one table ("Total population"
+    # under both age and race): offer it once, from the first table.
+    best = {}
+    for score, var in scored:
+        key = (_title(cat[var]["label"])[0].lower(), _units(var, cat[var]["label"]))
+        if key not in best or var < best[key][1]:
+            best[key] = (max(score, best.get(key, (score, var))[0]), var)
+    scored = sorted(best.values(), reverse=True)
     out = []
     for _, var in scored[:limit]:
         label = cat[var]["label"]
