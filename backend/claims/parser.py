@@ -358,9 +358,11 @@ def parse_claim(text: str) -> ParsedClaim:
     # A percent claim whose metric is a percent metric: keep as-is. A bare
     # number with no unit against a USD metric is dollars.
     if claimed is not None and spec is not None and claimed.family == "unknown":
+        # Keep the written precision: without it "30 million" fell back to a
+        # blanket 1% band instead of "to the nearest million".
         claimed = Quantity(
             magnitude=claimed.magnitude, family=spec.family,
-            approximate=claimed.approximate, raw=claimed.raw,
+            approximate=claimed.approximate, raw=claimed.raw, precision=claimed.precision,
         )
 
     all_values = _all_quantities(value_text)

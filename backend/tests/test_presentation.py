@@ -263,3 +263,11 @@ class TestAuditFixes:
         assert "nipa_table_list=5" in table_permalink("T10105")
         assert "nipa_table_list=1" in table_permalink("T10101")
         assert "nipa_table_list=58" in table_permalink("T20100")
+
+
+def test_counts_keep_their_written_precision():
+    """'about 335 million' is to the nearest million, not a blanket 1% band."""
+    from claims.parser import parse_claim
+    q = parse_claim("U.S. population was about 335 million in 2023").claimed_value
+    assert q.family == "persons" and q.precision == 1_000_000
+    assert humanize_claim(q.magnitude, q.family, q.precision) == "335 million"
