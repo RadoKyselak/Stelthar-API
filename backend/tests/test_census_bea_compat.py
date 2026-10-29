@@ -556,13 +556,20 @@ class TestQualifierBlockers:
         "Real median household income was $80,610 in 2023",
         "The unemployment rate for Black women was 5% in 2023",
         "Nominal GDP grew 6% in Q3 2023",
-        "Personal income grew 5% in Q2 2024",
     ])
     def test_blocked_from_structured_tier(self, claim):
         from services.verify_v2 import _structured_is_applicable
         p = parse_claim(claim)
         assert p.metric is not None
         assert p.structured_blocker, claim
+        assert _structured_is_applicable(p) is not None
+
+    def test_growth_rate_is_never_checked_against_a_dollar_level(self):
+        """A percent claim about a dollar series is not matched to it at all,
+        so the dataset search can look for a growth-rate series first."""
+        from services.verify_v2 import _structured_is_applicable
+        p = parse_claim("Personal income grew 5% in Q2 2024")
+        assert p.metric is None
         assert _structured_is_applicable(p) is not None
 
     @pytest.mark.parametrize("claim", [

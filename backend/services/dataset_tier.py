@@ -39,16 +39,18 @@ def _drop_words(parsed: ParsedClaim) -> Set[str]:
     return words
 
 
-async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], started: float):
-    from services.verify_v2 import _verdict_to_result  # avoid an import cycle
+def _model_allowed(text: str) -> bool:
+    """The pick is a model call: same switch, gate and limits as the AI tier."""
+    if not config.ANTHROPIC_API_KEY or config.AI_SEARCH_PROVIDER != "claude":
+        return False
+    return not ai_search.gate(text, names_a_metric=True)
 
+
+async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], started: float):
     if parsed.claimed_value is None or parsed.is_trend_claim or parsed.has_unresolved_period:
         return None
-    # The pick is a model call: same switch, gate and limits as the AI tier.
-    if not config.ANTHROPIC_API_KEY or config.AI_SEARCH_PROVIDER != "claude":
-        return None
-    if ai_search.gate(text, names_a_metric=True):
-        return None
+    # Only the label-matched twins below work without a model.
+    model_ok = _model_allowed(text)
 
     geo = parsed.geography
     drop = _drop_words(parsed)
@@ -74,13 +76,21 @@ async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], start
                         break  # a place we cannot pin down: no Census answer
                 else:
                     break
+                # Same measure as a fixed series, at a county or city: no model needed.
+                same = (await census_profile.twin(parsed.metric.metric, y)
+                        if parsed.metric is not None and not parsed.structured_blocker else None)
+                if same is not None:
+                    return await _answer(text, parsed, same, "value", y, g, started,
+                                         model_calls=0, cost=0.0)
+                if not model_ok:
+                    break
                 found = await census_profile.candidates(text, y, drop, want, limit=30)
                 if found:
                     cands += found
                     census_year, census_geo = y, g
                     break
         # FRED series here are national; a state or city claim is not offered them.
-        if fred.available() and (geo is None or geo.level == "nation"):
+        if model_ok and fred.available() and (geo is None or geo.level == "nation"):
             cands += await fred.candidates(text, drop, limit=12)
     except SourceUnavailable as e:
         logger.warning("Dataset catalog unavailable: %s", e)
@@ -96,11 +106,18 @@ async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], start
     if c is None:
         return None
 
+    return await _answer(text, parsed, c, choice.stat, census_year, census_geo, started,
+                         model_calls=choice.model_calls, cost=choice.cost_usd)
+
+
+async def _answer(text, parsed, c: Candidate, stat: str, census_year, census_geo, started,
+                  *, model_calls: int, cost: float):
+    from services.verify_v2 import _verdict_to_result  # avoid an import cycle
     try:
         if c.provider == "census_profile":
             dp = await census_profile.fetch(c, census_year, census_geo)
         else:
-            dp = await fred.fetch(c, parsed.year, parsed.month, choice.stat)
+            dp = await fred.fetch(c, parsed.year, parsed.month, stat)
     except SourceUnavailable as e:
         logger.warning("Dataset fetch failed for %s: %s", c.id, e)
         return None
@@ -114,12 +131,13 @@ async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], start
     v = assess(judged, [dp])
     result = _verdict_to_result(text, judged, v, started)
     result.tier = TIER_DATASET
-    result.model_calls = choice.model_calls
+    result.model_calls = model_calls
     # A model chose the series, so the answer is never rated above Medium.
-    if result.confidence == HIGH:
+    # A twin of a fixed series was matched by its label, not by a model.
+    if model_calls and result.confidence == HIGH:
         result.confidence = MEDIUM
-    result.notes.append(f"dataset: {c.provider} {c.id} ({choice.stat}); "
-                        f"pick cost ${choice.cost_usd:.5f}")
+    result.notes.append(f"dataset: {c.provider} {c.id} ({stat}); "
+                        + (f"pick cost ${cost:.5f}" if model_calls else "matched by label, no model call"))
     if result.verdict == NO_VERDICT:
         return None
     return result

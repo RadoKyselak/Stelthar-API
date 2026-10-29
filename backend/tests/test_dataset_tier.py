@@ -136,7 +136,9 @@ class TestEndToEnd:
         monkeypatch.setattr(cp, "candidates", cands)
         monkeypatch.setattr(cp, "_get_json", AsyncMock(return_value=census_rows("DP04_0134E", 2109, 9, "California")))
         with fake, patch("services.verify_v2.ai_search.search", AsyncMock()):
-            r = await verify("Median rent in California was $3,000 in 2023", client_ip="1.2.3.4")
+            # Worded so no fixed series matches ("median rent" is one now).
+            r = await verify("Renters in California paid a median of $3,000 a month in 2023",
+                             client_ip="1.2.3.4")
         assert r.tier == "dataset" and r.verdict == CONTRADICTED
 
     async def test_no_fit_falls_through_to_web_search(self, monkeypatch):
@@ -238,3 +240,41 @@ class TestPlacesInClaims:
         assert [c.id for c in totals] == ["DP05_0001E"]
         rent = cpm._title(CATALOG["DP04_0134E"]["label"])[0]
         assert rent == "Gross rent: median (dollars)"
+
+
+class TestTwinsWithoutAModel:
+    """A fixed series that stops at states answers counties and cities from
+    its profile twin, matched by label: no model call, no spend."""
+
+    @pytest.mark.parametrize("metric,var", [
+        ("population", "DP05_0001E"),
+        ("median_household_income", "DP03_0062E"),
+        ("median_home_value", "DP04_0089E"),
+        ("median_gross_rent", "DP04_0134E"),
+        ("poverty_rate", "DP03_0128PE"),
+        ("uninsured_rate", "DP03_0099PE"),
+        ("bachelors_or_higher", "DP02_0068PE"),
+    ])
+    async def test_twin_found_by_label(self, metric, var):
+        c = await cp.twin(metric, 2023)
+        assert c is not None and c.id == var
+
+    async def test_no_twin_for_other_series(self):
+        assert await cp.twin("unemployment_rate", 2023) is None
+
+    async def test_county_population_needs_no_model(self, monkeypatch):
+        monkeypatch.setattr(config, "AI_SEARCH_PROVIDER", "off")   # no model at all
+        cook = Geography(name="Cook County, Illinois", level="county", fips="17031")
+        monkeypatch.setattr(cp, "resolve_place", AsyncMock(return_value=cook))
+        rows = [["NAME", "DP05_0001E", "DP05_0001M", "state", "county"],
+                ["Cook County, Illinois", "5087072", "-555555555", "17", "031"]]
+        monkeypatch.setattr(cp, "_get_json", AsyncMock(return_value=rows))
+        search = AsyncMock()
+        with patch("services.verify_v2.ai_search.search", search):
+            r = await verify("Cook County had 5.1 million people in 2023", client_ip="1.2.3.4")
+        assert r.tier == "dataset" and r.model_calls == 0
+        assert r.verdict == SUPPORTED
+        assert any("no model call" in n for n in r.notes)
+        search.assert_not_called()
+        ex = to_response_dict(r)["display"]["comparisons"][0]["excerpt"]
+        assert ex["rows"][0] == {"label": "Estimate", "value": "5,087,072", "cited": True}

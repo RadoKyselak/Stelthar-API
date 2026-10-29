@@ -163,16 +163,48 @@ async def candidates(claim: str, year: int, drop_words, want: str, limit: int = 
         if key not in best or pref(var) < pref(best[key][1]):
             best[key] = (max(score, best.get(key, (score, var))[0]), var)
     scored = sorted(best.values(), reverse=True)
-    out = []
-    for _, var in scored[:limit]:
-        label = cat[var]["label"]
-        title, detail = _title(label)
-        out.append(Candidate(
-            provider="census_profile", id=var, title=title,
-            units=_units(var, label), frequency=f"annual, ACS {year} 1-year",
-            detail=detail, meta={"label": label, "table": cat[var]["table"], "year": str(year)},
-        ))
-    return out
+    return [_candidate(var, cat[var], year) for _, var in scored[:limit]]
+
+
+def _candidate(var: str, info: Dict[str, str], year: int) -> Candidate:
+    label = info["label"]
+    title, detail = _title(label)
+    return Candidate(
+        provider="census_profile", id=var, title=title,
+        units=_units(var, label), frequency=f"annual, ACS {year} 1-year",
+        detail=detail, meta={"label": label, "table": info["table"], "year": str(year)},
+    )
+
+
+# A fixed series that stops at states has a twin in the profile tables, which
+# reach counties and cities. Found by the catalog's own label rather than the
+# variable number, because profile numbers shift from year to year.
+_TWINS = {
+    "population": ("Estimate!!SEX AND AGE!!Total population", False),
+    "median_household_income": ("!!Total households!!Median household income (dollars)", False),
+    "median_home_value": ("!!VALUE!!Owner-occupied units!!Median (dollars)", False),
+    "median_gross_rent": ("!!GROSS RENT!!Occupied units paying rent!!Median (dollars)", False),
+    "poverty_rate": ("BELOW THE POVERTY LEVEL!!All people", True),
+    "uninsured_rate": ("!!Civilian noninstitutionalized population!!No health insurance coverage", True),
+    "bachelors_or_higher": ("!!Population 25 years and over!!Bachelor's degree or higher", True),
+}
+
+
+async def twin(metric: str, year: int) -> Optional[Candidate]:
+    """The profile estimate that is the same measure as a fixed series, or None.
+    Exactly one variable must carry the label; anything else is not a twin."""
+    spec = _TWINS.get(metric)
+    if spec is None:
+        return None
+    suffix, percent = spec
+    cat = await catalog(year)
+    hits = [v for v, info in cat.items()
+            if info["label"].endswith(suffix) and v.endswith("PE") == percent]
+    # The same estimate repeated in another table: keep DP05's copy, as above.
+    hits.sort(key=lambda v: (0 if v.startswith("DP05") else 1, v))
+    if not hits or (len(hits) > 1 and not hits[0].startswith("DP05")):
+        return None
+    return _candidate(hits[0], cat[hits[0]], year)
 
 
 # ------------------------------------------------------------------ places
