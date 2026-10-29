@@ -204,6 +204,8 @@ async def resolve_place(name: str, year: int, claim: str) -> Optional[Geography]
     raw = re.sub(r"^(the\s+)?city of\s+", "", (name or "").strip(), flags=re.I)
     level = "county" if re.search(r"\b(county|parish|borough)\b", raw, re.I) else "place"
     rows = await _places(year, level)
+    if not rows:
+        logger.info("No %s list for ACS %s", level, year)
     target = _norm(re.sub(r"\b(county|parish)\b", "", raw, flags=re.I) if level == "county" else raw)
     if not target:
         return None

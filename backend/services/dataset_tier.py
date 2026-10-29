@@ -61,12 +61,15 @@ async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], start
         if census_profile.available() and annual_claim:
             years = [parsed.year] if parsed.year else [datetime.now(timezone.utc).year - y for y in (1, 2)]
             for y in years:
+                if not await census_profile.catalog(y):
+                    continue  # that ACS year is not published yet
                 if geo is None or geo.level == "nation":
                     g = None
                 elif geo.level == "state":
                     g = geo
                 elif geo.name:
                     g = await census_profile.resolve_place(geo.name, y, text)
+                    logger.info("Dataset place %r (%s) -> %s", geo.name, y, g.name if g else None)
                     if g is None:
                         break  # a place we cannot pin down: no Census answer
                 else:
