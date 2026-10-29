@@ -152,10 +152,14 @@ async def candidates(claim: str, year: int, drop_words, want: str, limit: int = 
     scored.sort(reverse=True)
     # The same estimate appears in more than one table ("Total population"
     # under both age and race): offer it once, from the first table.
+    # Totals live first in DP05 (demographics), so that copy is kept.
+    def pref(v):
+        return (0 if v.startswith("DP05") else 1, v)
+
     best = {}
     for score, var in scored:
         key = (_title(cat[var]["label"])[0].lower(), _units(var, cat[var]["label"]))
-        if key not in best or var < best[key][1]:
+        if key not in best or pref(var) < pref(best[key][1]):
             best[key] = (max(score, best.get(key, (score, var))[0]), var)
     scored = sorted(best.values(), reverse=True)
     out = []

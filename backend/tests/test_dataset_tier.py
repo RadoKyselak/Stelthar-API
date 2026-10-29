@@ -233,7 +233,7 @@ class TestPlacesInClaims:
         from evidence.datasets import census_profile as cpm
         found = asyncio.get_event_loop().run_until_complete(
             cpm.candidates("Chicago's population was 2.7 million", 2023, {"chicago"}, "persons", 30))
-        titles = [c.title for c in found if c.title.lower() == "total population"]
-        assert len(titles) == 1 and found[[c.title for c in found].index("Total population")].id == "DP05_0001E"
+        totals = [c for c in found if c.title.lower() == "total population" and c.units == "count"]
+        assert [c.id for c in totals] == ["DP05_0001E"]
         rent = cpm._title(CATALOG["DP04_0134E"]["label"])[0]
         assert rent == "Gross rent: median (dollars)"
