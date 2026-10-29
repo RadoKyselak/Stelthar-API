@@ -16,43 +16,32 @@
   const CSS = `
     :host { all: initial; }
     .trigger {
-      position: absolute; display: inline-flex; align-items: center; height: 30px; padding: 3px;
-      border: 0; border-radius: 999px; cursor: pointer; user-select: none;
-      background: rgba(255,255,255,.92); color: #1d1d1f;
-      -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
-      box-shadow: 0 0 0 .5px rgba(0,0,0,.12), 0 4px 14px rgba(0,0,0,.16);
-      font: 500 12.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
-      animation: appear .18s cubic-bezier(.2,1.3,.4,1);
+      position: absolute; display: inline-flex; align-items: center; gap: 6px; height: 30px;
+      padding: 0 10px 0 6px; border: 0; border-radius: 4px; cursor: pointer; user-select: none;
+      background: #ffffff; color: #005ea2; box-shadow: inset 0 0 0 2px #005ea2, 0 2px 6px rgba(0,0,0,.18);
+      font: 700 14px/1 "Public Sans", "Source Sans Pro", "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif;
     }
-    .trigger img { width: 24px; height: 24px; border-radius: 50%; display: block; flex: none; }
-    .trigger span { max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0;
-      transition: max-width .2s ease, opacity .15s ease, padding .2s ease; }
-    .trigger:hover span, .trigger:focus-visible span { max-width: 60px; opacity: 1; padding: 0 8px 0 6px; }
-    .trigger:focus-visible { outline: 2px solid #0071e3; outline-offset: 2px; }
+    .trigger:hover { color: #1a4480; box-shadow: inset 0 0 0 2px #1a4480, 0 2px 6px rgba(0,0,0,.18); }
+    .trigger:focus { outline: 4px solid #2491ff; outline-offset: 0; }
+    .trigger img { width: 18px; height: 18px; display: block; flex: none; }
     .card {
       position: absolute; width: ${CARD_WIDTH}px; max-width: calc(100vw - 16px);
-      max-height: min(70vh, 520px); overflow: auto; overscroll-behavior: contain;
-      padding: 14px 16px 12px; border-radius: 14px;
-      background: rgba(255,255,255,.86);
-      -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px);
-      box-shadow: 0 0 0 .5px rgba(0,0,0,.14), 0 14px 40px rgba(0,0,0,.18);
-      animation: appear .16s ease-out;
+      max-height: min(70vh, 560px); overflow: auto; overscroll-behavior: contain;
+      padding: 16px; border-radius: 4px; background: #ffffff; border: 1px solid #a9aeb1;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
     }
-    .card.above { transform-origin: bottom left; }
-    .close { position: absolute; top: 9px; right: 9px; width: 22px; height: 22px; display: grid; place-items: center;
-      border: 0; border-radius: 50%; background: rgba(0,0,0,.06); color: #6e6e73; cursor: pointer; padding: 0; }
-    .close:hover { background: rgba(0,0,0,.1); color: #1d1d1f; }
-    .close:focus-visible { outline: 2px solid #0071e3; outline-offset: 1px; }
-    .close svg { width: 10px; height: 10px; }
+    .close { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; display: grid; place-items: center;
+      border: 0; border-radius: 4px; background: none; color: #565c65; cursor: pointer; padding: 0; }
+    .close:hover { color: #1b1b1b; background: #f0f0f0; }
+    .close:focus { outline: 4px solid #2491ff; outline-offset: 0; }
+    .close svg { width: 14px; height: 14px; }
+    .card .mv-alert { margin-right: 28px; }
     @media (prefers-color-scheme: dark) {
-      .trigger { background: rgba(44,44,46,.92); color: #f5f5f7; box-shadow: 0 0 0 .5px rgba(255,255,255,.16), 0 4px 14px rgba(0,0,0,.5); }
-      .card { background: rgba(30,30,32,.86); box-shadow: 0 0 0 .5px rgba(255,255,255,.14), 0 14px 40px rgba(0,0,0,.55); }
-      .close { background: rgba(255,255,255,.1); color: #a1a1a6; }
-      .close:hover { background: rgba(255,255,255,.16); color: #f5f5f7; }
+      .trigger { background: #1b1b1b; color: #73b3e7; box-shadow: inset 0 0 0 2px #73b3e7, 0 2px 6px rgba(0,0,0,.5); }
+      .card { background: #1b1b1b; border-color: #565c65; box-shadow: 0 4px 16px rgba(0,0,0,.6); }
+      .close { color: #a9aeb1; }
+      .close:hover { color: #f0f0f0; background: #2d2e2f; }
     }
-    /* Scale only: if a browser pauses the animation, the card is still fully visible. */
-    @keyframes appear { from { transform: scale(.97); } to { transform: none; } }
-    @media (prefers-reduced-motion: reduce) { .trigger, .card { animation: none; } }
   `;
 
   const ensureHost = () => {
@@ -110,7 +99,7 @@
     const xp = document.createElementNS("http://www.w3.org/2000/svg", "path");
     xp.setAttribute("d", "M1.5 1.5l7 7M8.5 1.5l-7 7");
     xp.setAttribute("stroke", "currentColor");
-    xp.setAttribute("stroke-width", "1.6");
+    xp.setAttribute("stroke-width", "1.8");
     xp.setAttribute("stroke-linecap", "round");
     x.appendChild(xp);
     close.appendChild(x);
@@ -128,7 +117,6 @@
       card.classList.add("above");
       card.style.top = `${window.scrollY + a.top - 8}px`;
       card.style.transform = "translateY(-100%)";
-      card.style.animation = "none";
     } else {
       card.style.top = `${anchor ? below : window.scrollY + 80}px`;
     }
@@ -182,7 +170,7 @@
       const trigger = document.createElement("button");
       trigger.type = "button";
       trigger.className = "trigger";
-      trigger.title = "Check this claim (⌘⇧Y)";
+      trigger.title = "Check this claim against official data (⌘⇧Y)";
       trigger.setAttribute("aria-label", "Check this claim");
       const icon = document.createElement("img");
       icon.src = chrome.runtime.getURL("icons/icon48.png");
@@ -196,7 +184,7 @@
       const vp = viewport();
       let top = window.scrollY + end.top - 36;
       if (top < vp.top) top = window.scrollY + end.bottom + 6;
-      const left = Math.min(window.scrollX + end.right - 28, vp.right - 90);
+      const left = Math.min(window.scrollX + end.right - 40, vp.right - 90);
       trigger.style.top = `${top}px`;
       trigger.style.left = `${Math.max(vp.left, left)}px`;
       const anchor = sel.getRangeAt(0).getBoundingClientRect();

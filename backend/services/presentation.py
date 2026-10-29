@@ -206,6 +206,7 @@ def _comparison(p: Dict[str, Any]) -> Dict[str, Any]:
         "period": when,
         "basis": _short_basis(basis),
         "relation": _relation(p),
+        "gap": p.get("gap") or "",
         "gap_short": _gap_short(p.get("gap") or ""),
         "citation": p.get("citation") or "",
         "citation_html": p.get("citation_html") or "",
