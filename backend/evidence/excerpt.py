@@ -10,7 +10,7 @@ on long numbers, which adds no digit and drops none.
 import re
 from typing import Any, Dict, List, Optional
 
-from evidence.units import INDEX, JOBS, PERCENT, PERSONS, USD
+from evidence.units import INDEX, JOBS, MINUTES, PERCENT, PERSONS, USD, YEARS
 
 _NUMBER = re.compile(r"(-?)(\d+)(\.\d+)?")
 
@@ -47,7 +47,7 @@ def make(rows: List[Dict[str, Any]], units: str = "", note: str = "") -> Optiona
 
 def units_for(family: str) -> str:
     return {PERCENT: "percent", USD: "dollars", JOBS: "jobs", PERSONS: "people",
-            INDEX: "index"}.get(family, "")
+            INDEX: "index", YEARS: "years", MINUTES: "minutes"}.get(family, "")
 
 
 def moe_excerpt(estimate: Any, moe: Any, units: str = "") -> Optional[Dict[str, Any]]:

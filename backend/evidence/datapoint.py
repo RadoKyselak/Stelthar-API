@@ -22,7 +22,7 @@ explicitly — which the pipeline treats as a mismatch, not as a pass.
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from evidence.units import JOBS, PERCENT, PERSONS, USD, Quantity, humanize
+from evidence.units import JOBS, MINUTES, PERCENT, PERSONS, USD, YEARS, Quantity, humanize
 
 # Period kinds.
 ANNUAL = "annual"
@@ -275,7 +275,8 @@ class Datapoint:
             if fam == USD and abs(mag) < 100 and places <= 3:
                 return f"{'-' if mag < 0 else ''}${abs(mag):,.{places}f}"
             if fam not in (USD, PERSONS, JOBS, PERCENT) and places <= 3:
-                return f"{mag:,.{places}f}"
+                unit = f" {fam}" if fam in (YEARS, MINUTES) else ""
+                return f"{mag:,.{places}f}{unit}"
         return humanize(mag, fam)
 
     def to_dict(self) -> Dict[str, Any]:

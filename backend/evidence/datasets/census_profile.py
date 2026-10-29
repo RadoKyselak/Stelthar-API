@@ -19,7 +19,7 @@ from evidence.datapoint import ANNUAL, Datapoint, Geography, Period
 from evidence.datasets import Candidate, query_tokens, tokens
 from evidence.excerpt import moe_excerpt
 from evidence.sources import SourceUnavailable
-from evidence.units import PERCENT, PERSONS, USD, Quantity
+from evidence.units import MINUTES, PERCENT, PERSONS, USD, YEARS, Quantity
 
 _BASE = "https://api.census.gov/data"
 _DATASET = "acs/acs1/profile"
@@ -187,6 +187,23 @@ _TWINS = {
     "poverty_rate": ("BELOW THE POVERTY LEVEL!!All people", True),
     "uninsured_rate": ("!!Civilian noninstitutionalized population!!No health insurance coverage", True),
     "bachelors_or_higher": ("!!Population 25 years and over!!Bachelor's degree or higher", True),
+    # Measures with no fixed series: answered here at every level, nation included.
+    # Alternatives cover spellings Census has used in other years.
+    "median_age": ("!!SEX AND AGE!!Total population!!Median age (years)", False),
+    "mean_commute": ("!!COMMUTING TO WORK!!Workers 16 years and over!!Mean travel time to work (minutes)", False),
+    "homeownership_rate": ("!!HOUSING TENURE!!Occupied housing units!!Owner-occupied", True),
+    "veterans_share": ("!!VETERAN STATUS!!Civilian population 18 years and over!!Civilian veterans", True),
+    "broadband_share": ("!!COMPUTERS AND INTERNET USE!!Total households!!With a broadband Internet subscription",
+                        True),
+    "other_language_share": ("!!LANGUAGE SPOKEN AT HOME!!Population 5 years and over!!Language other than English",
+                             True),
+    "disability_share": ("!!Total Civilian Noninstitutionalized Population!!With a disability", True),
+    "work_from_home_share": (("!!COMMUTING TO WORK!!Workers 16 years and over!!Worked from home",
+                              "!!COMMUTING TO WORK!!Workers 16 years and over!!Worked at home"), True),
+    "foreign_born_share": (("!!PLACE OF BIRTH!!Total population!!Foreign-born",
+                            "!!PLACE OF BIRTH!!Total population!!Foreign born"), True),
+    "foreign_born_count": (("!!PLACE OF BIRTH!!Total population!!Foreign-born",
+                            "!!PLACE OF BIRTH!!Total population!!Foreign born"), False),
 }
 
 
@@ -196,10 +213,12 @@ async def twin(metric: str, year: int) -> Optional[Candidate]:
     spec = _TWINS.get(metric)
     if spec is None:
         return None
-    suffix, percent = spec
+    suffixes, percent = spec
+    if isinstance(suffixes, str):
+        suffixes = (suffixes,)
     cat = await catalog(year)
     hits = [v for v, info in cat.items()
-            if info["label"].endswith(suffix) and v.endswith("PE") == percent]
+            if info["label"].endswith(suffixes) and v.endswith("PE") == percent]
     # The same estimate repeated in another table: keep DP05's copy, as above.
     hits.sort(key=lambda v: (0 if v.startswith("DP05") else 1, v))
     if not hits or (len(hits) > 1 and not hits[0].startswith("DP05")):
@@ -289,6 +308,10 @@ def _family(units: str, label: str):
         return USD, 1.0
     if units == "count" and "population" in label.lower():
         return PERSONS, 1.0
+    if units == "years":
+        return YEARS, 1.0
+    if units == "minutes":
+        return MINUTES, 1.0
     return "unknown", 1.0
 
 

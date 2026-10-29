@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from claims.geography import resolve_geography
-from claims.metrics import BY_METRIC, VARIANTS, MetricSpec, match_metric, match_metrics
+from claims.metrics import BY_METRIC, PROFILE_METRICS, VARIANTS, MetricSpec, match_metric, match_metrics
 from evidence.datapoint import Geography
 from evidence.units import Quantity, parse_quantity
 import evidence.units as _units
@@ -110,7 +110,63 @@ _UNIVERSE_OK = {
                                       r"\b(?:aged?|ages|over)\s+25\b", re.IGNORECASE),
     "unemployment_rate": re.compile(r"\b16\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b", re.IGNORECASE),
     "labor_force_participation": re.compile(r"\b16\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b", re.IGNORECASE),
+    # Census profile measures: the words that define each one's own universe.
+    "veterans_share": re.compile(r"\bveterans?\b|\b18\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b|"
+                                 r"\b(?:aged?|ages|over)\s+18\b", re.IGNORECASE),
+    "foreign_born_share": re.compile(r"\bimmigrants?\b|\bforeign[- ]born\b", re.IGNORECASE),
+    "foreign_born_count": re.compile(r"\bimmigrants?\b|\bforeign[- ]born\b", re.IGNORECASE),
+    "disability_share": re.compile(r"\bdisabled\b|\bpeople with disabilities\b", re.IGNORECASE),
+    "other_language_share": re.compile(r"\b5\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b|"
+                                       r"\b(?:aged?|ages|over)\s+5\b", re.IGNORECASE),
+    "mean_commute": re.compile(r"\b16\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b", re.IGNORECASE),
+    "work_from_home_share": re.compile(r"\b16\s+(?:years?\s+)?(?:and|or)\s+(?:older|over)\b", re.IGNORECASE),
+    # "median age 42.7", "median age is over 40": the age is the figure itself.
+    "median_age": re.compile(r"\bmedian\s+age\s+(?:of\s+|was\s+|is\s+|at\s+|hit\s+|reached\s+)?"
+                             r"(?:about\s+|nearly\s+|roughly\s+|around\s+|over\s+|under\s+|above\s+|"
+                             r"below\s+)?\d{1,2}(?:\.\d+)?"
+                             r"|\b(?:over|under|above|below)\s+\d{1,2}(?:\.\d+)?(?:\s*years?)?", re.IGNORECASE),
 }
+
+# Claims that use a profile measure's words about something else. Each sends
+# the claim past the label match (to the model pick, or to web search).
+_NOT_THE_PROFILE_MEASURE = {
+    "foreign_born_share": re.compile(
+        r"\b(?:undocumented|illegal(?:ly)?|unauthori[sz]ed|refugees?|asylum|deport\w*|border|"
+        r"crossings?|encounters?|migrants?|green[- ]cards?|naturali[sz]ed|citizens?|non[- ]?citizens?|"
+        r"visas?|arriv\w*|recent|newly|new|came|entered|admitted|added|grew|rose|increased|fell|"
+        r"declined|since)\b", re.IGNORECASE),
+    "median_age": re.compile(
+        r"\b(?:buyers?|homebuyers?|marriage|married|marry|deaths?|died|mothers?|first[- ]time|workers?|"
+        r"employees?|farmers?|cars?|vehicles?|homes?|housing|buildings?|members?|senators?|congress|"
+        r"voters?|patients?|retire\w*|diagnos\w*|students?|teachers?|nurses?|doctors?|physicians?|"
+        r"inmates?|prisoners?|ceos?|owners?|founders?|graduates?|parents?|fathers?|grandparents?)\b",
+        re.IGNORECASE),
+    # ACS mean travel time is one way, for workers who do not work at home.
+    "mean_commute": re.compile(
+        r"\b(?:round[- ]trip|both ways|a day|per day|daily|each day|a week|per week|weekly|a year|"
+        r"per year|annually|hours|drive|driving|drove|car|cars|bus|buses|transit|train|subway|rail|"
+        r"walk\w*|bik\w*|cycl\w*|carpool\w*|longest|shortest|super[- ]?commut\w*)\b", re.IGNORECASE),
+    "homeownership_rate": re.compile(
+        r"\b(?:millennials?|gen(?:eration)?\s*z|baby boomers?|boomers|first[- ]time|young|younger|"
+        r"renters?|under\s+\d+)\b", re.IGNORECASE),
+    # CDC's "1 in 4 adults" comes from another survey and definition.
+    "disability_share": re.compile(
+        r"\b(?:adults?|veterans?|children|workers?|employed|unemploy\w*)\b", re.IGNORECASE),
+    # ACS counts households; Pew-style figures count adults, and FCC counts availability.
+    "broadband_share": re.compile(
+        r"\b(?:adults?|students?|schools?|rural|speeds?|mbps|gigabit|fiber|coverage|available|"
+        r"availability|access to)\b", re.IGNORECASE),
+    "work_from_home_share": re.compile(
+        r"\b(?:hybrid|some days|at least one day|part[- ]time|occasionally|sometimes|any day|"
+        r"some of the time|fully remote|days? a week)\b", re.IGNORECASE),
+    "veterans_share": re.compile(
+        r"\b(?:homeless|unemploy\w*|suicides?|disab\w*|post[- ]9/11|vietnam|gulf war|korea\w*|wwii|"
+        r"world war)\b", re.IGNORECASE),
+    "other_language_share": re.compile(
+        r"\b(?:spanish|chinese|tagalog|vietnamese|arabic|french|korean|german|russian|"
+        r"limited english|less than very well|not speak english|don'?t speak english)\b", re.IGNORECASE),
+}
+_NOT_THE_PROFILE_MEASURE["foreign_born_count"] = _NOT_THE_PROFILE_MEASURE["foreign_born_share"]
 
 _QUARTER_RE = re.compile(
     r"\bq[1-4]\b|\b(?:first|second|third|fourth|1st|2nd|3rd|4th)[- ]quarter\b|"
@@ -222,6 +278,12 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
         return "the claim is about a quarter or an annualised rate; only annual and monthly figures are wired up"
     if _PER_CAPITA_RE.search(text):
         return "the claim is a per-capita figure; the series is a total"
+    other = _NOT_THE_PROFILE_MEASURE.get(spec.metric)
+    if other is not None:
+        m = other.search(text)
+        if m:
+            return (f"the claim is about something narrower than {spec.label.lower()} "
+                    f"(\u201c{m.group(0).strip()}\u201d)")
     if spec.metric == "national_debt":
         m = _NOT_THE_DEBT_RE.search(text)
         if m:
@@ -451,6 +513,11 @@ def _choose_metric(text: str, claimed: Optional[Quantity]) -> Optional[MetricSpe
         specs = [named] + [sp for sp in specs if sp is not named]
     if not specs and _population_headcount(text):
         specs = [BY_METRIC["population"]]
+    # A profile measure is only the answer when no fixed series' wording also
+    # matches: "the unemployment rate for people with disabilities" is about
+    # unemployment, not about the share of people with a disability.
+    specs = ([sp for sp in specs if sp.metric not in PROFILE_METRICS]
+             + [sp for sp in specs if sp.metric in PROFILE_METRICS])
     fam = claimed.family if claimed is not None else _units.UNKNOWN
     if fam == _units.UNKNOWN and claimed is not None and _SCALE_WORD_RE.search(claimed.raw or ""):
         # "26 million Americans": a count with no unit noun. It is never a rate.
@@ -543,7 +610,12 @@ def parse_claim(text: str) -> ParsedClaim:
         all_values=all_values,
         has_unresolved_period=has_unresolved,
         unparsed_reason=reason,
-        structured_blocker=structured_blocker(raw, spec, quarter),
+        structured_blocker=(
+            # A sentence with two figures ("39 million people and 10 million
+            # immigrants") cannot be read against one label-matched estimate.
+            "the claim states more than one figure"
+            if spec is not None and spec.metric in PROFILE_METRICS and len(all_values) > 1
+            else structured_blocker(raw, spec, quarter)),
         quarter=quarter,
         fiscal_year_assumed=fiscal_assumed,
     )

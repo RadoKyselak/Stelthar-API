@@ -28,6 +28,10 @@ USD = "usd"
 PERSONS = "persons"
 INDEX = "index"
 JOBS = "jobs"
+# Census profile measures such as median age and mean commute. Their own
+# families, so "42.7" years can never be compared with 42.7% unnoticed.
+YEARS = "years"
+MINUTES = "minutes"
 UNKNOWN = "unknown"
 
 # Multiplier words, longest first so "trillion" is not shadowed by a prefix.
@@ -376,4 +380,6 @@ def humanize(magnitude: float, family: str) -> str:
         if a < 100:
             return f"{sign}${a:,.2f}"  # prices and wages: $3.52, $33.82
         return f"{sign}${a:,.0f}"
+    if family in (YEARS, MINUTES):
+        return f"{magnitude:,.2f}".rstrip("0").rstrip(".") + f" {family}"
     return f"{magnitude:,.2f}".rstrip("0").rstrip(".")

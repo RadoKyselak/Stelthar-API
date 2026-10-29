@@ -16,7 +16,7 @@ Adding a metric is a data change, not a code change — which is the point.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from evidence.units import INDEX, JOBS, PERCENT, PERSONS, USD
+from evidence.units import INDEX, JOBS, MINUTES, PERCENT, PERSONS, USD, YEARS
 
 
 @dataclass(frozen=True)
@@ -461,9 +461,64 @@ _SPECS: List[MetricSpec] = [
         phrases=("bachelor's degree or higher", "college graduates", "college educated",
                  "with a college degree", "bachelors degree"),
     ),
+
+    # ---- Census data profile, by label (no fixed series) ------------------
+    # No variable is wired: services/dataset_tier.py finds each estimate in the
+    # ACS profile catalog by its label (census_profile._TWINS) and reads it for
+    # the nation, a state, a county or a city. No model call.
+    *[
+        MetricSpec(
+            metric=metric, label=label, source="CENSUS", family=family,
+            structured=False, min_year=2010,
+            geo_levels=("nation", "state", "county", "place"),
+            phrases=phrases, notes="ACS 1-year data profile; matched by its label.",
+            **extra,
+        )
+        for metric, label, family, phrases, extra in [
+            ("median_age", "Median age (years)", YEARS,
+             ("median age",), {}),
+            ("mean_commute", "Mean travel time to work (minutes)", MINUTES,
+             ("average commute", "mean commute", "commute time", "commute times",
+              "average commute time", "mean travel time to work", "average travel time to work",
+              "travel time to work", "commute to work", "commute averaged", "commute was",
+              "commute is"), {}),
+            ("homeownership_rate", "Homeownership rate (owner-occupied share of occupied homes)", PERCENT,
+             ("homeownership rate", "home ownership rate", "homeownership", "home ownership",
+              "own their homes", "own their home", "own a home", "owner-occupied"),
+             # Census also headlines a rate from its Housing Vacancy Survey,
+             # for the nation and the states (65.9% in 2023 vs ACS 65.2%).
+             {"alternate_measure": "the homeownership rate from Census's Housing Vacancy Survey",
+              "alternate_band": 0.04}),
+            ("veterans_share", "Veterans, share of civilians 18 and over", PERCENT,
+             ("veterans", "are veterans", "military veterans", "veteran population"), {}),
+            ("broadband_share", "Households with a broadband internet subscription", PERCENT,
+             ("broadband", "high-speed internet", "high speed internet", "internet subscription",
+              "broadband internet"), {}),
+            ("other_language_share", "Speak a language other than English at home, ages 5 and over",
+             PERCENT,
+             ("language other than english", "speak a language other than", "speak another language",
+              "non-english language", "languages other than english"), {}),
+            ("disability_share", "People with a disability (civilian, not in institutions)", PERCENT,
+             ("with a disability", "have a disability", "has a disability", "disability rate",
+              "people with disabilities", "disabled"), {}),
+            ("work_from_home_share", "Workers who worked from home", PERCENT,
+             ("work from home", "worked from home", "working from home", "work remotely",
+              "worked remotely", "working remotely", "remote workers", "remote work", "telework",
+              "teleworked"), {}),
+            ("foreign_born_share", "Foreign-born share of the population", PERCENT,
+             ("foreign-born", "foreign born", "immigrants", "immigrant population", "born abroad",
+              "born outside the", "born in another country", "born in a foreign country"), {}),
+            ("foreign_born_count", "Foreign-born population", PERSONS,
+             ("foreign-born", "foreign born", "immigrants", "immigrant population", "born abroad",
+              "born outside the", "born in another country", "born in a foreign country"), {}),
+        ]
+    ],
 ]
 
 BY_METRIC: Dict[str, MetricSpec] = {s.metric: s for s in _SPECS}
+# Measures answered by label from the ACS data profile (see above).
+PROFILE_METRICS = frozenset(s.metric for s in _SPECS
+                            if s.source == "CENSUS" and not s.structured and not s.census_variable)
 
 # Phrase -> spec, searched longest-first so "core inflation" wins over
 # "inflation" and "median household income" over "household income".

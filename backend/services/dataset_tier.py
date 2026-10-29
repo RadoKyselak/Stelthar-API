@@ -129,6 +129,12 @@ async def _answer(text, parsed, c: Candidate, stat: str, census_year, census_geo
     if dp.geography.level in ("place", "county"):
         judged = replace(parsed, geography=dp.geography)
     v = assess(judged, [dp])
+    if model_calls == 0 and dp.geography.level in ("nation", "state"):
+        # Matched by label to a measure Census also headlines from another
+        # survey (homeownership: the Housing Vacancy Survey). A near miss may
+        # be quoting that one, so it is not called wrong on this figure alone.
+        from services.verify_v2 import _soften_for_alternate_measure
+        v = _soften_for_alternate_measure(judged, v)
     result = _verdict_to_result(text, judged, v, started)
     result.tier = TIER_DATASET
     result.model_calls = model_calls

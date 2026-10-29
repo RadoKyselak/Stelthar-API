@@ -106,21 +106,22 @@ class TestEndToEnd:
         fake, create = model_says('{"pick": "S1", "stat": "value"}')
 
         async def cands(*a, **k):
-            return [Candidate("census_profile", "DP05_0018E", "Median age (years)", "years",
-                              meta={"label": CATALOG["DP05_0018E"]["label"], "table": "DP05"})]
+            return [Candidate("census_profile", "DP02_0016E", "Average household size", "count",
+                              meta={"label": CATALOG["DP02_0016E"]["label"], "table": "DP02"})]
         monkeypatch.setattr(cp, "candidates", cands)
-        monkeypatch.setattr(cp, "_get_json", AsyncMock(return_value=census_rows("DP05_0018E", 42.7, 0.1)))
+        monkeypatch.setattr(cp, "_get_json", AsyncMock(return_value=census_rows("DP02_0016E", 2.47, 0.01)))
         search = AsyncMock()
         with fake, patch("services.verify_v2.ai_search.search", search):
-            r = await verify("The median age in Florida was 42.8 in 2023", client_ip="1.2.3.4")
+            # A measure no label twin covers, so the model picks the series.
+            r = await verify("The average household size in Florida was 2.5 in 2023", client_ip="1.2.3.4")
         assert r.tier == "dataset" and r.model_calls == 1
-        assert r.verdict in (SUPPORTED, MOSTLY_ACCURATE)   # 42.8 vs 42.7 ±0.1
+        assert r.verdict in (SUPPORTED, MOSTLY_ACCURATE)   # 2.5 vs 2.47, to the claim's one decimal
         assert r.confidence != "High"                      # a model chose the series
         search.assert_not_called()                          # no web search was paid for
         d = to_response_dict(r)["display"]
         assert d["method"]["kind"] == "dataset"
-        assert "table DP05" in d["citation"] and "Florida" in d["citation"]
-        assert "https://data.census.gov/table/ACSDP1Y2023.DP05?g=040XX00US12" in d["citation"]
+        assert "table DP02" in d["citation"] and "Florida" in d["citation"]
+        assert "https://data.census.gov/table/ACSDP1Y2023.DP02?g=040XX00US12" in d["citation"]
         create.assert_awaited_once()
         kw = create.await_args.kwargs
         assert kw.get("tools") is None                     # never a web search
@@ -278,3 +279,116 @@ class TestTwinsWithoutAModel:
         search.assert_not_called()
         ex = to_response_dict(r)["display"]["comparisons"][0]["excerpt"]
         assert ex["rows"][0] == {"label": "Estimate", "value": "5,087,072", "cited": True}
+
+
+class TestProfileMeasures:
+    """Everyday Census measures with no fixed series, answered from the ACS
+    data profile by label at every level, with no model call."""
+
+    @pytest.mark.parametrize("metric,var", [
+        ("median_age", "DP05_0018E"),
+        ("mean_commute", "DP03_0025E"),
+        ("homeownership_rate", "DP04_0046PE"),
+        ("veterans_share", "DP02_0070PE"),
+        ("broadband_share", "DP02_0154PE"),
+        ("other_language_share", "DP02_0114PE"),
+        ("disability_share", "DP02_0072PE"),
+        ("work_from_home_share", "DP03_0024PE"),
+        ("foreign_born_share", "DP02_0094PE"),
+        ("foreign_born_count", "DP02_0094E"),
+    ])
+    async def test_found_by_label(self, metric, var):
+        c = await cp.twin(metric, 2023)
+        assert c is not None and c.id == var
+
+    async def test_older_spellings_still_match(self, monkeypatch):
+        old = {"DP03_0024PE": {"label": "Percent!!COMMUTING TO WORK!!Workers 16 years and over!!Worked at home",
+                               "table": "DP03"},
+               "DP02_0092PE": {"label": "Percent!!PLACE OF BIRTH!!Total population!!Foreign born",
+                               "table": "DP02"}}
+
+        async def cat(year):
+            return old
+        monkeypatch.setattr(cp, "catalog", cat)
+        assert (await cp.twin("work_from_home_share", 2019)).id == "DP03_0024PE"
+        assert (await cp.twin("foreign_born_share", 2019)).id == "DP02_0092PE"
+
+    @pytest.mark.parametrize("claim,metric", [
+        ("The median age in Florida was 42.7 in 2023", "median_age"),
+        ("Florida's median age is over 40", "median_age"),
+        ("The average commute in New York was 33 minutes in 2023", "mean_commute"),
+        ("Travis County's homeownership rate was 52% in 2023", "homeownership_rate"),
+        ("Veterans make up 6% of adults in Texas", "veterans_share"),
+        ("90% of households have broadband", "broadband_share"),
+        ("22% of Americans speak a language other than English at home", "other_language_share"),
+        ("13% of Americans have a disability", "disability_share"),
+        ("15% of workers worked from home in 2023", "work_from_home_share"),
+        ("14% of Americans are immigrants", "foreign_born_share"),
+        ("Texas had 5.2 million foreign-born residents in 2023", "foreign_born_count"),
+    ])
+    def test_routed_to_a_measure(self, claim, metric):
+        p = parse_claim(claim)
+        assert p.metric is not None and p.metric.metric == metric, (claim, p.metric)
+        assert not p.structured_blocker, (claim, p.structured_blocker)
+
+    @pytest.mark.parametrize("claim", [
+        "The median age of first-time homebuyers was 35 in 2023",   # not the population
+        "The median age of women in Florida was 44 in 2023",         # a subgroup
+        "Americans spend 55 minutes a day commuting",                # a round trip
+        "The average commute by car was 28 minutes in 2023",
+        "The homeownership rate for Black households was 45% in 2023",
+        "Millennials' homeownership rate was 48% in 2023",
+        "There are 11 million undocumented immigrants",               # not the foreign-born stock
+        "1 in 4 adults have a disability, about 26%",                 # CDC's survey and definition
+        "Hybrid workers were 15% of workers in 2023",
+        "California has 39 million people and 10 million immigrants", # two figures
+    ])
+    def test_look_alikes_are_never_label_matched(self, claim):
+        p = parse_claim(claim)
+        assert p.metric is None or p.structured_blocker, (claim, p.metric)
+
+    @pytest.mark.parametrize("claim,metric", [
+        # Another series' wording wins: these are about unemployment and poverty.
+        ("The unemployment rate for people with disabilities was 7% in 2023", "unemployment_rate"),
+        ("The unemployment rate for veterans was 3% in 2023", "unemployment_rate_veterans"),
+        ("The poverty rate among immigrants was 14% in 2023", "poverty_rate"),
+    ])
+    def test_fixed_series_wording_wins(self, claim, metric):
+        assert parse_claim(claim).metric.metric == metric
+
+    def test_years_and_percent_never_compare(self):
+        p = parse_claim("The median age in Florida was 42.7% in 2023")
+        assert p.metric is None or p.metric.metric != "median_age"
+
+    async def test_county_answered_without_a_model(self, monkeypatch):
+        monkeypatch.setattr(config, "AI_SEARCH_PROVIDER", "off")
+        travis = Geography(name="Travis County, Texas", level="county", fips="48453")
+        monkeypatch.setattr(cp, "resolve_place", AsyncMock(return_value=travis))
+        rows = [["NAME", "DP04_0046PE", "DP04_0046PM", "state", "county"],
+                ["Travis County, Texas", "52.4", "1.1", "48", "453"]]
+        monkeypatch.setattr(cp, "_get_json", AsyncMock(return_value=rows))
+        search = AsyncMock()
+        with patch("services.verify_v2.ai_search.search", search):
+            r = await verify("Travis County's homeownership rate was 52% in 2023", client_ip="1.2.3.4")
+        assert r.tier == "dataset" and r.model_calls == 0 and r.verdict == SUPPORTED
+        search.assert_not_called()
+        ex = to_response_dict(r)["display"]["comparisons"][0]["excerpt"]
+        assert ex["rows"][0] == {"label": "Estimate", "value": "52.4", "cited": True}
+        assert ex["rows"][1]["value"] == "±1.1"
+
+    async def test_median_age_reads_in_years(self, monkeypatch):
+        monkeypatch.setattr(config, "AI_SEARCH_PROVIDER", "off")
+        monkeypatch.setattr(cp, "_get_json", AsyncMock(return_value=census_rows("DP05_0018E", 42.7, 0.1)))
+        r = await verify("The median age in Florida was 42.7 in 2023", client_ip="1.2.3.4")
+        assert r.tier == "dataset" and r.model_calls == 0 and r.verdict == SUPPORTED
+        assert to_response_dict(r)["display"]["comparisons"][0]["official"] == "42.7 years"
+
+    async def test_national_near_miss_defers_to_the_other_survey(self, monkeypatch):
+        """Census headlines homeownership from its Housing Vacancy Survey
+        (65.9% in 2023) and the ACS says 65.2%: a claim quoting the former
+        is not called wrong on the ACS figure."""
+        monkeypatch.setattr(config, "AI_SEARCH_PROVIDER", "off")
+        rows = [["NAME", "DP04_0046PE", "DP04_0046PM", "us"], ["United States", "65.2", "0.1", "1"]]
+        monkeypatch.setattr(cp, "_get_json", AsyncMock(return_value=rows))
+        r = await verify("The U.S. homeownership rate was 65.9% in 2023", client_ip="1.2.3.4")
+        assert r.verdict != CONTRADICTED
