@@ -121,7 +121,10 @@ class TestEndToEnd:
         assert "table DP05" in d["citation"] and "Florida" in d["citation"]
         assert "https://data.census.gov/table/ACSDP1Y2023.DP05?g=040XX00US12" in d["citation"]
         create.assert_awaited_once()
-        assert create.await_args.kwargs.get("tools") is None  # never a web search
+        kw = create.await_args.kwargs
+        assert kw.get("tools") is None                     # never a web search
+        assert kw["thinking"] == {"type": "disabled"}      # the answer is never crowded out
+        assert kw["max_tokens"] <= 200
 
     async def test_a_wrong_figure_is_contradicted(self, monkeypatch):
         fake, _ = model_says('{"pick": "S1", "stat": "value"}')

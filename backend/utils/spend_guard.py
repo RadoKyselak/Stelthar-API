@@ -203,7 +203,7 @@ async def reserve(client_ip: Optional[str]) -> Reservation:
 
 # A dataset-pick call: no tools, a short prompt, a one-line answer.
 PICK_MAX_INPUT_TOKENS = 4_000
-PICK_MAX_OUTPUT_TOKENS = 60
+PICK_MAX_OUTPUT_TOKENS = 200
 
 
 def worst_case_pick_cost(model: Optional[str] = None) -> float:

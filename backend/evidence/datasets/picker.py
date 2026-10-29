@@ -34,7 +34,7 @@ Reply with one line of JSON and nothing else: {"pick": "<key>" or "NONE", "stat"
 - stat "peak" when the claim says a figure hit, peaked at, reached a high of or topped; "low" for a low or bottom; otherwise "value"."""
 
 _STATS = {"value", "peak", "low"}
-_PROMPT_VERSION = "2"  # part of the cache key: a new prompt is never served an old answer
+_PROMPT_VERSION = "3"  # part of the cache key: a new prompt is never served an old answer
 _WEEK = 7 * 24 * 3600
 
 
@@ -74,9 +74,14 @@ async def pick(claim: str, where: str, when: str, cands: List[Candidate],
             f"Candidates (key | what it measures | units | frequency | detail):\n{listing}")
     model = config.CLAUDE_SEARCH_MODEL
     try:
+        # Haiku 5.5 thinks by default, and that hidden thinking can use the
+        # whole small output budget before any answer is written. A pick is a
+        # lookup, not a reasoning task: thinking off, low effort.
         resp = await _client().messages.create(
             model=model, max_tokens=spend_guard.PICK_MAX_OUTPUT_TOKENS, system=_SYSTEM,
             messages=[{"role": "user", "content": user[: spend_guard.PICK_MAX_INPUT_TOKENS * 3]}],
+            thinking={"type": "disabled"},
+            output_config={"effort": "low"},
         )
     except anthropic.APIError as e:
         logger.warning("Dataset pick failed: %s", str(e)[:200])
