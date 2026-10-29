@@ -392,6 +392,49 @@ def _population_headcount(text: str) -> bool:
 
 _SCALE_WORD_RE = re.compile(r"\b(?:thousand|million|billion|trillion)\b", re.IGNORECASE)
 
+# "The economy added 2.7 million jobs in 2023", "payrolls grew by 2.7 million".
+# Gains only: a loss would need its sign carried through, so it is left to
+# the other tiers. One calendar year only (BLS states annual job growth as
+# December to December); monthly changes are revised too much to call a
+# first-report figure wrong, and "since 2021" or "under X" span several years.
+_JOBS_ADDED_RE = re.compile(
+    r"\b(?:added|created|gained|generated)\s+(?:a\s+(?:net\s+)?(?:total\s+of\s+)?)?"
+    r"(?:about\s+|nearly\s+|roughly\s+|almost\s+|around\s+|approximately\s+|some\s+|over\s+|"
+    r"more\s+than\s+|just\s+over\s+|just\s+under\s+|under\s+|fewer\s+than\s+|less\s+than\s+)?"
+    r"\d[\d,.]*\s*(?:million|thousand)?\s+(?:new\s+)?(?:nonfarm\s+|payroll\s+)?jobs\b"
+    r"|\bpayrolls?\s+(?:grew|rose|increased|expanded|climbed)\s+by\b"
+    r"|\bjob\s+(?:growth|gains)\s+(?:of|was|were|totaled|totalled|reached)\b"
+    r"|\bjobs\s+(?:were\s+)?(?:added|created)\b",
+    re.IGNORECASE)
+_SPAN_RE = re.compile(
+    r"\b(?:since|under|between|through|thru|per\s+month|a\s+month|each\s+month|monthly|"
+    r"over\s+the|during\s+the|in\s+the\s+(?:past|last)|(?:past|last)\s+\d+|"
+    r"so\s+far|year[- ]to[- ]date|first\s+(?:half|year|term)|term)\b", re.IGNORECASE)
+# "Wages grew 4.3% in December 2023": the 12-month change in average hourly
+# earnings, as BLS headlines it each month. A named month is required.
+_WAGE_GROWTH_RE = re.compile(
+    r"\b(?:average\s+)?(?:hourly\s+)?(?:wages?|earnings|pay)\s+(?:grew|rose|increased|climbed|"
+    r"were\s+up|was\s+up|went\s+up|jumped|gained)\b|\bwage\s+growth\s+(?:was|of|hit|reached)\b",
+    re.IGNORECASE)
+_NOT_AVERAGE_WAGES_RE = re.compile(
+    r"\b(?:real|inflation[- ]adjusted|median|weekly|annual|annually|minimum|union|manufacturing|"
+    r"federal|government|teachers?|nurses?|ceos?|executives?|women|men|black|white|hispanic|"
+    r"latino|asian|youth|young|lowest|highest|bottom|top|workers\s+in)\b", re.IGNORECASE)
+
+
+def _named_series(text: str, claimed: Optional[Quantity]) -> Optional[MetricSpec]:
+    """Series matched by sentence shape rather than by a phrase."""
+    if _SPAN_RE.search(text) or len(_extract_years(text)) != 1:
+        return None
+    month = _MONTH_YEAR_RE.search(text)
+    # "averaged 200,000 jobs" is a monthly mean, not the year's total.
+    if _JOBS_ADDED_RE.search(text) and not month and not re.search(r"\baverag", text, re.I):
+        return BY_METRIC["jobs_added"]
+    if (_WAGE_GROWTH_RE.search(text) and month and not _NOT_AVERAGE_WAGES_RE.search(text)
+            and claimed is not None and claimed.family == _units.PERCENT):
+        return BY_METRIC["wage_growth"]
+    return None
+
 
 def _choose_metric(text: str, claimed: Optional[Quantity]) -> Optional[MetricSpec]:
     """The best-worded series in the claim's own units.
@@ -403,6 +446,9 @@ def _choose_metric(text: str, claimed: Optional[Quantity]) -> Optional[MetricSpe
     can look for a series in its units first.
     """
     specs = match_metrics(text)
+    named = _named_series(text, claimed)
+    if named is not None:
+        specs = [named] + [sp for sp in specs if sp is not named]
     if not specs and _population_headcount(text):
         specs = [BY_METRIC["population"]]
     fam = claimed.family if claimed is not None else _units.UNKNOWN

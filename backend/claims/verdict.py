@@ -312,6 +312,17 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
             f"{headline[:-1]}: close, but off by "
             f"{_gap_phrase(delta, official.quantity.family)}."
         )
+    elif (parsed.comparator == "equals" and parsed.metric is not None
+          and parsed.metric.revision_band and rel is not None
+          and abs(rel) <= parsed.metric.revision_band):
+        # A count the agency revises after its first report: a claim this
+        # close may be quoting that report, so it is not called wrong.
+        outcome = MOSTLY_ACCURATE
+        headline = (
+            f"{headline[:-1]}: close, off by {_gap_phrase(delta, official.quantity.family)} "
+            f"from the current count. The agency has revised this figure since its first "
+            f"report, which the claim may be quoting."
+        )
     else:
         outcome = CONTRADICTED
 

@@ -103,6 +103,10 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
                 spec.metric, spec.label, series_id, spec.family
             )
         spec = replace(spec, series_id=series_id)
+        if spec.bls_kind == "change":
+            if year is None:
+                return []
+            return await bls_source.fetch_change(spec.metric, spec.label, spec.series_id, year)
         if year is None:
             # A present-tense claim wants the most recent complete year.
             from datetime import datetime, timezone

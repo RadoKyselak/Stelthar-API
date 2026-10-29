@@ -32,7 +32,7 @@ from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from evidence.cache import TTL_IMMUTABLE, TTL_VOLATILE, cached
 from evidence.sources import SourceUnavailable
 from evidence.datapoint import ANNUAL, MONTHLY, Datapoint, Geography, Period
-from evidence.excerpt import make as make_excerpt, row as ex_row, units_for
+from evidence.excerpt import make as make_excerpt, published, row as ex_row, units_for
 from evidence.units import INDEX, JOBS, PERCENT, USD, Quantity, parse_number
 from utils.rate_limiter import get_quota_limiter
 
@@ -289,6 +289,52 @@ async def fetch_monthly(
     return []
 
 
+def _level_name(series_id: str) -> str:
+    """What the two values a change is computed from are: a price index, or
+    (for payroll series) average hourly earnings in dollars."""
+    return "Earnings ($/hr)" if (series_id or "").upper().startswith(("CES", "CEU")) else "Index"
+
+
+def _adjustment(series_id: str) -> str:
+    """BLS encodes it in the prefix: CES/CUSR/LNS/WPS/LAS adjusted, the rest not."""
+    sid = (series_id or "").upper()
+    return ("seasonally adjusted" if sid.startswith(("CES", "CUSR", "LNS", "WPS", "LASST"))
+            else "not seasonally adjusted")
+
+
+async def fetch_change(metric: str, label: str, series_id: str, year: int) -> List[Datapoint]:
+    """Jobs added in a calendar year: December over the previous December, the
+    way BLS states annual payroll growth ("payroll employment rose by 2.7
+    million in 2023"). Nothing for a year whose December is not out yet."""
+    rows = await _fetch_raw(series_id, year - 1, year)
+    prev, cur = _month_row(rows, year - 1, 12), _month_row(rows, year, 12)
+    pv = parse_number(prev.get("value")) if prev else None
+    cv = parse_number(cur.get("value")) if cur else None
+    if pv is None or cv is None:
+        logger.info("BLS change %s: December %s or %s not published", series_id, year - 1, year)
+        return []
+    change = cv - pv
+    shown = f"{change:,.0f}" if float(change).is_integer() else f"{change:,.1f}"
+    excerpt = make_excerpt(
+        [ex_row(f"{year - 1} Dec", prev.get("value")), ex_row(f"{year} Dec", cur.get("value")),
+         ex_row("Change", shown, cited=True)],
+        units=f"thousands of jobs, {_adjustment(series_id)}",
+        note=f"{published(cur.get('value'))} − {published(prev.get('value'))} = {shown} thousand jobs.",
+    )
+    return [Datapoint(
+        quantity=Quantity(magnitude=_scale_for(series_id, change), family=JOBS),
+        metric=metric, label=label,
+        observed=Period(year=year, kind=ANNUAL,
+                        basis=f"December {year - 1} to December {year}, {_adjustment(series_id)}"),
+        geography=geography_for_series(series_id),
+        source="BLS", source_url=series_permalink(series_id, year=year),
+        series_id=series_id, raw_value=None,
+        extra={"excerpt": excerpt,
+               "caveat": (f"BLS revises payroll counts every month and each February. Its first "
+                          f"report for {year} may have given a different total.")},
+    )]
+
+
 async def fetch_inflation(
     metric: str, label: str, series_id: str, year: int, month: Optional[int] = None,
 ) -> List[Datapoint]:
@@ -315,9 +361,10 @@ async def fetch_inflation(
         if cur is None or not prev:
             return []
         pct = (cur - prev) / prev * 100.0
-        basis = f"12-month change from {_MONTH_NAMES[month - 1]} {year - 1}, not seasonally adjusted"
+        basis = f"12-month change from {_MONTH_NAMES[month - 1]} {year - 1}, {_adjustment(series_id)}"
         period = Period(year=year, kind=MONTHLY, month=month, basis=basis)
-        labels = (f"Index, {_MON[month - 1]} {year - 1}", f"Index, {_MON[month - 1]} {year}")
+        labels = (f"{_level_name(series_id)}, {_MON[month - 1]} {year - 1}",
+                  f"{_level_name(series_id)}, {_MON[month - 1]} {year}")
     else:
         cur, cur_basis, _ = _annual_value(rows, year)
         prev, _, _ = _annual_value(rows, year - 1)
@@ -331,7 +378,8 @@ async def fetch_inflation(
         )
         cur_raw = f"{cur:.{_decimals(rows, year)}f}"
         prev_raw = f"{prev:.{_decimals(rows, year - 1)}f}"
-        labels = (f"Index, {year - 1} annual average", f"Index, {year} annual average")
+        labels = (f"{_level_name(series_id)}, {year - 1} annual average",
+                  f"{_level_name(series_id)}, {year} annual average")
 
     # BLS publishes 12-month changes to one decimal, computed from the index
     # exactly as here ("9.1 percent" for June 2022). The comparison and the

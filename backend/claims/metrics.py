@@ -81,6 +81,10 @@ class MetricSpec:
     # How far apart two official measures can plausibly be. A miss larger
     # than this is Contradicted even when an alternate measure exists.
     alternate_band: float = 0.10
+    # For counts the agency revises after the first report (payroll jobs):
+    # a miss within this share of the current figure is Mostly accurate,
+    # never Contradicted, because the claim may quote the first report.
+    revision_band: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +118,25 @@ _SPECS: List[MetricSpec] = [
         phrases=("total nonfarm employment", "nonfarm payrolls", "nonfarm employment",
                  "number of jobs", "total employment"),
         notes="Level in thousands as published; normalised to jobs.",
+    ),
+    MetricSpec(
+        # Matched by wording in the parser ("added 2.7 million jobs in 2023"),
+        # never by a bare phrase, and only for one stated calendar year.
+        metric="jobs_added", label="Jobs added (change in nonfarm payroll employment)",
+        source="BLS", family=JOBS, series_id="CES0000000001", bls_kind="change",
+        phrases=(),
+        # 2023: first reported as 2.7 million, 2.5 million after revisions.
+        revision_band=0.15,
+        notes="December to December, seasonally adjusted, as BLS states annual job growth.",
+    ),
+    MetricSpec(
+        # The 12-month change in average hourly earnings, which BLS headlines
+        # each month. Only for a named month: "wages grew 4% in 2023" could
+        # mean December over December or one annual average over another.
+        metric="wage_growth", label="Average hourly earnings, 12-month change",
+        source="BLS", family=PERCENT, series_id="CES0500000003", bls_kind="cpi_yoy",
+        phrases=(),
+        notes="All private employees, seasonally adjusted.",
     ),
     MetricSpec(
         metric="avg_hourly_earnings", label="Average hourly earnings, private",
