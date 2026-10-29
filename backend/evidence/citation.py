@@ -109,6 +109,8 @@ _BASIS_REWRITES = (
     (re.compile(r"^\w+ monthly observation$", re.I), ""),
     (re.compile(r"^annual$", re.I), ""),
     (re.compile(r",?\s*as of \d{4}-\d{2}-\d{2}"), ""),
+    (re.compile(r"^computed as the mean of 12 monthly observations.*$", re.I),
+     "average of the 12 monthly figures"),
 )
 _MONTH_CODE_RE = re.compile(r"\bM(0[1-9]|1[0-2]) (\d{4}) vs M(0[1-9]|1[0-2]) (\d{4})")
 
@@ -233,7 +235,11 @@ def render(dp: Datapoint, accessed: Optional[date] = None) -> Dict[str, str]:
                  dp.geography.name if dp.geography else ""):
         if part:
             head.append(f"{part},")
-    period = when(dp.observed) + (f" ({basis})" if basis else "")
+    dataset = dataset_name(dp.source, dp.series_id, basis)
+    # "American Community Survey 1-year estimates, ... 2023 (ACS 1-year
+    # estimate)" says the same thing twice.
+    shown_basis = "" if basis.startswith("ACS 1-year") and "1-year" in dataset else basis
+    period = when(dp.observed) + (f" ({shown_basis})" if shown_basis else "")
     note = " ".join(head) + f" {period}: {value}."
     if url:
         note += f" {url}"

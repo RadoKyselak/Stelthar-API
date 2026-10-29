@@ -46,8 +46,9 @@ class TestCitationCarriesTheBasis:
         c = render(_unemployment(basis), accessed=ACCESSED)
         # Too long to sit inside "3.6% (…)" — but it must survive somewhere.
         assert c["inline"] == "3.6% (BLS, 2023)"
-        assert c["caveat"] == basis
-        assert basis in c["note"]
+        # Restated in plain words, but still says the figure was computed.
+        assert c["caveat"] == "average of the 12 monthly figures"
+        assert "(average of the 12 monthly figures)" in c["note"]
 
     def test_note_carries_agency_series_period_and_access_date(self):
         c = render(_unemployment(), accessed=ACCESSED)
