@@ -341,7 +341,9 @@ def _point(v: Verdict, label: Optional[str] = None) -> Dict[str, Any]:
         "source": dp.source,
         "gap": v.gap_display,
         "comparator": v.comparator,
+        "measure": dp.label,
         "citation": cite["note"],
+        "citation_html": cite["note_html"],
         "citation_inline": cite["inline"],
         "url": cite["url"],
     }

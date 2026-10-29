@@ -109,6 +109,7 @@ _BASIS_REWRITES = (
     (re.compile(r"^\w+ monthly observation$", re.I), ""),
     (re.compile(r"^annual$", re.I), ""),
     (re.compile(r",?\s*as of \d{4}-\d{2}-\d{2}"), ""),
+    (re.compile(r"^daily figure$", re.I), ""),  # "as of <date>" already says it
     (re.compile(r"^computed as the mean of 12 monthly observations.*$", re.I),
      "average of the 12 monthly figures"),
 )
@@ -131,9 +132,9 @@ def when(period) -> str:
     """"2023", "June 2022", "FY2024", "Q2 2026", "December 29, 2023"."""
     if period.kind == POINT_IN_TIME and period.record_date:
         try:
-            return _format_date(date.fromisoformat(period.record_date[:10]))
+            return "as of " + _format_date(date.fromisoformat(period.record_date[:10]))
         except ValueError:
-            return period.record_date
+            return f"as of {period.record_date}"
     return period.label()
 
 
@@ -240,10 +241,12 @@ def render(dp: Datapoint, accessed: Optional[date] = None) -> Dict[str, str]:
     # estimate)" says the same thing twice.
     shown_basis = "" if basis.startswith("ACS 1-year") and "1-year" in dataset else basis
     period = when(dp.observed) + (f" ({shown_basis})" if shown_basis else "")
-    note = " ".join(head) + f" {period}: {value}."
-    if url:
-        note += f" {url}"
-    note += f" (accessed {_format_date(accessed)})."
+    body = " ".join(head) + f" {period}: {value}."
+    tail = f" (accessed {_format_date(accessed)})."
+    note = body + (f" {url}" if url else "") + tail
+    # The same note with a live link, for pasting into Docs, Word or email.
+    note_html = escape(body) + (
+        f' <a href="{escape(url, quote=True)}">{escape(url)}</a>' if url else "") + escape(tail)
 
     return {
         "value": value,
@@ -251,6 +254,7 @@ def render(dp: Datapoint, accessed: Optional[date] = None) -> Dict[str, str]:
         "markdown": markdown,
         "html": html,
         "note": note,
+        "note_html": note_html,
         "attribution": attribution,
         "caveat": basis if len(basis) > _INLINE_BASIS_CHARS else "",
         "agency": agency_name(dp.source),

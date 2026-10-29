@@ -1,8 +1,7 @@
-"""The `display` block every client renders, the web page, and coverage.
+"""The `display` block the extension renders, and the citations it copies.
 
-The extension panel, its popup and the web page all draw `display`, so its
-wording and its safety rules (only http(s) links, nothing executable) are
-tested here once rather than in three front ends.
+The in-page card and the popup both draw `display`, so its wording and its
+safety rules (only http(s) links, nothing executable) are tested here once.
 """
 import pathlib
 from unittest.mock import AsyncMock, patch
@@ -140,50 +139,26 @@ class TestFormatting:
                           "period_kind": "point_in_time", "as_of": "2026-10-27",
                           "period_basis": "daily figure, as of 2026-10-27"})
         assert s["url"].startswith("https://fiscaldata.treasury.gov/datasets/debt-to-the-penny")
-        assert s["period"] == "October 27, 2026" and s["basis"] == "daily figure"
+        assert s["period"] == "October 27, 2026" and s["basis"] == ""
         assert s["dataset"] == "Debt to the Penny" and s["identifier"] == ""
 
 
-class TestWebPage:
-    def test_browser_gets_the_page_with_a_strict_policy(self, test_client):
-        r = test_client.get("/", headers={"accept": "text/html"})
-        assert r.status_code == 200 and "Project Mirador" in r.text
-        csp = r.headers["content-security-policy"]
-        assert "script-src 'self'" in csp and "frame-ancestors 'none'" in csp
-
-    def test_api_clients_still_get_json(self, test_client):
-        assert test_client.get("/").json()["status"] == "ok"
-
-    @pytest.mark.parametrize("name", ["app.js", "result-view.js", "site.css", "logo.png", "favicon.png"])
-    def test_static_files(self, test_client, name):
-        r = test_client.get(f"/static/{name}")
-        assert r.status_code == 200 and r.headers["x-content-type-options"] == "nosniff"
-
-    @pytest.mark.parametrize("name", ["index.html", "..%2Fmain.py", "nope.js"])
-    def test_nothing_else_is_served(self, test_client, name):
-        assert test_client.get(f"/static/{name}").status_code == 404
-
-    def test_extension_and_site_render_with_the_same_code(self):
-        a = (ROOT / "extension" / "result-view.js").read_bytes()
-        b = (ROOT / "backend" / "static" / "result-view.js").read_bytes()
-        assert a == b, "copy extension/result-view.js to backend/static/ after editing it"
-
-    def test_renderer_never_injects_html(self):
+class TestRenderer:
+    @pytest.mark.parametrize("name", ["result-view.js", "content.js", "popup.js"])
+    def test_extension_never_injects_html(self, name):
         import re
-        src = (ROOT / "extension" / "result-view.js").read_text()
+        src = (ROOT / "extension" / name).read_text()
         code = re.sub(r"/\*.*?\*/|//[^\n]*", "", src, flags=re.S)  # ignore comments
         assert not re.search(r"\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML|document\.write", code)
 
-    def test_coverage(self, test_client, monkeypatch):
-        monkeypatch.setattr(config, "BEA_API_KEY", "k")
-        monkeypatch.setattr(config, "CENSUS_API_KEY", "k")
-        r = test_client.get("/v2/coverage").json()
-        sources = [a["source"] for a in r["agencies"]]
-        assert sources == ["BLS", "BEA", "CENSUS", "TREASURY"]
-        bls = r["agencies"][0]["metrics"]
-        unemp = next(m for m in bls if m["metric"] == "unemployment_rate")
-        assert "Black" in unemp["groups"] and unemp["places"] == "U.S. and every state"
-        assert r["metric_count"] == sum(len(a["metrics"]) for a in r["agencies"])
+    def test_card_never_animates_the_official_number(self):
+        """A paused animation once left the claim's 4.1% where BLS's 4.0% belonged."""
+        src = (ROOT / "extension" / "result-view.js").read_text()
+        assert "requestAnimationFrame" not in src
+
+    def test_no_website_is_served(self, test_client):
+        assert test_client.get("/", headers={"accept": "text/html"}).json()["status"] == "ok"
+        assert test_client.get("/static/app.js").status_code == 404
 
 
 class TestCitations:
@@ -221,7 +196,7 @@ class TestCitations:
         assert clean_basis("BLS published annual average") == "annual average"
         assert clean_basis("January monthly observation") == ""
         assert clean_basis("latest monthly observation") == "latest month"
-        assert clean_basis("daily figure, as of 2026-10-27") == "daily figure"
+        assert clean_basis("daily figure, as of 2026-10-27") == ""
 
 
 class TestAuditFixes:

@@ -1,7 +1,6 @@
-// Project Mirador popup: check a claim or find a number. Results are drawn by
-// result-view.js, the same renderer the in-page panel and the web app use.
+// Project Mirador popup. One field: a sentence with a figure in it is checked
+// as a claim; a measure without one ("unemployment texas 2023") is looked up.
 const MAX_CLAIM_LEN = 600;
-const AI_CHAR_LIMIT = 300;
 const View = window.MiradorView;
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -10,157 +9,159 @@ document.addEventListener("DOMContentLoaded", () => {
   document.head.appendChild(style);
 
   const $ = (id) => document.getElementById(id);
-  const form = $("form");
   const q = $("q");
-  const go = $("go");
+  const hint = $("hint");
   const out = $("out");
-  const count = $("count");
-  const MODES = {
-    check: { tab: $("mode-check"), label: "Claim to check", button: "Check",
-      placeholder: "Paste or type a claim with a number" },
-    find: { tab: $("mode-find"), label: "Number to find", button: "Find",
-      placeholder: "unemployment rate texas 2023" },
-  };
-  let mode = "check";
+  const list = $("list");
   let ticket = 0;
   let debounce = null;
-  let lastSurprise = "";
-  const drafts = { check: "", find: "" };
+  let shownFor = "";
 
   const autosize = () => {
-    q.style.height = "38px";
-    q.style.height = `${Math.min(q.scrollHeight, 120)}px`;
+    q.style.height = "20px";
+    q.style.height = `${Math.min(q.scrollHeight, 110)}px`;
   };
 
-  const sync = () => {
-    const n = q.value.trim().length;
-    go.disabled = n < 2 || (mode === "check" && n > MAX_CLAIM_LEN);
-    count.textContent = mode === "check" && n > AI_CHAR_LIMIT * 0.8 ? `${n} / ${AI_CHAR_LIMIT}` : "";
-    count.classList.toggle("over", n > AI_CHAR_LIMIT);
+  const text = () => q.value.trim();
+
+  const refresh = () => {
     autosize();
+    const t = text();
+    if (!t) {
+      hint.textContent = "";
+      out.replaceChildren();
+      shownFor = "";
+      showList();
+      return;
+    }
+    list.hidden = true;
+    if (t.length > MAX_CLAIM_LEN) {
+      hint.textContent = "Too long. Select one sentence with one figure.";
+      return;
+    }
+    hint.textContent = t === shownFor ? ""
+      : View.intentOf(t) === "check" ? "Return to check this claim" : "Return to find this number";
   };
 
-  const setMode = (next) => {
-    drafts[mode] = q.value;
-    mode = next;
-    Object.entries(MODES).forEach(([k, m]) => m.tab.setAttribute("aria-selected", String(k === next)));
-    q.placeholder = MODES[next].placeholder;
-    $("q-label").textContent = MODES[next].label;
-    go.setAttribute("aria-label", MODES[next].button);
-    q.value = drafts[next];
-    out.replaceChildren();
-    sync();
-    q.focus();
-    chrome.storage.local.set({ stelthar_popup_mode: next });
-  };
-
-  // ------------------------------------------------------------- check
-  const check = (claim, { bypassCache = false } = {}) => {
-    claim = (claim || "").trim();
-    if (!claim) return;
+  // ------------------------------------------------------------- actions
+  const check = (claim, bypassCache = false) => {
     const mine = ++ticket;
-    go.disabled = true;
+    shownFor = claim;
+    hint.textContent = "";
     out.replaceChildren(View.loading());
     chrome.storage.local.set({ stelthar_last_claim: claim });
     chrome.runtime.sendMessage({ type: "verifyClaim", claim, bypassCache }, (resp) => {
       if (mine !== ticket) return;
-      sync();
       if (chrome.runtime.lastError || !resp) {
-        out.replaceChildren(View.error("The extension did not answer. Try reloading it.",
-          { onRetry: () => check(claim, { bypassCache: true }) }));
+        out.replaceChildren(View.error("The extension didn't respond. Try reopening it.",
+          { onRetry: () => check(claim, true) }));
         return;
       }
       if (!resp.ok) {
-        out.replaceChildren(View.error(resp.error, { onRetry: () => check(claim, { bypassCache: true }) }));
+        out.replaceChildren(View.error(resp.error, { onRetry: () => check(claim, true) }));
         return;
       }
       out.replaceChildren(View.render(resp.result, {
-        cached: !!resp.result._cached,
-        onRecheck: () => check(claim, { bypassCache: true }),
+        onRecheck: resp.result._cached ? () => check(claim, true) : null,
       }));
-      loadHistory();
     });
   };
 
-  // -------------------------------------------------------------- find
-  const find = async (query) => {
-    query = (query || "").trim();
+  const find = async (query, { quiet = false } = {}) => {
     const mine = ++ticket;
-    if (query.length < 2) { out.replaceChildren(); return; }
+    if (!quiet) out.replaceChildren(View.loading());
     try {
       const reply = await chrome.runtime.sendMessage({ type: "lookup", query });
       if (mine !== ticket) return;
       if (!reply || !reply.ok) {
-        out.replaceChildren(View.error((reply && reply.error) || "Lookup failed."));
+        if (!quiet) out.replaceChildren(View.error((reply && reply.error) || "Lookup failed."));
         return;
       }
-      out.replaceChildren(View.renderLookup(reply.result, {
-        onSuggest: (s) => { q.value = s; sync(); find(s); },
-      }));
+      // While typing, only show a result once there is one.
+      if (quiet && !reply.result.ok) return;
+      shownFor = query;
+      hint.textContent = "";
+      out.replaceChildren(View.renderLookup(reply.result, { onSuggest: (s) => run(s, true) }));
     } catch (e) {
-      if (mine === ticket) out.replaceChildren(View.error(e.message));
+      if (mine === ticket && !quiet) out.replaceChildren(View.error(e.message));
     }
   };
 
-  const run = (text) => (mode === "check" ? check(text) : find(text));
-
-  const surprise = () => {
-    const text = View.pick(mode === "check" ? View.examples.claims : View.examples.lookups, lastSurprise);
-    lastSurprise = text;
-    q.value = text;
-    sync();
-    run(text);
+  const run = (t, setField = false) => {
+    t = (t || "").trim();
+    if (!t || t.length > MAX_CLAIM_LEN) return;
+    if (setField) { q.value = t; refresh(); }
+    list.hidden = true;
+    clearTimeout(debounce);
+    if (View.intentOf(t) === "check") check(t);
+    else find(t);
   };
 
-  // ------------------------------------------------------------ recent
-  const loadHistory = () => {
+  // ------------------------------------------- recent checks / examples
+  const showList = () => {
     chrome.storage.local.get(["stelthar_history"], (data) => {
-      const history = data.stelthar_history || [];
-      $("recent").hidden = !history.length;
-      $("history").replaceChildren(...history.map((entry) => {
-        const label = entry.verdict === "Inconclusive" ? "No verdict" : (entry.verdict || "No verdict");
+      if (text()) return;
+      const history = (data.stelthar_history || []).slice(0, 6);
+      const rows = history.length
+        ? history.map((h) => ({ text: h.claim, key: View.verdictKey(h.verdict), title: h.verdict }))
+        : View.examples.map((e) => ({ text: e, key: "example", title: "Example" }));
+      $("list-title").textContent = history.length ? "Recent" : "Try";
+      $("items").replaceChildren(...rows.map((r) => {
         const li = document.createElement("li");
-        li.tabIndex = 0;
-        li.title = `${label}: show this check again`;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.title = r.title || "";
         const dot = document.createElement("span");
-        dot.className = `dot ${View.verdictKey(label)}`;
-        const c = document.createElement("span");
-        c.className = "hclaim";
-        c.textContent = entry.claim;
-        li.append(dot, c);
-        const open = () => {
-          if (mode !== "check") setMode("check");
-          q.value = entry.claim;
-          sync();
-          check(entry.claim);
-        };
-        li.addEventListener("click", open);
-        li.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
+        dot.className = `dot ${r.key}`;
+        const t = document.createElement("span");
+        t.className = "t";
+        t.textContent = r.text;
+        b.append(dot, t);
+        b.addEventListener("click", () => run(r.text, true));
+        li.appendChild(b);
         return li;
       }));
+      list.hidden = false;
     });
   };
 
-  // ------------------------------------------------------------ wiring
-  form.addEventListener("submit", (e) => { e.preventDefault(); run(q.value); });
+  // ------------------------------------------------------------- wiring
+  $("form").addEventListener("submit", (e) => { e.preventDefault(); run(text()); });
+  q.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); run(text()); }
+  });
   q.addEventListener("input", () => {
-    sync();
-    if (mode === "find") {
-      clearTimeout(debounce);
-      debounce = setTimeout(() => find(q.value), 260);
+    refresh();
+    const t = text();
+    clearTimeout(debounce);
+    // Lookups answer as you type; claims wait for Return.
+    if (t.length > 2 && View.intentOf(t) === "find" && t !== shownFor) {
+      debounce = setTimeout(() => find(t, { quiet: true }), 350);
     }
   });
-  q.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); run(q.value); }
-  });
-  MODES.check.tab.addEventListener("click", () => mode !== "check" && setMode("check"));
-  MODES.find.tab.addEventListener("click", () => mode !== "find" && setMode("find"));
-  $("surprise").addEventListener("click", surprise);
 
-  chrome.storage.local.get(["stelthar_last_claim", "stelthar_popup_mode"], (data) => {
-    drafts.check = (data.stelthar_last_claim || "").trim();
-    if (data.stelthar_popup_mode === "find") setMode("find");
-    else { q.value = drafts.check; sync(); q.focus(); q.select(); }
+  // Highlighted text on the current page is what the person wants checked:
+  // open straight onto its result. Otherwise start empty, with recent checks.
+  const selectionOnPage = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.id) return "";
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => String(window.getSelection() || "").replace(/\s+/g, " ").trim(),
+      });
+      return result || "";
+    } catch (e) {
+      return ""; // chrome:// pages, the Web Store, PDFs
+    }
+  };
+
+  refresh();
+  q.focus();
+  selectionOnPage().then((sel) => {
+    if (!sel || text() || sel.length > MAX_CLAIM_LEN) return;
+    q.value = sel;
+    refresh();
+    run(sel);
   });
-  loadHistory();
 });

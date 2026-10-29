@@ -152,9 +152,8 @@ def _row_to_datapoint(spec, row: Dict[str, Any], api_url: str) -> Optional[Datap
         extra={"table": spec.bea_table, "line": spec.bea_line,
                "line_description": desc, "api_url": api_url,
                "metric_name": row.get("METRIC_NAME"),
-               **({"caveat": ("BEA revises quarterly GDP several times (advance, second and "
-                              "third estimates, then annual updates); this is the latest "
-                              "published estimate.")} if quarter else {})},
+               **({"caveat": "Latest estimate. BEA revises quarterly GDP several times."}
+                  if quarter else {})},
     )
 
 

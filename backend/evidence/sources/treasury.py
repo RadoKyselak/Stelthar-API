@@ -225,8 +225,6 @@ def _mts_row_to_datapoint(rows, fy: int, kind: str) -> Optional[Datapoint]:
         geography=Geography.national(),
         source="TREASURY", source_url=_mts_permalink(),
         series_id="MTS Table 1", as_of=record_date, raw_value=str(ytd.get(field)),
-        extra={"caveat": (f"Federal budget totals are reported by fiscal year: FY{fy} ran "
-                          f"from October 1, {fy - 1} to September 30, {fy}. This is the total "
-                          f"Treasury published at year end; later statements can restate it "
-                          f"slightly.")},
+        extra={"caveat": (f"FY{fy} is the fiscal year Oct 1, {fy - 1} to Sep 30, {fy}. Year-end total; "
+                          f"later statements can revise it slightly.")},
     )

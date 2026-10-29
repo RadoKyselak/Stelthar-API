@@ -10,6 +10,7 @@ which figure it rests on and where that figure came from, how the check was
 done, how to cite it, and what to try when there is no answer.
 """
 from datetime import date
+from html import escape
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -26,6 +27,8 @@ _VERDICTS = {
     V.MISLEADING: ("misleading", "The number may be right, but the framing misleads."),
     V.NO_VERDICT: ("no-verdict", "No official figure settles this claim."),
 }
+# What the card says, where the API's verdict word would read as jargon.
+_LABELS = {V.NO_VERDICT: "Can't verify"}
 
 # why, what to try
 _REASONS = {
@@ -167,6 +170,22 @@ def _short_basis(basis: str) -> str:
     return head if len(head) <= 34 else ""
 
 
+def _relation(p: Dict[str, Any]) -> str:
+    """exact | within (rounds to the claim) | off | meets | fails (thresholds)."""
+    if not p.get("claim"):
+        return ""
+    if p.get("comparator") != "equals":
+        return "meets" if p.get("verdict") == V.SUPPORTED else "fails"
+    if not p.get("gap"):
+        return "exact"
+    return "within" if p.get("verdict") == V.SUPPORTED else "off"
+
+
+def _gap_short(gap: str) -> str:
+    """"0.1 percentage point" -> "0.1 pt"; "$32.82 billion" stays."""
+    return (gap or "").replace(" percentage points", " pts").replace(" percentage point", " pt")
+
+
 def _comparison(p: Dict[str, Any]) -> Dict[str, Any]:
     place = p.get("place") or ""
     basis = p.get("basis") or ""
@@ -182,7 +201,14 @@ def _comparison(p: Dict[str, Any]) -> Dict[str, Any]:
         "source": agency_short(p.get("source") or ""),
         "context": context,
         "note": _note(p),
+        "measure": p.get("measure") or "",
+        "place": "" if place == "United States" else place,
+        "period": when,
+        "basis": _short_basis(basis),
+        "relation": _relation(p),
+        "gap_short": _gap_short(p.get("gap") or ""),
         "citation": p.get("citation") or "",
+        "citation_html": p.get("citation_html") or "",
         "url": _safe_url(p.get("url")),
     }
 
@@ -246,18 +272,23 @@ def _method(v, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _web_citation(web: List[Dict[str, Any]], reported: Dict[str, str]) -> str:
-    """A citation for a web-search answer: the best official page it rests on."""
+def _web_citation(web: List[Dict[str, Any]], reported: Dict[str, str]):
+    """A citation for a web-search answer: the best official page it rests on.
+    Returns (plain, html)."""
     if not web:
-        return ""
+        return "", ""
     s = next((x for x in web if x["official"]), web[0])
     org = reported.get("source_org") or s["domain"]
     value, period = reported.get("value"), reported.get("period")
     fact = ""
     if value:
         fact = f" {value}" + (f" ({period})" if period else "") + "."
-    return (f"{org}, “{s['title']}.”{fact} {s['url']} "
-            f"(accessed {_long_date(date.today().isoformat())}).")
+    body = f"{org}, “{s['title']}.”{fact}"
+    tail = f" (accessed {_long_date(date.today().isoformat())})."
+    plain = f"{body} {s['url']}{tail}"
+    html = (f'{escape(body)} <a href="{escape(s["url"], quote=True)}">{escape(s["url"])}</a>'
+            f"{escape(tail)}")
+    return plain, html
 
 
 def _share_text(label: str, v, comparisons, citation: str) -> str:
@@ -279,7 +310,7 @@ def _share_text(label: str, v, comparisons, citation: str) -> str:
 def build_display(v) -> Dict[str, Any]:
     status = _status(v)
     key, meaning = _VERDICTS.get(v.verdict, ("no-verdict", ""))
-    label = v.verdict
+    label = _LABELS.get(v.verdict, v.verdict)
     if status == "unavailable":
         key, label = "unavailable", "Couldn't check"
         meaning = "An outage on our side, not a judgment about the claim."
@@ -313,8 +344,9 @@ def build_display(v) -> Dict[str, Any]:
             notes.append(c)
 
     if v.tier == "grounded":
-        citation = _web_citation(web, reported)
+        citation, citation_html = _web_citation(web, reported)
     else:
+        citation_html = "<br>".join(c["citation_html"] for c in comparisons if c["citation_html"])
         citation = "\n".join(c["citation"] for c in comparisons if c["citation"])
 
     return {
@@ -330,5 +362,6 @@ def build_display(v) -> Dict[str, Any]:
         "method": _method(v, sources),
         "notes": notes,
         "citation": citation,
+        "citation_html": citation_html,
         "share_text": _share_text(label, v, comparisons, citation.split("\n")[0] if citation else ""),
     }
