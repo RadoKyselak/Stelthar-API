@@ -48,9 +48,20 @@ class TestPage:
     def test_says_it_is_not_a_government_site(self, test_client):
         """Government-style design, never a government claim."""
         page = " ".join(test_client.get("/", headers=HTML).text.split())
-        assert "Not a government website" in page and "not affiliated" in page
+        assert "Independent" in page and "Not a government website" in page
         for word in ("official website", ".gov", "seal", "An official"):
             assert word not in page, word
+
+    def test_page_is_just_a_lookup(self, test_client):
+        """No copy beyond the name, the question, the box and the disclaimer."""
+        html = test_client.get("/", headers=HTML).text
+        body = html[html.index("<body>"):]
+        # Visible copy only: the screen-reader label is for assistive tech.
+        text = re.sub(r'<label[^>]*class="sr"[^>]*>.*?</label>|<script.*?</script>|<[^>]+>', " ",
+                      body, flags=re.S)
+        words = text.split()
+        assert len(words) <= 14, words
+        assert "<details" not in html and 'role="tab"' not in html
 
     def test_page_cannot_be_framed(self, test_client):
         """Clickjacking."""
@@ -92,7 +103,7 @@ class TestPage:
         browser send a check (each could cost a paid search)."""
         code = (STATIC / "app.js").read_text()
         deep = code[code.index("Deep links"):]
-        assert "check(" not in deep and "find(" not in deep
+        assert "run(" not in deep and "check(" not in deep and "find(" not in deep
 
 
 class TestFiles:

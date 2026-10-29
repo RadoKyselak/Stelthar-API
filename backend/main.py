@@ -185,42 +185,6 @@ async def static_file(name: str):
                         headers={"Cache-Control": "no-cache"})
 
 
-_GROUP_NAMES = {"black": "Black", "white": "White", "hispanic": "Hispanic", "asian": "Asian",
-                "teens": "teens (16–19)", "youth": "ages 16–24"}
-
-
-@app.get("/v2/coverage")
-async def coverage() -> Dict[str, Any]:
-    """What can be checked against an exact official figure right now.
-
-    Built from the metric registry and the configured keys, so it cannot
-    drift from what the engine actually does."""
-    from claims.metrics import all_metrics
-    from evidence.citation import agency_name
-    from services.verify_v2 import has_structured_adapter
-
-    specs = [s for s in all_metrics() if has_structured_adapter(s)]
-    groups: Dict[str, Any] = {}
-    for spec in specs:
-        if spec.parent:
-            continue
-        agency = groups.setdefault(spec.source, {
-            "source": spec.source, "agency": agency_name(spec.source), "metrics": []})
-        variants = [_GROUP_NAMES.get(v.metric[len(spec.metric) + 1:],
-                                     v.metric[len(spec.metric) + 1:].replace("_", " "))
-                    for v in specs if v.parent == spec.metric]
-        agency["metrics"].append({
-            "metric": spec.metric,
-            "label": spec.label,
-            "places": "U.S. and every state" if "state" in spec.geo_levels else "U.S.",
-            "groups": variants,
-        })
-    order = ["BLS", "BEA", "CENSUS", "TREASURY"]
-    agencies = sorted(groups.values(), key=lambda g: order.index(g["source"])
-                      if g["source"] in order else 99)
-    return {"agencies": agencies, "metric_count": sum(len(g["metrics"]) for g in agencies)}
-
-
 def _health_details_allowed(request: Request) -> bool:
     token = request.headers.get("x-health-token", "")
     return bool(config.HEALTH_TOKEN) and hmac.compare_digest(token, config.HEALTH_TOKEN)

@@ -3,72 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mirador: check a number against official data</title>
-  <meta name="description" content="An independent fact checker. Check any number against official U.S. government data from BLS, BEA, the Census Bureau and the Treasury, with a citation to the exact source.">
+  <title>Mirador</title>
+  <meta name="description" content="Check a number against official U.S. government data, with the exact source.">
   <link rel="icon" href="/static/favicon.png" type="image/png">
   <link rel="preload" href="/static/instrument-serif.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/instrument-sans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/site.css">
 </head>
 <body>
-  <p class="strip">Independent fact checker <span>·</span> Not a government website</p>
-
-  <header class="top">
+  <header class="nav">
     <a class="brand" href="/" aria-label="Mirador home">
-      <img src="/static/logo.png" alt="" width="32" height="32">
+      <img src="/static/logo.png" alt="" width="28" height="28">
       <span>Mirador</span>
     </a>
-    <a class="ext label" href="https://chromewebstore.google.com/detail/anehbncclhojcaihgeoebennaccpeegn" rel="noopener">Chrome extension</a>
   </header>
 
-  <div class="hero">
-    <main class="main">
-      <p class="kicker label">Checked against BLS · BEA · Census · Treasury</p>
-      <h1 id="title">Is that number right?</h1>
-      <p class="lede" id="lede">Check a claim against the government's own published figures, with a citation to the exact table and row.</p>
-
-      <div class="modes" role="tablist" aria-label="Mode">
-        <button type="button" role="tab" class="mode label" id="mode-check" aria-selected="true">Check a claim</button>
-        <button type="button" role="tab" class="mode label" id="mode-find" aria-selected="false">Find a number</button>
-      </div>
-
-      <form id="form" class="ask" autocomplete="off">
-        <label for="q" class="sr" id="q-label">Claim to check</label>
-        <input id="q" name="q" type="text" maxlength="1000" spellcheck="false"
-          placeholder="Unemployment in Texas was 4.1% in 2023">
-        <button id="go" class="label" type="submit" aria-label="Check">
-          <span class="go-text" id="go-text">Check</span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        </button>
-      </form>
-      <button type="button" id="surprise" class="surprise label">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/></svg>
-        Try an example
+  <main class="main">
+    <h1>Is that number right?</h1>
+    <form id="form" class="ask" role="search" autocomplete="off">
+      <label for="q" class="sr">A claim to check, or a figure to find</label>
+      <input id="q" name="q" type="text" maxlength="1000" spellcheck="false"
+        placeholder="Unemployment in Texas was 4.1% in 2023">
+      <button id="go" type="submit" aria-label="Look up">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
+    </form>
+    <div id="out" class="out" aria-live="polite"></div>
+  </main>
 
-      <div id="out" class="out" aria-live="polite"></div>
-    </main>
-  </div>
-
-  <footer class="foot">
-    <div class="foot-inner">
-      <details>
-        <summary>How it works</summary>
-        <p>Mirador reads the figure, period and place in a claim, pulls that exact number from the
-          agency’s own data, and compares them at the precision the claim was written to. Close calls
-          are <i>Mostly accurate</i>. Every answer shows the published row it came from. When no
-          official series covers a claim, it searches published sources and only reports what a
-          source backs.</p>
-      </details>
-      <details id="coverage">
-        <summary>What can I check?</summary>
-        <div id="coverage-list" class="cov"></div>
-      </details>
-      <p class="fine"><strong>Mirador is independent.</strong> It is not a government website and is not
-        affiliated with or endorsed by any government agency. Figures come from the Bureau of Labor
-        Statistics, the Bureau of Economic Analysis, the Census Bureau and the Treasury.</p>
-    </div>
-  </footer>
+  <footer class="foot">Independent · Not a government website</footer>
 
   <script src="/static/result-view.js"></script>
   <script src="/static/app.js"></script>
