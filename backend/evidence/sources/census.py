@@ -143,12 +143,18 @@ def _row_to_datapoint(spec, year: int, dataset: str, blob: Dict[str, Any]) -> Op
         return None
 
     extra: Dict[str, Any] = {"dataset": dataset, "api_url": blob.get("url", "")}
+    notes = []
     if moe:
         extra["margin_of_error"] = moe
-        extra["caveat"] = (
-            "ACS figures are survey estimates; the published 90% margin of error "
-            f"is ±{_fmt(moe, spec.family)}."
-        )
+        notes.append("ACS figures are survey estimates; the published 90% margin of error "
+                     f"is ±{_fmt(moe, spec.family)}.")
+    if spec.alternate_measure:
+        # ACS poverty (12.5% for 2023) is not Census's headline poverty rate
+        # (11.1%, CPS ASEC). A reader must not take one for the other.
+        notes.append(f"This is the American Community Survey figure. Another official "
+                     f"figure exists: {spec.alternate_measure}.")
+    if notes:
+        extra["caveat"] = " ".join(notes)
 
     return Datapoint(
         quantity=Quantity(magnitude=value, family=spec.family, raw=str(raw)),

@@ -66,10 +66,12 @@ def _row_to_datapoint(row: Dict[str, Any], url: str, want_fiscal: bool) -> Optio
         observed=period,
         geography=Geography.national(),
         source="TREASURY",
-        source_url=url,
+        # The dataset page a reader can open, not the JSON API call (kept in extra).
+        source_url="https://fiscaldata.treasury.gov/datasets/debt-to-the-penny/debt-to-the-penny",
         series_id="debt_to_penny",
         as_of=record_date or None,
         raw_value=str(row.get(_VALUE_FIELD)),
+        extra={"api_url": url},
     )
 
 
@@ -224,5 +226,7 @@ def _mts_row_to_datapoint(rows, fy: int, kind: str) -> Optional[Datapoint]:
         source="TREASURY", source_url=_mts_permalink(),
         series_id="MTS Table 1", as_of=record_date, raw_value=str(ytd.get(field)),
         extra={"caveat": (f"Federal budget totals are reported by fiscal year: FY{fy} ran "
-                          f"from October 1, {fy - 1} to September 30, {fy}.")},
+                          f"from October 1, {fy - 1} to September 30, {fy}. This is the total "
+                          f"Treasury published at year end; later statements can restate it "
+                          f"slightly.")},
     )

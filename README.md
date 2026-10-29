@@ -86,6 +86,12 @@ Stelthar's fact-checking API verifies claims by comparing them against official 
 
 ## 🚀 Getting Started
 
+### Web app
+
+Open **https://stelthar-api.vercel.app** in any browser: paste a claim, see the verdict
+beside the official figure with a link to the exact series, or look up a figure with a
+ready-to-paste citation. It is served by the API itself, so it updates on every deploy.
+
 ### Chrome Extension
 
 1. Visit the [Chrome Web Store](https://chromewebstore.google.com/detail/anehbncclhojcaihgeoebennaccpeegn?utm_source=item-share-cb)
@@ -197,6 +203,13 @@ https://stelthar-api.vercel.app
 | `POST /verify` | Verify a claim. v2 engine, v1-compatible response (what the extension calls). |
 | `POST /v2/verify` | Same engine, v2-only response fields. |
 | `POST /v2/lookup` | "What is the official figure?" — value plus ready-to-paste citations. |
+| `GET /v2/coverage` | Every measure answered from an agency's own published figure, by agency. |
+| `GET /` | The web app (browsers); a status line for API clients. |
+
+Every verify response carries a `display` block: the verdict and what it means, each
+figure compared (claim beside official, with the gap), the sources (agency, dataset,
+series, link), how it was checked (official data or web search) and text to share. The
+web app, the extension popup and the in-page panel all render this one block.
 | `POST /v1/verify` | Legacy multi-pass planner, kept for comparison. |
 | `GET /health` | Model in use, configured sources. |
 

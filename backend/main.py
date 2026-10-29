@@ -1,9 +1,10 @@
 import asyncio
 import json
+import pathlib
 from typing import Dict, Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import config
@@ -146,9 +147,81 @@ async def general_exception_handler(request: Request, exc: Exception):
         }
     )
 
+_STATIC = pathlib.Path(__file__).parent / "static"
+_STATIC_TYPES = {
+    "app.js": "text/javascript; charset=utf-8",
+    "result-view.js": "text/javascript; charset=utf-8",
+    "site.css": "text/css; charset=utf-8",
+    "logo.png": "image/png",
+    "favicon.png": "image/png",
+}
+# The page loads only its own files and talks only to this API.
+_PAGE_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; connect-src 'self'; frame-src 'none'; base-uri 'none'; "
+        "form-action 'self'; frame-ancestors 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Cache-Control": "no-cache",
+}
+
+
 @app.get("/")
-async def health_check():
-    return {"status": "ok", "message": "Stelthar-API is running :)"}
+async def home(request: Request):
+    """The web app for browsers; a status line for API clients and monitors."""
+    if "text/html" not in request.headers.get("accept", ""):
+        return {"status": "ok", "message": "Stelthar-API is running :)"}
+    return HTMLResponse((_STATIC / "index.html").read_text(encoding="utf-8"),
+                        headers=_PAGE_HEADERS)
+
+
+@app.get("/static/{name}")
+async def static_file(name: str):
+    # A fixed allow-list, so no path can reach anything else on disk.
+    if name not in _STATIC_TYPES:
+        raise HTTPException(status_code=404, detail="Not found")
+    # no-cache = revalidate each time (cheap: ETag), so a deploy shows at once.
+    return FileResponse(_STATIC / name, media_type=_STATIC_TYPES[name],
+                        headers={"Cache-Control": "no-cache",
+                                 "X-Content-Type-Options": "nosniff"})
+
+
+_GROUP_NAMES = {"black": "Black", "white": "White", "hispanic": "Hispanic", "asian": "Asian",
+                "teens": "teens (16–19)", "youth": "ages 16–24"}
+
+
+@app.get("/v2/coverage")
+async def coverage() -> Dict[str, Any]:
+    """What can be checked against an exact official figure right now.
+
+    Built from the metric registry and the configured keys, so it cannot
+    drift from what the engine actually does."""
+    from claims.metrics import all_metrics
+    from evidence.citation import agency_name
+    from services.verify_v2 import has_structured_adapter
+
+    specs = [s for s in all_metrics() if has_structured_adapter(s)]
+    groups: Dict[str, Any] = {}
+    for spec in specs:
+        if spec.parent:
+            continue
+        agency = groups.setdefault(spec.source, {
+            "source": spec.source, "agency": agency_name(spec.source), "metrics": []})
+        variants = [_GROUP_NAMES.get(v.metric[len(spec.metric) + 1:],
+                                     v.metric[len(spec.metric) + 1:].replace("_", " "))
+                    for v in specs if v.parent == spec.metric]
+        agency["metrics"].append({
+            "metric": spec.metric,
+            "label": spec.label,
+            "places": "U.S. and every state" if "state" in spec.geo_levels else "U.S.",
+            "groups": variants,
+        })
+    order = ["BLS", "BEA", "CENSUS", "TREASURY"]
+    agencies = sorted(groups.values(), key=lambda g: order.index(g["source"])
+                      if g["source"] in order else 99)
+    return {"agencies": agencies, "metric_count": sum(len(g["metrics"]) for g in agencies)}
 
 @app.get("/health")
 async def detailed_health_check():

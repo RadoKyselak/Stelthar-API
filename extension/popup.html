@@ -1,148 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Stelthar Verification</title>
-    <meta charset="UTF-8">
-    <style>
-        body { width: 360px; font-family:'Courier New', Courier, monospace; padding: 15px; background-color: #fdfaf3; color: #1a1a1a; margin: 0; }
-        #main-title { font-size: 22px; font-weight: bold; text-align: center; color: #333; margin-bottom: 4px; }
-        #subtitle { font-size: 11px; text-align: center; color: #888; margin-bottom: 12px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
-        .section { margin-bottom: 15px; border: 1px solid #e0e0e0; padding: 10px; border-radius: 5px; background-color: #fffaf0; }
-        .section-title { font-weight: bold; margin-bottom: 8px; font-size: 14px; color: #333; }
-        #claim-text { color: #555; font-size: 13px; margin-bottom: 10px; }
-        #manual-claim-input { width: 100%; min-height: 80px; box-sizing: border-box; resize: vertical; border: 1px solid #ccc; border-radius: 4px; padding: 8px; font-family: 'Courier New', Courier, monospace; font-size: 13px; }
-        #char-count { font-size: 11px; color: #999; text-align: right; margin-top: 2px; }
-        #char-count.over { color: #CC0000; font-weight: bold; }
-        #verifyBtn { margin-bottom: 8px; padding: 8px 12px; cursor: pointer; font-family: 'Courier New', Courier, monospace; background-color: #f0eadd; border: 2px solid #1a1a1a; color: #1a1a1a; width: 100%; font-size: 16px; font-weight: bold; }
-        #verifyBtn:hover:not(:disabled) { background-color: #e6e0cf; }
-        #verifyBtn:disabled { background-color: #ccc; cursor: not-allowed; }
-        #results-area { display: none; }
-        #verdict-text { font-weight: bold; font-size: 18px; margin-bottom: 5px; }
-        #verdict-text.supported { color: #008000; }
-        #verdict-text.contradicted { color: #CC0000; }
-        #verdict-text.inconclusive { color: #B8860B; }
-        #verdict-text.mostly-accurate { color: #4F7A00; }
-        #verdict-text.misleading { color: #D2691E; }
-        #verdict-text.no-verdict { color: #666; }
-        #verdict-text.degraded { color: #666; }
-        #search-suggestions { display: none; margin-top: 8px; }
-        #verdict-text.error { color: #CC0000; }
-        #confidence-text { font-size: 14px; color: #666; margin-bottom: 6px; }
-        #cached-badge { display: none; font-size: 11px; color: #888; margin-bottom: 6px; }
-        #cached-badge a { color: #0000EE; cursor: pointer; text-decoration: underline; }
-        #breakdown { margin: 8px 0; display: none; }
-        .bd-row { display: flex; align-items: center; margin-bottom: 4px; font-size: 11px; }
-        .bd-label { width: 110px; color: #555; }
-        .bd-bar-track { flex: 1; height: 8px; background: #e8e2d4; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; }
-        .bd-bar-fill { height: 100%; background: #007aff; width: 0; }
-        .bd-value { width: 38px; text-align: right; color: #555; }
-        #summary-text { font-size: 14px; line-height: 1.5; }
-        #evidence-links-list { list-style: none; padding-left: 0; margin-top: 10px; margin-bottom: 0; }
-        #evidence-links-list li { margin-bottom: 5px; }
-        #evidence-links-list a { color: #0000EE; text-decoration: none; font-size: 12px; }
-        #evidence-links-list a:hover { text-decoration: underline; }
-        /* --- lookup --- */
-        #lookup-input { width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; padding: 8px; font-family: 'Courier New', Courier, monospace; font-size: 13px; }
-        #lookup-hint { font-size: 11px; color: #999; margin-top: 4px; }
-        #lookup-result { display: none; margin-top: 10px; }
-        #lookup-value { font-size: 22px; font-weight: bold; color: #1a1a1a; }
-        #lookup-attribution { font-size: 12px; color: #666; margin-top: 2px; }
-        #lookup-caveat { font-size: 11px; color: #B8860B; margin-top: 6px; line-height: 1.4; }
-        #lookup-source-link { font-size: 11px; margin-top: 6px; }
-        #lookup-source-link a { color: #0000EE; }
-        .copy-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-        .copy-btn { flex: 1 1 auto; padding: 6px 8px; cursor: pointer; font-family: 'Courier New', Courier, monospace; font-size: 12px; background-color: #f0eadd; border: 1px solid #1a1a1a; border-radius: 3px; }
-        .copy-btn:hover { background-color: #e6e0cf; }
-        .copy-btn.copied { background-color: #d6efd6; border-color: #008000; }
-        #lookup-miss { display: none; margin-top: 10px; font-size: 12px; color: #555; line-height: 1.5; }
-        .sugg { display: inline-block; margin: 3px 4px 0 0; padding: 3px 6px; border: 1px dashed #888; border-radius: 3px; cursor: pointer; font-size: 11px; background: #f9f5ed; }
-        .sugg:hover { background: #efe8d8; }
-        details#sources-dropdown { margin-top: 15px; border: 1px dashed #888; border-radius: 4px; background-color: #f9f5ed; }
-        details#sources-dropdown summary { padding: 8px 10px; font-weight: bold; cursor: pointer; outline: none; font-size: 13px; }
-        #sources-list { list-style: none; padding: 0 10px 10px 25px; margin: 0; font-size: 12px; max-height: 200px; overflow-y: auto; border-top: 1px dashed #aaa; }
-        #sources-list li { margin-bottom: 10px; border-bottom: 1px dotted #ccc; padding-bottom: 8px; }
-        #sources-list li span.source-title { display: block; font-weight: bold; color: #1a1a1a; }
-        #sources-list li span.source-snippet { display: block; color: #555; margin-top: 3px; font-style: italic; }
-        #sources-list a { color: #0000EE; text-decoration: none; display: block; margin-top: 3px; word-break: break-all; }
-        #sources-list a:hover { text-decoration: underline; }
-        #loading-indicator { margin: 20px 0; display: flex; justify-content: center; align-items: center; height: 40px; }
-        .beacon-loader { position: relative; width: 40px; height: 40px; }
-        .beacon-ring { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 2px solid #007aff; border-radius: 50%; opacity: 0; animation: beacon-pulse 1.5s cubic-bezier(0.0, 0.0, 0.2, 1) infinite; }
-        .beacon-ring:nth-child(1) { animation-delay: 0s; }
-        .beacon-ring:nth-child(2) { animation-delay: 0.3s; }
-        .beacon-ring:nth-child(3) { animation-delay: 0.6s; }
-        .beacon-ring:nth-child(4) { animation-delay: 0.9s; }
-        @keyframes beacon-pulse { 0% { transform: scale(0.1); opacity: 0; } 50% { opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
-        #error-message { color: #CC0000; margin-top: 10px; font-weight: bold; border: 1px solid #CC0000; background-color: #ffeeee; padding: 8px; display: none; border-radius: 4px; font-size: 13px; }
-        details#history-dropdown { margin-top: 12px; border: 1px dashed #888; border-radius: 4px; background-color: #f9f5ed; }
-        details#history-dropdown summary { padding: 8px 10px; font-weight: bold; cursor: pointer; font-size: 13px; }
-        #history-list { list-style: none; padding: 0 10px 10px 10px; margin: 0; font-size: 12px; max-height: 180px; overflow-y: auto; border-top: 1px dashed #aaa; }
-        #history-list li { padding: 6px 4px; border-bottom: 1px dotted #ccc; cursor: pointer; }
-        #history-list li:hover { background: #f0eadd; }
-        .hist-verdict { font-weight: bold; font-size: 11px; }
-        .hist-verdict.supported { color: #008000; }
-        .hist-verdict.contradicted { color: #CC0000; }
-        .hist-verdict.inconclusive { color: #B8860B; }
-        .hist-verdict.mostly-accurate { color: #4F7A00; }
-        .hist-verdict.misleading { color: #D2691E; }
-        .hist-verdict.no-verdict { color: #666; }
-        .hist-claim { display: block; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        #shortcut-hint { font-size: 10px; color: #aaa; text-align: center; margin-top: 10px; }
-    </style>
+  <title>Project Mirador</title>
+  <meta charset="UTF-8">
+  <style>
+    :root { --bg:#fafaf9; --card:#ffffff; --ink:#121314; --muted:#6b6f76; --faint:#9a9ea5; --line:#e9e9e6;
+      --focus:#2563eb;
+      --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color-scheme: light dark; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0e0f10; --card:#161718; --ink:#f1f1f0; --muted:#a3a7ae; --faint:#71757c; --line:#2a2b2e; --focus:#8ab4ff; }
+    }
+    * { box-sizing: border-box; }
+    body { width: 380px; margin: 0; padding: 14px 16px 16px; background: var(--bg); color: var(--ink);
+      font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .top { display:flex; align-items:center; justify-content:space-between; margin-bottom: 14px; }
+    .brand { display:flex; align-items:center; gap:9px; font-weight: 750; font-size: 15px; letter-spacing: -0.01em; }
+    .brand img { width: 26px; height: 26px; border-radius: 7px; display:block; }
+    .web { font-size: 12.5px; color: var(--muted); text-decoration: none; }
+    .web:hover { color: var(--ink); }
+    .modes { display:inline-flex; gap:2px; padding:3px; border-radius:999px; background:var(--card);
+      border:1px solid var(--line); margin-bottom: 10px; }
+    .mode { font: 600 12.5px var(--sans); color: var(--muted); background:none; border:0; border-radius:999px;
+      padding: 5px 12px; cursor:pointer; }
+    .mode[aria-selected="true"] { background: var(--ink); color: var(--card); }
+    .ask { display:flex; align-items:flex-end; gap:6px; background:var(--card); border:1.5px solid var(--line);
+      border-radius:14px; padding:5px 5px 5px 13px; }
+    .ask:focus-within { border-color: var(--ink); }
+    textarea { flex:1; min-width:0; border:0; background:none; color:var(--ink); font: 15px/1.4 var(--sans);
+      padding: 8px 0; resize:none; height: 38px; max-height: 120px; }
+    textarea:focus { outline:none; }
+    textarea::placeholder { color: var(--faint); }
+    #go { flex:none; width:38px; height:38px; border-radius:10px; border:0; background:var(--ink); color:var(--card);
+      cursor:pointer; display:grid; place-items:center; }
+    #go:disabled { opacity:.35; cursor:default; }
+    #go svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+    .row { display:flex; justify-content:space-between; align-items:center; margin-top: 8px; }
+    .surprise { display:inline-flex; align-items:center; gap:6px; font: 600 12.5px var(--sans); color:var(--muted);
+      background:none; border:0; padding:2px; cursor:pointer; }
+    .surprise:hover { color: var(--ink); }
+    .surprise svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8; }
+    .surprise svg circle { fill: currentColor; stroke: none; }
+    .count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+    .count.over { color: #c4281c; font-weight: 600; }
+    #out { margin-top: 12px; }
+    #out:empty { display:none; }
+    #out > .mv { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
+    #out .mv-single .mv-n.mv-official { font-size: 34px; }
+    details.recent { margin-top: 12px; }
+    details.recent summary { cursor:pointer; list-style:none; font-size:12.5px; font-weight:600; color:var(--muted); }
+    details.recent summary::-webkit-details-marker { display:none; }
+    details.recent summary::after { content:" +"; color:var(--faint); }
+    details.recent[open] summary::after { content:" \2212"; }
+    #history { list-style:none; margin:6px 0 0; padding:0; }
+    #history li { display:flex; gap:8px; align-items:baseline; padding:6px 4px; border-radius:8px; cursor:pointer; }
+    #history li:hover { background: var(--card); }
+    .dot { width:8px; height:8px; border-radius:50%; flex:none; background:#9aa1ab; transform: translateY(-1px); }
+    .dot.supported { background:#12813a; } .dot.mostly-accurate { background:#8aa800; }
+    .dot.contradicted { background:#c4281c; } .dot.misleading { background:#d97706; }
+    .hclaim { min-width:0; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  </style>
 </head>
 <body>
-    <div id="main-title">Project Mirador</div>
-    <div id="subtitle">Fact-checking with official U.S. government data</div>
+  <header class="top">
+    <div class="brand"><img src="icons/icon48.png" alt="">Mirador</div>
+    <a class="web" href="https://stelthar-api.vercel.app/" target="_blank" rel="noopener">Web app ↗</a>
+  </header>
 
-    <div class="section">
-        <div class="section-title">Look up a figure</div>
-        <input id="lookup-input" type="text" placeholder="unemployment 2023" autocomplete="off" spellcheck="false">
-        <div id="lookup-hint">Or from any tab: type <b>mir</b>, Tab, then your query.</div>
-        <div id="lookup-result">
-            <div id="lookup-value"></div>
-            <div id="lookup-attribution"></div>
-            <div id="lookup-caveat"></div>
-            <div id="lookup-source-link"></div>
-            <div class="copy-row">
-                <button class="copy-btn" data-format="inline">Copy cited</button>
-                <button class="copy-btn" data-format="note">Copy footnote</button>
-                <button class="copy-btn" data-format="markdown">Copy MD</button>
-                <button class="copy-btn" data-format="value">Copy value</button>
-            </div>
-        </div>
-        <div id="lookup-miss"></div>
-    </div>
+  <div class="modes" role="tablist" aria-label="Mode">
+    <button class="mode" role="tab" id="mode-check" aria-selected="true">Check a claim</button>
+    <button class="mode" role="tab" id="mode-find" aria-selected="false">Find a number</button>
+  </div>
 
-    <div class="section">
-        <div class="section-title">Claim</div>
-        <div id="claim-text">Loading claim...</div>
-        <textarea id="manual-claim-input" placeholder="Paste or type a claim here, or highlight text on any page."></textarea>
-        <div id="char-count"></div>
-    </div>
-    <button id="verifyBtn">Verify Claim</button>
-    <div id="loading-indicator" style="display: none;"><div class="beacon-loader"><div class="beacon-ring"></div><div class="beacon-ring"></div><div class="beacon-ring"></div><div class="beacon-ring"></div></div></div>
-    <div id="results-area">
-        <div class="section">
-            <div id="verdict-text">VERDICT: ...</div>
-            <div id="confidence-text">CONFIDENCE: ...</div>
-            <div id="cached-badge">Cached result · <a id="recheck-link">re-check now</a></div>
-            <div id="breakdown">
-                <div class="bd-row"><span class="bd-label">Source reliability</span><div class="bd-bar-track"><div class="bd-bar-fill" id="bd-reliability"></div></div><span class="bd-value" id="bd-reliability-val"></span></div>
-                <div class="bd-row"><span class="bd-label">Evidence density</span><div class="bd-bar-track"><div class="bd-bar-fill" id="bd-density"></div></div><span class="bd-value" id="bd-density-val"></span></div>
-                <div class="bd-row"><span class="bd-label">Semantic match</span><div class="bd-bar-track"><div class="bd-bar-fill" id="bd-semantic"></div></div><span class="bd-value" id="bd-semantic-val"></span></div>
-            </div>
-            <div id="summary-text">Loading summary...</div>
-        </div>
-        <div class="section">
-            <div class="section-title">Evidence Links</div>
-            <ul id="evidence-links-list"></ul>
-        </div>
-        <div id="search-suggestions"></div>
-        <details id="sources-dropdown" style="display: none;"><summary>View All Sources Consulted</summary><ul id="sources-list"></ul></details>
-    </div>
-    <div id="error-message"></div>
-    <details id="history-dropdown" style="display: none;"><summary>Recent Checks</summary><ul id="history-list"></ul></details>
-    <div id="shortcut-hint">Tip: highlight text and press Ctrl+Shift+Y (⌘+Shift+Y on Mac)</div>
-    <script src="popup.js"></script>
+  <form id="form" class="ask" autocomplete="off">
+    <label for="q" hidden id="q-label">Claim to check</label>
+    <textarea id="q" rows="1" spellcheck="false" placeholder="Paste or type a claim with a number"></textarea>
+    <button id="go" type="submit" aria-label="Check">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+  </form>
+  <div class="row">
+    <button type="button" id="surprise" class="surprise">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/></svg>
+      Surprise me
+    </button>
+    <span id="count" class="count"></span>
+  </div>
+
+  <div id="out" aria-live="polite"></div>
+
+  <details class="recent" id="recent" hidden>
+    <summary>Recent checks</summary>
+    <ul id="history"></ul>
+  </details>
+
+  <script src="result-view.js"></script>
+  <script src="popup.js"></script>
 </body>
 </html>

@@ -97,7 +97,7 @@ async def search(claim: str, hint: str = "", *, client_ip: Optional[str] = None,
                  names_a_metric: bool = False) -> GroundedAnswer:
     provider = config.AI_SEARCH_PROVIDER
     if provider not in ("claude", "gemini"):
-        return GroundedAnswer(ok=False, error="AI search is turned off", model_calls=0, skipped=True)
+        return GroundedAnswer(ok=False, error="AI search is turned off.", model_calls=0, skipped=True)
 
     why_not = gate(claim, names_a_metric)
     if why_not:

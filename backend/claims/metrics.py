@@ -229,14 +229,14 @@ _SPECS: List[MetricSpec] = [
 
     # ---- Prices (BLS) -----------------------------------------------------
     MetricSpec(
-        metric="inflation_rate", label="CPI-U inflation rate (year over year)",
+        metric="inflation_rate", label="CPI-U inflation rate",
         source="BLS", family=PERCENT, series_id="CUUR0000SA0", bls_kind="cpi_yoy",
         phrases=("inflation rate", "inflation", "consumer price inflation",
                  "cpi inflation", "rate of inflation", "consumer prices"),
         notes="Computed from the CPI-U all-items index, not seasonally adjusted.",
     ),
     MetricSpec(
-        metric="core_inflation_rate", label="Core CPI inflation rate (year over year)",
+        metric="core_inflation_rate", label="Core CPI inflation rate",
         source="BLS", family=PERCENT, series_id="CUUR0000SA0L1E", bls_kind="cpi_yoy",
         phrases=("core inflation rate", "core inflation", "core cpi",
                  "inflation excluding food and energy"),
@@ -247,7 +247,7 @@ _SPECS: List[MetricSpec] = [
         phrases=("consumer price index", "cpi index", "cpi level"),
     ),
     MetricSpec(
-        metric="producer_price_inflation", label="PPI final demand (year over year)",
+        metric="producer_price_inflation", label="PPI final demand inflation rate",
         source="BLS", family=PERCENT, series_id="WPUFD4", bls_kind="cpi_yoy",
         phrases=("producer price inflation", "producer prices", "ppi", "wholesale inflation"),
     ),
@@ -387,7 +387,7 @@ _SPECS: List[MetricSpec] = [
                  "typical home value", "house prices"),
     ),
     MetricSpec(
-        metric="bachelors_or_higher", label="Bachelor's degree or higher",
+        metric="bachelors_or_higher", label="Bachelor's degree or higher, ages 25 and over",
         source="CENSUS", family=PERCENT, census_variable="S1501_C02_015E",
         census_dataset="acs/acs1/subject", min_year=2015,
         geo_levels=("nation", "state"),

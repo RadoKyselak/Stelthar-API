@@ -1,445 +1,166 @@
+// Project Mirador popup: check a claim or find a number. Results are drawn by
+// result-view.js, the same renderer the in-page panel and the web app use.
 const MAX_CLAIM_LEN = 600;
-
-let lastStoredClaim = "";
-let currentClaim = "";
+const AI_CHAR_LIMIT = 300;
+const View = window.MiradorView;
 
 document.addEventListener("DOMContentLoaded", () => {
-    const claimTextEl = document.getElementById("claim-text");
-    const manualClaimInputEl = document.getElementById("manual-claim-input");
-    const charCountEl = document.getElementById("char-count");
-    const verifyBtn = document.getElementById("verifyBtn");
-    const loadingIndicator = document.getElementById("loading-indicator");
-    const resultsArea = document.getElementById("results-area");
-    const verdictTextEl = document.getElementById("verdict-text");
-    const confidenceTextEl = document.getElementById("confidence-text");
-    const cachedBadgeEl = document.getElementById("cached-badge");
-    const recheckLink = document.getElementById("recheck-link");
-    const breakdownEl = document.getElementById("breakdown");
-    const summaryTextEl = document.getElementById("summary-text");
-    const evidenceLinksListEl = document.getElementById("evidence-links-list");
-    const sourcesDropdown = document.getElementById("sources-dropdown");
-    const sourcesListEl = document.getElementById("sources-list");
-    const errorMessageEl = document.getElementById("error-message");
-    const historyDropdown = document.getElementById("history-dropdown");
-    const historyListEl = document.getElementById("history-list");
+  const style = document.createElement("style");
+  style.textContent = View.css;
+  document.head.appendChild(style);
 
-    const clearResults = () => {
-        resultsArea.style.display = "none";
-        sourcesDropdown.style.display = "none";
-        sourcesDropdown.open = false;
-        cachedBadgeEl.style.display = "none";
-        breakdownEl.style.display = "none";
-        errorMessageEl.style.display = "none";
-        errorMessageEl.textContent = "";
-        verdictTextEl.textContent = "VERDICT: ...";
-        verdictTextEl.className = "";
-        confidenceTextEl.textContent = "CONFIDENCE: ...";
-        summaryTextEl.textContent = "Loading summary...";
-        renderSearchSuggestions("");
-        evidenceLinksListEl.innerHTML = "";
-        sourcesListEl.innerHTML = "";
-    };
-
-    const formatConfidence = (conf) => {
-        if (conf === null || conf === undefined) return "N/A";
-
-        if (typeof conf === "number") {
-            const value = conf > 0 && conf <= 1 ? conf * 100 : conf;
-            return `${Math.round(value)}%`;
-        }
-
-        if (typeof conf === "string") {
-            const s = conf.trim();
-            if (s.endsWith("%")) return s;
-
-            const num = Number(s.replace(",", ""));
-            if (Number.isNaN(num)) return s;
-
-            const value = num > 0 && num <= 1 ? num * 100 : num;
-            return `${Math.round(value)}%`;
-        }
-
-        return String(conf);
-    };
-
-    const getClaimToVerify = () => {
-        const manualClaim = manualClaimInputEl.value.trim();
-        return manualClaim || lastStoredClaim;
-    };
-
-    const updateCharCount = () => {
-        const len = manualClaimInputEl.value.trim().length;
-        if (!len) {
-            charCountEl.textContent = "";
-            charCountEl.className = "";
-            return;
-        }
-        charCountEl.textContent = `${len} / ${MAX_CLAIM_LEN}`;
-        charCountEl.className = len > MAX_CLAIM_LEN ? "over" : "";
-    };
-
-    const setVerifyButtonState = () => {
-        const claim = getClaimToVerify();
-        verifyBtn.disabled = !claim || claim.length > MAX_CLAIM_LEN;
-    };
-
-    const setBreakdownBar = (id, value) => {
-        const fill = document.getElementById(id);
-        const label = document.getElementById(`${id}-val`);
-        const pct = Math.max(0, Math.min(100, Math.round((value ?? 0) * 100)));
-        fill.style.width = `${pct}%`;
-        label.textContent = `${pct}%`;
-    };
-
-    // The v2 engine reports Supported / Mostly accurate / Contradicted / Misleading / No verdict
-    // in `verdict_detail`; `verdict` keeps the old three values for old builds.
-    const verdictOf = (r) => r.verdict_detail || r.verdict || "Inconclusive";
-    const verdictClass = (v) => v.toLowerCase().replace(/\s+/g, "-");
-
-    const confidenceLine = (r) => {
-        if (r.engine === "v2") {
-            if (verdictOf(r) === "No verdict") return "CONFIDENCE: —";
-            // A tier is what the engine actually knows; the percentage only
-            // exists for the old popup.
-            return `CONFIDENCE: ${(r.confidence_tier || "Low").toUpperCase()}`;
-        }
-        const tier = r.confidence_tier ? ` (${r.confidence_tier})` : "";
-        return `CONFIDENCE: ${formatConfidence(r.confidence)}${tier}`;
-    };
-
-    // Google Search grounding requires showing its search-suggestion chips
-    // wherever grounded citations are shown. Rendered inside a shadow root so
-    // Google's inline styles cannot leak into ours.
-    const renderSearchSuggestions = (html) => {
-        let host = document.getElementById("search-suggestions");
-        if (!host) return;
-        host.style.display = html ? "block" : "none";
-        if (!html) return;
-        const root = host.shadowRoot || host.attachShadow({ mode: "open" });
-        root.innerHTML = html;
-        root.querySelectorAll("a").forEach((a) => {
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-        });
-    };
-
-    const renderResult = (jsonResp) => {
-        loadingIndicator.style.display = "none";
-        resultsArea.style.display = "block";
-        setVerifyButtonState();
-
-        const verdictRaw = verdictOf(jsonResp);
-        verdictTextEl.textContent = jsonResp.degraded
-            ? "VERDICT: COULDN'T CHECK"
-            : `VERDICT: ${verdictRaw.toUpperCase()}`;
-        verdictTextEl.className = jsonResp.degraded ? "degraded" : verdictClass(verdictRaw);
-
-        confidenceTextEl.textContent = jsonResp.degraded
-            ? "This is an outage on our side, not a judgment about the claim."
-            : confidenceLine(jsonResp);
-
-        renderSearchSuggestions(jsonResp.search_suggestions_html || "");
-
-        cachedBadgeEl.style.display = jsonResp._cached ? "block" : "none";
-
-        const bd = jsonResp.confidence_breakdown;
-        if (bd && typeof bd === "object") {
-            breakdownEl.style.display = "block";
-            setBreakdownBar("bd-reliability", bd.source_reliability);
-            setBreakdownBar("bd-density", bd.evidence_density);
-            setBreakdownBar("bd-semantic", bd.semantic_alignment);
-        }
-
-        summaryTextEl.textContent = jsonResp.summary || "No summary provided.";
-
-        evidenceLinksListEl.innerHTML = "";
-        if (jsonResp.evidence_links?.length) {
-            jsonResp.evidence_links.forEach((link) => {
-                const li = document.createElement("li");
-                const a = document.createElement("a");
-                a.href = link.source_url;
-                a.textContent = link.finding;
-                a.target = "_blank";
-                a.rel = "noopener noreferrer";
-                li.appendChild(a);
-                evidenceLinksListEl.appendChild(li);
-            });
-        } else {
-            evidenceLinksListEl.innerHTML = "<li>No evidence links provided.</li>";
-        }
-
-        sourcesListEl.innerHTML = "";
-        if (jsonResp.sources?.length) {
-            sourcesDropdown.style.display = "block";
-            jsonResp.sources.forEach((source) => {
-                const li = document.createElement("li");
-                const titleSpan = document.createElement("span");
-                titleSpan.className = "source-title";
-                titleSpan.textContent = source.title;
-                li.appendChild(titleSpan);
-
-                if (source.snippet) {
-                    const snippetSpan = document.createElement("span");
-                    snippetSpan.className = "source-snippet";
-                    snippetSpan.textContent = `"${source.snippet}"`;
-                    li.appendChild(snippetSpan);
-                }
-
-                const a = document.createElement("a");
-                a.href = source.url;
-                a.textContent = source.url;
-                a.target = "_blank";
-                a.rel = "noopener noreferrer";
-                li.appendChild(a);
-
-                sourcesListEl.appendChild(li);
-            });
-        }
-    };
-
-    const runVerification = (claim, { bypassCache = false } = {}) => {
-        clearResults();
-        verifyBtn.disabled = true;
-        loadingIndicator.style.display = "flex";
-        currentClaim = claim;
-
-        chrome.storage.local.set({ stelthar_last_claim: claim });
-        lastStoredClaim = claim;
-
-        chrome.runtime.sendMessage({ type: "verifyClaim", claim, bypassCache }, (resp) => {
-            loadingIndicator.style.display = "none";
-            setVerifyButtonState();
-
-            if (chrome.runtime.lastError || !resp) {
-                errorMessageEl.textContent = "Error: could not reach the extension background service. Try reloading the extension.";
-                errorMessageEl.style.display = "block";
-                return;
-            }
-            if (!resp.ok) {
-                errorMessageEl.textContent = `Error: ${resp.error}`;
-                errorMessageEl.style.display = "block";
-                return;
-            }
-
-            renderResult(resp.result);
-            loadHistory();
-        });
-    };
-
-    const loadHistory = () => {
-        chrome.storage.local.get(["stelthar_history"], (data) => {
-            const history = data.stelthar_history || [];
-            if (!history.length) {
-                historyDropdown.style.display = "none";
-                return;
-            }
-            historyDropdown.style.display = "block";
-            historyListEl.innerHTML = "";
-            history.forEach((entry) => {
-                const li = document.createElement("li");
-                const verdictSpan = document.createElement("span");
-                const verdictRaw = (entry.verdict || "inconclusive").toLowerCase();
-                verdictSpan.className = `hist-verdict ${verdictRaw.replace(/\s+/g, "-")}`;
-                // "No verdict" is no judgment at all; "0%" would read as "almost
-                // certainly false".
-                const conf = verdictRaw === "no verdict"
-                    ? "—"
-                    : (entry.confidence_tier || formatConfidence(entry.confidence));
-                verdictSpan.textContent = `${verdictRaw.toUpperCase()} · ${conf}`;
-                const claimSpan = document.createElement("span");
-                claimSpan.className = "hist-claim";
-                claimSpan.textContent = entry.claim;
-                li.appendChild(verdictSpan);
-                li.appendChild(claimSpan);
-                li.title = "Click to re-run this check";
-                li.onclick = () => {
-                    manualClaimInputEl.value = entry.claim;
-                    updateCharCount();
-                    runVerification(entry.claim);
-                };
-                historyListEl.appendChild(li);
-            });
-        });
-    };
-
-    chrome.storage.local.get(["stelthar_last_claim"], (data) => {
-        const storedClaim = (data.stelthar_last_claim || "").trim();
-        lastStoredClaim = storedClaim;
-
-        if (storedClaim) {
-            claimTextEl.textContent = `Highlighted claim: "${storedClaim}"`;
-            manualClaimInputEl.value = storedClaim;
-        } else {
-            claimTextEl.textContent = "No highlighted claim detected. Paste text below to verify directly.";
-        }
-
-        updateCharCount();
-        setVerifyButtonState();
-    });
-
-    manualClaimInputEl.addEventListener("input", () => {
-        updateCharCount();
-        setVerifyButtonState();
-    });
-
-    recheckLink.addEventListener("click", () => {
-        if (currentClaim) runVerification(currentClaim, { bypassCache: true });
-    });
-
-    verifyBtn.onclick = () => {
-        const claim = getClaimToVerify();
-
-        if (!claim) {
-            errorMessageEl.textContent = "No claim found. Highlight text or paste one into the box.";
-            errorMessageEl.style.display = "block";
-            return;
-        }
-        if (claim.length > MAX_CLAIM_LEN) {
-            errorMessageEl.textContent = `Claim is too long (${claim.length} chars). Keep it under ${MAX_CLAIM_LEN} characters for accurate verification.`;
-            errorMessageEl.style.display = "block";
-            return;
-        }
-
-        runVerification(claim);
-    };
-
-    loadHistory();
-});
-
-// ===========================================================================
-// Lookup panel
-//
-// The popup is the discoverable surface; the omnibox is the fast one. Both
-// hit the same endpoint. Copying happens here rather than via the offscreen
-// document because a button click is a real user gesture, so the async
-// Clipboard API works directly and can carry both flavours.
-// ===========================================================================
-document.addEventListener("DOMContentLoaded", () => {
-  const input = document.getElementById("lookup-input");
-  const resultEl = document.getElementById("lookup-result");
-  const valueEl = document.getElementById("lookup-value");
-  const attrEl = document.getElementById("lookup-attribution");
-  const caveatEl = document.getElementById("lookup-caveat");
-  const linkEl = document.getElementById("lookup-source-link");
-  const missEl = document.getElementById("lookup-miss");
-  const buttons = Array.from(document.querySelectorAll(".copy-btn"));
-  if (!input) return;
-
-  let current = null;
+  const $ = (id) => document.getElementById(id);
+  const form = $("form");
+  const q = $("q");
+  const go = $("go");
+  const out = $("out");
+  const count = $("count");
+  const MODES = {
+    check: { tab: $("mode-check"), label: "Claim to check", button: "Check",
+      placeholder: "Paste or type a claim with a number" },
+    find: { tab: $("mode-find"), label: "Number to find", button: "Find",
+      placeholder: "unemployment rate texas 2023" },
+  };
+  let mode = "check";
+  let ticket = 0;
   let debounce = null;
+  let lastSurprise = "";
+  const drafts = { check: "", find: "" };
 
-  const hideAll = () => {
-    resultEl.style.display = "none";
-    missEl.style.display = "none";
+  const autosize = () => {
+    q.style.height = "38px";
+    q.style.height = `${Math.min(q.scrollHeight, 120)}px`;
   };
 
-  const showMiss = (result) => {
-    current = null;
-    resultEl.style.display = "none";
-    missEl.style.display = "block";
-    missEl.textContent = result.headline || "No match.";
-    (result.suggestions || []).slice(0, 5).forEach((s) => {
-      const chip = document.createElement("span");
-      chip.className = "sugg";
-      chip.textContent = s.example;
-      chip.addEventListener("click", () => {
-        input.value = s.example;
-        run(s.example);
-      });
-      missEl.appendChild(chip);
-    });
+  const sync = () => {
+    const n = q.value.trim().length;
+    go.disabled = n < 2 || (mode === "check" && n > MAX_CLAIM_LEN);
+    count.textContent = mode === "check" && n > AI_CHAR_LIMIT * 0.8 ? `${n} / ${AI_CHAR_LIMIT}` : "";
+    count.classList.toggle("over", n > AI_CHAR_LIMIT);
+    autosize();
   };
 
-  const showHit = (result) => {
-    current = result;
-    missEl.style.display = "none";
-    resultEl.style.display = "block";
-    const c = result.citations || {};
-    valueEl.textContent = c.value || result.value || "";
-    attrEl.textContent = c.attribution || "";
-    // A figure the agency did not publish, standing in for one it did, has to
-    // say so where the writer will actually read it.
-    caveatEl.textContent = c.caveat ? `Note: ${c.caveat}` : "";
-    linkEl.innerHTML = "";
-    if (c.url) {
-      const a = document.createElement("a");
-      a.href = c.url;
-      a.target = "_blank";
-      a.rel = "noopener";
-      a.textContent = "View the source series";
-      linkEl.appendChild(a);
-    }
-    buttons.forEach((b) => {
-      b.classList.remove("copied");
-      b.textContent = b.dataset.label || b.textContent;
-    });
+  const setMode = (next) => {
+    drafts[mode] = q.value;
+    mode = next;
+    Object.entries(MODES).forEach(([k, m]) => m.tab.setAttribute("aria-selected", String(k === next)));
+    q.placeholder = MODES[next].placeholder;
+    $("q-label").textContent = MODES[next].label;
+    go.setAttribute("aria-label", MODES[next].button);
+    q.value = drafts[next];
+    out.replaceChildren();
+    sync();
+    q.focus();
+    chrome.storage.local.set({ stelthar_popup_mode: next });
   };
 
-  async function run(query) {
-    if (!query || query.trim().length < 2) {
-      hideAll();
-      return;
-    }
-    try {
-      const reply = await chrome.runtime.sendMessage({ type: "lookup", query: query.trim() });
-      if (!reply || !reply.ok) {
-        showMiss({ headline: `Lookup failed: ${(reply && reply.error) || "unknown error"}` });
+  // ------------------------------------------------------------- check
+  const check = (claim, { bypassCache = false } = {}) => {
+    claim = (claim || "").trim();
+    if (!claim) return;
+    const mine = ++ticket;
+    go.disabled = true;
+    out.replaceChildren(View.loading());
+    chrome.storage.local.set({ stelthar_last_claim: claim });
+    chrome.runtime.sendMessage({ type: "verifyClaim", claim, bypassCache }, (resp) => {
+      if (mine !== ticket) return;
+      sync();
+      if (chrome.runtime.lastError || !resp) {
+        out.replaceChildren(View.error("The extension did not answer. Try reloading it.",
+          { onRetry: () => check(claim, { bypassCache: true }) }));
         return;
       }
-      const result = reply.result;
-      if (result.ok) showHit(result);
-      else showMiss(result);
-    } catch (e) {
-      showMiss({ headline: `Lookup failed: ${e.message}` });
-    }
-  }
-
-  input.addEventListener("input", () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => run(input.value), 260);
-  });
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      clearTimeout(debounce);
-      run(input.value);
-    }
-  });
-
-  async function copy(plain, html) {
-    try {
-      if (html && window.ClipboardItem) {
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            "text/plain": new Blob([plain], { type: "text/plain" }),
-            "text/html": new Blob([html], { type: "text/html" }),
-          }),
-        ]);
-        return true;
+      if (!resp.ok) {
+        out.replaceChildren(View.error(resp.error, { onRetry: () => check(claim, { bypassCache: true }) }));
+        return;
       }
-      await navigator.clipboard.writeText(plain);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  buttons.forEach((btn) => {
-    btn.dataset.label = btn.textContent;
-    btn.addEventListener("click", async () => {
-      if (!current) return;
-      const c = current.citations || {};
-      const format = btn.dataset.format;
-      const plain = c[format] || c.inline || "";
-      // Only the inline form has a rich equivalent; a footnote pastes as text.
-      const ok = await copy(plain, format === "inline" ? c.html : "");
-      btn.classList.toggle("copied", ok);
-      btn.textContent = ok ? "Copied" : "Copy failed";
-      setTimeout(() => {
-        btn.classList.remove("copied");
-        btn.textContent = btn.dataset.label;
-      }, 1400);
+      out.replaceChildren(View.render(resp.result, {
+        cached: !!resp.result._cached,
+        onRecheck: () => check(claim, { bypassCache: true }),
+      }));
+      loadHistory();
     });
-  });
+  };
 
-  input.focus();
+  // -------------------------------------------------------------- find
+  const find = async (query) => {
+    query = (query || "").trim();
+    const mine = ++ticket;
+    if (query.length < 2) { out.replaceChildren(); return; }
+    try {
+      const reply = await chrome.runtime.sendMessage({ type: "lookup", query });
+      if (mine !== ticket) return;
+      if (!reply || !reply.ok) {
+        out.replaceChildren(View.error((reply && reply.error) || "Lookup failed."));
+        return;
+      }
+      out.replaceChildren(View.renderLookup(reply.result, {
+        onSuggest: (s) => { q.value = s; sync(); find(s); },
+      }));
+    } catch (e) {
+      if (mine === ticket) out.replaceChildren(View.error(e.message));
+    }
+  };
+
+  const run = (text) => (mode === "check" ? check(text) : find(text));
+
+  const surprise = () => {
+    const text = View.pick(mode === "check" ? View.examples.claims : View.examples.lookups, lastSurprise);
+    lastSurprise = text;
+    q.value = text;
+    sync();
+    run(text);
+  };
+
+  // ------------------------------------------------------------ recent
+  const loadHistory = () => {
+    chrome.storage.local.get(["stelthar_history"], (data) => {
+      const history = data.stelthar_history || [];
+      $("recent").hidden = !history.length;
+      $("history").replaceChildren(...history.map((entry) => {
+        const label = entry.verdict === "Inconclusive" ? "No verdict" : (entry.verdict || "No verdict");
+        const li = document.createElement("li");
+        li.tabIndex = 0;
+        li.title = `${label}: show this check again`;
+        const dot = document.createElement("span");
+        dot.className = `dot ${View.verdictKey(label)}`;
+        const c = document.createElement("span");
+        c.className = "hclaim";
+        c.textContent = entry.claim;
+        li.append(dot, c);
+        const open = () => {
+          if (mode !== "check") setMode("check");
+          q.value = entry.claim;
+          sync();
+          check(entry.claim);
+        };
+        li.addEventListener("click", open);
+        li.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
+        return li;
+      }));
+    });
+  };
+
+  // ------------------------------------------------------------ wiring
+  form.addEventListener("submit", (e) => { e.preventDefault(); run(q.value); });
+  q.addEventListener("input", () => {
+    sync();
+    if (mode === "find") {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => find(q.value), 260);
+    }
+  });
+  q.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); run(q.value); }
+  });
+  MODES.check.tab.addEventListener("click", () => mode !== "check" && setMode("check"));
+  MODES.find.tab.addEventListener("click", () => mode !== "find" && setMode("find"));
+  $("surprise").addEventListener("click", surprise);
+
+  chrome.storage.local.get(["stelthar_last_claim", "stelthar_popup_mode"], (data) => {
+    drafts.check = (data.stelthar_last_claim || "").trim();
+    if (data.stelthar_popup_mode === "find") setMode("find");
+    else { q.value = drafts.check; sync(); q.focus(); q.select(); }
+  });
+  loadHistory();
 });

@@ -30,6 +30,7 @@ from claims.parser import ParsedClaim, parse_claim
 from claims.verdict import (
     ALTERNATE_MEASURE, GEOGRAPHY_UNSUPPORTED, HIGH, LOW, MEDIUM, MISLEADING, MOSTLY_ACCURATE,
     NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, Verdict, assess,
+    _phrase_for,
 )
 import config
 from config import logger
@@ -70,6 +71,12 @@ class VerificationV2:
     # Required by the Gemini grounding Terms of Service when citations are shown.
     search_suggestions_html: Optional[str] = None
     notes: List[str] = field(default_factory=list)
+    # One entry per figure compared: the claim's number beside the official
+    # one, with period, place and the size of any gap. Two for a two-point claim.
+    points: List[Dict[str, Any]] = field(default_factory=list)
+    # Web-search answers: the figure the search reported, kept apart from the
+    # explanation so a client can show each once.
+    reported: Dict[str, str] = field(default_factory=dict)
 
 
 async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
@@ -296,6 +303,8 @@ def _grounded_to_result(
         parsed=_parsed_summary(parsed),
         search_suggestions_html=g.search_suggestions_html or None,
         notes=[f"search queries: {', '.join(g.search_queries)}"] if g.search_queries else [],
+        reported={"value": g.official_value or "", "period": g.period or "",
+                  "source_org": g.source_org or "", "explanation": g.explanation or ""},
     )
 
 
@@ -311,6 +320,30 @@ def _parsed_summary(parsed: ParsedClaim) -> Dict[str, Any]:
         "claimed_value": parsed.claimed_value.magnitude if parsed.claimed_value else None,
         "comparator": parsed.comparator,
         "is_trend_claim": parsed.is_trend_claim,
+    }
+
+
+def _point(v: Verdict, label: Optional[str] = None) -> Dict[str, Any]:
+    """The claim's figure beside the official one, for display."""
+    from evidence.citation import clean_basis, render as render_citation, when
+    dp = v.evidence[0]
+    phrase = _phrase_for(v.comparator)
+    claim = f"{phrase} {v.claimed_display}".strip() if v.claimed_display else ""
+    cite = render_citation(dp)
+    return {
+        "label": label,
+        "verdict": v.verdict,
+        "claim": claim,
+        "official": dp.display_value(),
+        "period": when(dp.observed),
+        "basis": clean_basis(dp.observed.basis or ""),
+        "place": dp.geography.name,
+        "source": dp.source,
+        "gap": v.gap_display,
+        "comparator": v.comparator,
+        "citation": cite["note"],
+        "citation_inline": cite["inline"],
+        "url": cite["url"],
     }
 
 
@@ -333,6 +366,7 @@ def _verdict_to_result(
         model_calls=0,
         elapsed_seconds=round(time.monotonic() - started, 2),
         parsed=_parsed_summary(parsed),
+        points=[_point(v)] if v.evidence else [],
     )
 
 
@@ -403,6 +437,7 @@ async def _verify_two_points(text: str, parsed: ParsedClaim, started: float) -> 
         elapsed_seconds=round(time.monotonic() - started, 2),
         parsed=_parsed_summary(parsed),
         notes=["two-point claim: each value checked against its own year"],
+        points=[_point(v, str(y)) for y, v in zip(parsed.all_years, verdicts) if v.evidence],
     )
 
 
@@ -509,12 +544,12 @@ async def verify(claim: str, allow_grounding: bool = True,
     if structured_ran and parsed.metric is not None:
         unresolved_reason = PERIOD_UNAVAILABLE
         unresolved_headline = (
-            f"{parsed.metric.label} is a wired-up series, but no figure is "
-            f"published for {parsed.year or 'the requested period'} yet."
+            f"No official {parsed.metric.label.lower()} figure is published for "
+            f"{parsed.year or 'that period'} yet."
         )
     else:
         unresolved_reason = blocked or NO_SERIES
-        unresolved_headline = "No wired-up official series covers this claim."
+        unresolved_headline = "None of the official data series we check covers this claim."
 
     if not allow_grounding:
         return VerificationV2(
@@ -573,4 +608,7 @@ async def verify(claim: str, allow_grounding: bool = True,
 
 
 def to_response_dict(v: VerificationV2) -> Dict[str, Any]:
-    return asdict(v)
+    from services.presentation import build_display
+    out = asdict(v)
+    out["display"] = build_display(v)
+    return out
