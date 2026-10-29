@@ -17,30 +17,30 @@
     :host { all: initial; }
     .trigger {
       position: absolute; display: inline-flex; align-items: center; gap: 6px; height: 30px;
-      padding: 0 10px 0 6px; border: 0; border-radius: 4px; cursor: pointer; user-select: none;
-      background: #ffffff; color: #005ea2; box-shadow: inset 0 0 0 2px #005ea2, 0 2px 6px rgba(0,0,0,.18);
-      font: 700 14px/1 "Public Sans", "Source Sans Pro", "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif;
+      padding: 0 10px 0 7px; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer; user-select: none;
+      background: #ffffff; color: #111827; box-shadow: 0 4px 12px rgba(17,24,39,.12);
+      font: 600 13px/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     }
-    .trigger:hover { color: #1a4480; box-shadow: inset 0 0 0 2px #1a4480, 0 2px 6px rgba(0,0,0,.18); }
-    .trigger:focus { outline: 4px solid #2491ff; outline-offset: 0; }
-    .trigger img { width: 18px; height: 18px; display: block; flex: none; }
+    .trigger:hover { border-color: #d1d5db; background: #f9fafb; }
+    .trigger:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+    .trigger img { width: 18px; height: 18px; border-radius: 4px; display: block; flex: none; }
     .card {
       position: absolute; width: ${CARD_WIDTH}px; max-width: calc(100vw - 16px);
       max-height: min(70vh, 560px); overflow: auto; overscroll-behavior: contain;
-      padding: 16px; border-radius: 4px; background: #ffffff; border: 1px solid #a9aeb1;
-      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+      padding: 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e5e7eb;
+      box-shadow: 0 12px 32px rgba(17,24,39,.14), 0 2px 6px rgba(17,24,39,.06);
     }
-    .close { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; display: grid; place-items: center;
-      border: 0; border-radius: 4px; background: none; color: #565c65; cursor: pointer; padding: 0; }
-    .close:hover { color: #1b1b1b; background: #f0f0f0; }
-    .close:focus { outline: 4px solid #2491ff; outline-offset: 0; }
-    .close svg { width: 14px; height: 14px; }
-    .card .mv-alert { margin-right: 28px; }
+    .close { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; display: grid; place-items: center;
+      border: 0; border-radius: 6px; background: none; color: #6b7280; cursor: pointer; padding: 0; }
+    .close:hover { color: #111827; background: #f3f4f6; }
+    .close:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+    .close svg { width: 12px; height: 12px; }
     @media (prefers-color-scheme: dark) {
-      .trigger { background: #1b1b1b; color: #73b3e7; box-shadow: inset 0 0 0 2px #73b3e7, 0 2px 6px rgba(0,0,0,.5); }
-      .card { background: #1b1b1b; border-color: #565c65; box-shadow: 0 4px 16px rgba(0,0,0,.6); }
-      .close { color: #a9aeb1; }
-      .close:hover { color: #f0f0f0; background: #2d2e2f; }
+      .trigger { background: #17181b; color: #f3f4f6; border-color: #2b2f36; box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+      .trigger:hover { background: #1d1f23; border-color: #3a3f47; }
+      .card { background: #17181b; border-color: #2b2f36; box-shadow: 0 12px 32px rgba(0,0,0,.55); }
+      .close { color: #9ca3af; }
+      .close:hover { color: #f3f4f6; background: #24262b; }
     }
   `;
 

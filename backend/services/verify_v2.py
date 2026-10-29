@@ -563,6 +563,13 @@ async def verify(claim: str, allow_grounding: bool = True,
             parsed=_parsed_summary(parsed),
         )
 
+    # Before any web search: look for the figure in a government dataset.
+    # Costs one small model call at most, often nothing (cached picks).
+    from services import dataset_tier
+    ds = await dataset_tier.verify(text, parsed, client_ip, started)
+    if ds is not None:
+        return ds
+
     hint = ""
     if parsed.structured_blocker and parsed.metric is not None:
         hint = (

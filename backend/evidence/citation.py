@@ -50,6 +50,7 @@ _AGENCY_NAMES = {
     "TREASURY": "U.S. Department of the Treasury, Fiscal Data",
     "USASPENDING": "USAspending.gov",
     "CONGRESS": "U.S. Congress, Congress.gov",
+    "FRED": "Federal Reserve Bank of St. Louis",
 }
 
 # How an agency is referred to mid-sentence, where the full legal name would
@@ -61,6 +62,7 @@ _AGENCY_SHORT = {
     "TREASURY": "Treasury",
     "USASPENDING": "USAspending",
     "CONGRESS": "Congress.gov",
+    "FRED": "FRED",
 }
 
 _MONTHS = (
@@ -151,6 +153,8 @@ def dataset_name(source: str, series_id: Optional[str], basis: str = "") -> str:
     if source == "CENSUS":
         return "American Community Survey 1-year estimates" if "1-year" in (basis or "") \
             else "American Community Survey"
+    if source == "FRED":
+        return "FRED"
     if source == "TREASURY":
         if sid == "DEBT_TO_PENNY":
             return "Debt to the Penny"
@@ -230,9 +234,13 @@ def render(dp: Datapoint, accessed: Optional[date] = None) -> Dict[str, str]:
     # U.S. Bureau of Labor Statistics, "Unemployment rate," Local Area
     # Unemployment Statistics, series LAUST480000000000003, Texas, 2023
     # (annual average): 4.0%. https://... (accessed October 28, 2026).
-    head = [f'{agency_name(dp.source)}, "{dp.label},"']
+    # FRED's recommended form names the original publisher, then FRED.
+    publisher = (dp.extra or {}).get("original_source") if dp.source == "FRED" else ""
+    head = [f'{publisher or agency_name(dp.source)}, "{dp.label},"']
+    if dp.source == "FRED":
+        head.append("retrieved from FRED, Federal Reserve Bank of St. Louis,")
     ident = identifier(dp.source, dp.series_id, table=(dp.extra or {}).get("table"), as_of=dp.as_of)
-    for part in (dataset_name(dp.source, dp.series_id, basis), ident,
+    for part in ("" if dp.source == "FRED" else dataset_name(dp.source, dp.series_id, basis), ident,
                  dp.geography.name if dp.geography else ""):
         if part:
             head.append(f"{part},")

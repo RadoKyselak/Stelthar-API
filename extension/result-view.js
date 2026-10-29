@@ -5,11 +5,10 @@
  * draws the API's `display` block (a claim check) or a lookup result (one
  * official figure).
  *
- * Visual language follows the U.S. Web Design System's plain conventions:
- * system sans-serif type, high contrast, square corners, underlined links,
- * alert boxes with a colored left border for status. It deliberately uses
- * nothing that would suggest an official government product (no banner,
- * seal or flag): this is an independent tool that cites government data.
+ * Visual language: plain and modern. System type, one accent color, soft
+ * borders, a small tinted status badge, no gradients, glass or animation.
+ * Nothing suggests an official government product (no banner, seal or
+ * flag): this is an independent tool that cites government data.
  *
  * Safety: results contain text from claims and web pages, so every string
  * goes in through textContent and only http(s) links are clickable.
@@ -18,59 +17,64 @@
   "use strict";
 
   const CSS = `
-.mv { --ink:#1b1b1b; --muted:#565c65; --line:#dfe1e2; --bg:#ffffff; --link:#005ea2; --link-hover:#1a4480;
-  --btn:#005ea2; --btn-hover:#1a4480; --btn-ink:#ffffff; --focus:#2491ff;
-  --stripe:#71767a; --tint:#f0f0f0;
-  font: 15px/1.5 "Public Sans", "Source Sans Pro", "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif;
-  color: var(--ink); text-align: left; }
+.mv { --ink:#111827; --ink2:#374151; --muted:#6b7280; --line:#e5e7eb; --subtle:#f9fafb; --bg:#ffffff;
+  --accent:#2563eb; --accent-hover:#1d4ed8; --on-accent:#ffffff; --focus:#2563eb;
+  --tone:#4b5563; --tint:#f3f4f6;
+  font: 14px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--ink); text-align: left; -webkit-font-smoothing: antialiased; }
 .mv *, .mv *::before, .mv *::after { box-sizing: border-box; }
-.mv [data-verdict="supported"] { --stripe:#00a91c; --tint:#ecf3ec; }
-.mv [data-verdict="mostly-accurate"] { --stripe:#ffbe2e; --tint:#faf3d1; }
-.mv [data-verdict="misleading"] { --stripe:#e66f0e; --tint:#fbe9dc; }
-.mv [data-verdict="contradicted"] { --stripe:#d54309; --tint:#f4e3db; }
-.mv [data-verdict="unavailable"] { --stripe:#00bde3; --tint:#e7f6f8; }
+.mv [data-verdict="supported"] { --tone:#15803d; --tint:#ecfdf3; }
+.mv [data-verdict="mostly-accurate"] { --tone:#a16207; --tint:#fef9e7; }
+.mv [data-verdict="misleading"] { --tone:#c2410c; --tint:#fff4ed; }
+.mv [data-verdict="contradicted"] { --tone:#b91c1c; --tint:#fef2f2; }
+.mv [data-verdict="unavailable"] { --tone:#0369a1; --tint:#f0f9ff; }
 @media (prefers-color-scheme: dark) {
-  .mv { --ink:#f0f0f0; --muted:#a9aeb1; --line:#565c65; --bg:#1b1b1b; --link:#73b3e7; --link-hover:#a8d3f5;
-    --btn:#73b3e7; --btn-hover:#a8d3f5; --btn-ink:#1b1b1b; --stripe:#a9aeb1; --tint:#2d2e2f; }
-  .mv [data-verdict="supported"] { --stripe:#00a91c; --tint:#19311e; }
-  .mv [data-verdict="mostly-accurate"] { --stripe:#ffbe2e; --tint:#3b2f0b; }
-  .mv [data-verdict="misleading"] { --stripe:#e66f0e; --tint:#3d220e; }
-  .mv [data-verdict="contradicted"] { --stripe:#d54309; --tint:#3d1a0e; }
-  .mv [data-verdict="unavailable"] { --stripe:#00bde3; --tint:#0d3640; }
+  .mv { --ink:#f3f4f6; --ink2:#d1d5db; --muted:#9ca3af; --line:#2b2f36; --subtle:#1d1f23; --bg:#17181b;
+    --accent:#3b82f6; --accent-hover:#60a5fa; --on-accent:#ffffff; --focus:#60a5fa; --tone:#9ca3af; --tint:#24262b; }
+  .mv [data-verdict="supported"] { --tone:#4ade80; --tint:#13261b; }
+  .mv [data-verdict="mostly-accurate"] { --tone:#facc15; --tint:#2a2410; }
+  .mv [data-verdict="misleading"] { --tone:#fb923c; --tint:#2c1d12; }
+  .mv [data-verdict="contradicted"] { --tone:#f87171; --tint:#2c1617; }
+  .mv [data-verdict="unavailable"] { --tone:#38bdf8; --tint:#102530; }
 }
 .mv a, .mv button { font-family: inherit; }
-.mv a:focus, .mv button:focus { outline: 4px solid var(--focus); outline-offset: 0; }
-.mv a:focus:not(:focus-visible), .mv button:focus:not(:focus-visible) { outline: none; }
+.mv a:focus-visible, .mv button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
 
-.mv-alert { border-left: 8px solid var(--stripe); background: var(--tint); padding: 10px 12px; }
-.mv-alert-h { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; }
-.mv-alert-b { margin: 4px 0 0; font-size: 15px; }
+.mv-alert { }
+.mv-alert-h { display: inline-flex; align-items: center; gap: 7px; margin: 0; padding: 3px 10px 3px 8px;
+  border-radius: 6px; background: var(--tint); color: var(--tone); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.mv-alert-h::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.mv-alert-b { margin: 8px 0 0; font-size: 14px; color: var(--ink2); }
 
 .mv-sec { margin-top: 14px; }
-.mv-label { font-size: 14px; color: var(--muted); }
-.mv-fig { margin: 0; font-size: 28px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.mv-fig.mv-long { font-size: 20px; }
-.mv-what { margin: 2px 0 0; font-size: 15px; }
-.mv-note { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
+.mv-label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.mv-fig { margin: 1px 0 0; font-size: 30px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mv-fig.mv-long { font-size: 20px; letter-spacing: -0.01em; }
+.mv-what { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+.mv-note { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
 
-.mv-table { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
-.mv-table th, .mv-table td { text-align: left; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); }
-.mv-table th { font-weight: 700; font-size: 14px; }
+.mv-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.mv-table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); padding: 0 8px 4px 0; }
+.mv-table td { text-align: left; padding: 6px 8px 6px 0; border-top: 1px solid var(--line); }
+.mv-table td:nth-child(2) { font-weight: 650; }
 
 .mv-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-.mv-src { margin: 0 0 10px; font-size: 15px; overflow-wrap: anywhere; }
-.mv a { color: var(--link); text-decoration: underline; }
-.mv a:hover { color: var(--link-hover); }
-.mv-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.mv-btn { appearance: none; border: 0; border-radius: 4px; cursor: pointer; padding: 8px 16px;
-  font-size: 15px; font-weight: 700; line-height: 1; background: var(--btn); color: var(--btn-ink); }
-.mv-btn:hover { background: var(--btn-hover); }
-.mv-btn-outline { background: transparent; color: var(--link); box-shadow: inset 0 0 0 2px var(--link); }
-.mv-btn-outline:hover { background: transparent; color: var(--link-hover); box-shadow: inset 0 0 0 2px var(--link-hover); }
-.mv-linkbtn { appearance: none; border: 0; background: none; padding: 0; cursor: pointer; font-size: 15px;
-  color: var(--link); text-decoration: underline; }
-.mv-status { font-size: 14px; color: var(--muted); }
-.mv-loading { font-size: 15px; color: var(--muted); }
+.mv-src { margin: 0 0 10px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.mv a { color: var(--accent); text-decoration: none; }
+.mv a:hover { text-decoration: underline; }
+.mv-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mv-btn { appearance: none; border: 0; border-radius: 8px; cursor: pointer; padding: 7px 12px;
+  font-size: 13px; font-weight: 600; line-height: 1.2; background: var(--accent); color: var(--on-accent); }
+.mv-btn:hover { background: var(--accent-hover); }
+.mv-btn-outline { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.mv-btn-outline:hover { background: var(--subtle); }
+.mv-linkbtn { appearance: none; border: 0; background: none; padding: 0; cursor: pointer; font-size: 13px;
+  font-weight: 500; color: var(--muted); }
+.mv-linkbtn:hover { color: var(--ink); }
+.mv-status { font-size: 12.5px; color: var(--muted); }
+.mv-how { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.mv-loading { margin: 0; font-size: 13px; color: var(--muted); }
 `;
 
   function el(tag, cls, text) {
@@ -265,6 +269,9 @@
     if (src || d.citation || opts.onRecheck) {
       const foot = el("div", "mv-foot");
       if (src) foot.appendChild(src);
+      if (d.method && d.method.kind === "dataset") {
+        foot.appendChild(el("p", "mv-how", "Series matched by AI; the figure comes straight from the agency's data."));
+      }
       const actions = d.citation ? citeButton(d.citation, d.citation_html) : el("div", "mv-actions");
       if (typeof opts.onRecheck === "function") {
         const again = el("button", "mv-linkbtn", "Check again");

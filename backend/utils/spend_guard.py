@@ -201,6 +201,42 @@ async def reserve(client_ip: Optional[str]) -> Reservation:
     return Reservation(True)
 
 
+# A dataset-pick call: no tools, a short prompt, a one-line answer.
+PICK_MAX_INPUT_TOKENS = 4_000
+PICK_MAX_OUTPUT_TOKENS = 60
+
+
+def worst_case_pick_cost(model: Optional[str] = None) -> float:
+    return estimate_cost(model or config.CLAUDE_SEARCH_MODEL, PICK_MAX_INPUT_TOKENS,
+                         PICK_MAX_OUTPUT_TOKENS, 0)
+
+
+async def reserve_pick(client_ip: Optional[str]) -> Reservation:
+    """Permission for ONE dataset-pick call. Separate call caps (it is about
+    fifty times cheaper than a web search); the same daily dollar cap."""
+    if (config.AI_PICK_MAX_CALLS_PER_DAY <= 0 or config.AI_MAX_SPEND_USD_PER_DAY <= 0):
+        return Reservation(False, "ai_disabled", "Dataset matching is turned off.")
+    store = _get_store()
+    day = _day()
+    try:
+        spent_usd = (await store.get(f"ai:{day}:spend_micro")) / 1e6
+        if spent_usd + worst_case_pick_cost() > config.AI_MAX_SPEND_USD_PER_DAY:
+            return Reservation(False, "daily_spend_cap", "Today's AI budget is used up.")
+        calls = await store.incr(f"ai:{day}:pick_calls")
+        if calls > config.AI_PICK_MAX_CALLS_PER_DAY:
+            return Reservation(False, "daily_call_cap", "Today's dataset-matching limit is reached.")
+        key = client_key(client_ip)
+        if key:
+            mine = await store.incr(f"ai:{day}:pick_client:{key}")
+            if mine > config.AI_PICK_MAX_CALLS_PER_CLIENT_PER_DAY:
+                return Reservation(False, "per_client_cap",
+                                   "You've reached today's dataset-matching limit.")
+    except StoreUnavailable as e:
+        logger.error("Spend guard store unavailable, refusing pick call: %s", e)
+        return Reservation(False, "budget_store_unavailable", "Dataset matching is temporarily unavailable.")
+    return Reservation(True)
+
+
 async def record_spend(usd: float) -> None:
     if usd <= 0:
         return
@@ -224,6 +260,7 @@ async def status() -> Dict[str, object]:
     }
     try:
         out["calls_today"] = await store.get(f"ai:{day}:calls")
+        out["dataset_picks_today"] = await store.get(f"ai:{day}:pick_calls")
         out["spend_usd_today"] = round((await store.get(f"ai:{day}:spend_micro")) / 1e6, 4)
     except StoreUnavailable:
         out["limit_store"] = "unavailable (AI calls refused)"

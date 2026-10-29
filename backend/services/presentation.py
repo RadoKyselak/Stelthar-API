@@ -116,10 +116,11 @@ def _data_source(e: Dict[str, Any]) -> Dict[str, Any]:
     data_url = _safe_url(e.get("source_url"))
     url = _READABLE_PAGES.get(sid, data_url)
     place = e.get("geography") or ""
+    publisher = e.get("publisher") or ""
     return {
         "kind": "data",
         "official": True,
-        "agency": agency_name(src),
+        "agency": f"{publisher} (via FRED)" if src.upper() == "FRED" and publisher else agency_name(src),
         "agency_short": agency_short(src),
         "dataset": dataset_name(src, sid, basis),
         "identifier": identifier(src, sid, table=e.get("table"), as_of=e.get("as_of")),
@@ -230,7 +231,7 @@ def _status(v) -> str:
 def _confidence(v) -> Dict[str, Any]:
     if v.verdict == V.NO_VERDICT:
         return {"tier": None, "text": ""}
-    if v.tier == "structured":
+    if v.tier in ("structured", "dataset"):
         text = {
             V.HIGH: "The agency's own published figure for the period and place in the claim.",
             V.MEDIUM: "The agency's own published figure, with a note to read.",
@@ -251,6 +252,16 @@ def _method(v, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
             "kind": "official_data",
             "title": "Straight from the source",
             "text": f"The figure was read directly from {who}'s published data. No AI was used.",
+            "model_calls": v.model_calls, "elapsed_seconds": secs,
+        }
+    if v.tier == "dataset":
+        s0 = next((s for s in sources if s["kind"] == "data"), None)
+        where = f"{s0['agency']}'s {s0['dataset']}" if s0 and s0.get("dataset") else "the agency's data"
+        return {
+            "kind": "dataset",
+            "title": "Found in a government dataset",
+            "text": (f"A short AI step chose the matching series in {where}; the figure itself was "
+                     f"read directly from the data, not written by AI."),
             "model_calls": v.model_calls, "elapsed_seconds": secs,
         }
     if v.tier == "grounded":
