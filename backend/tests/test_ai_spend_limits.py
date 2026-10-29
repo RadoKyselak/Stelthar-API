@@ -318,8 +318,10 @@ class TestEndpoints:
         r = test_client.post("/verify", json={"claim": "x" * 1001})
         assert r.status_code == 422
 
-    async def test_health_shows_the_limits(self, test_client):
-        ai = test_client.get("/health").json()["ai_search"]
+    async def test_health_shows_the_limits(self, test_client, monkeypatch):
+        import config
+        monkeypatch.setattr(config, "HEALTH_TOKEN", "operator-token")
+        ai = test_client.get("/health", headers={"x-health-token": "operator-token"}).json()["ai_search"]
         assert ai["model"] == "claude-haiku-5-5"
         assert ai["max_spend_usd_per_day"] == 1.0 and ai["max_calls_per_client_per_day"] == 10
         assert ai["worst_case_usd_per_call"] < 0.05

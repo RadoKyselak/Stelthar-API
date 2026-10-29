@@ -99,6 +99,19 @@ REDIS_REST_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN") or os.getenv("KV_REST_A
 # Off unless explicitly enabled.
 ENABLE_LEGACY_V1 = (os.getenv("ENABLE_LEGACY_V1") or "").strip().lower() in ("1", "true", "yes")
 
+# --- Public surface ---------------------------------------------------------
+# The interactive API docs list every endpoint and input for anyone probing
+# the service. Off unless explicitly turned on (e.g. locally).
+ENABLE_API_DOCS = (os.getenv("ENABLE_API_DOCS") or "").strip().lower() in ("1", "true", "yes")
+# /health shows its details (which keys are set, today's AI spend) only to a
+# caller that sends this token as X-Health-Token. Unset: never shown.
+HEALTH_TOKEN = (os.getenv("HEALTH_TOKEN") or "").strip()
+# Requests per client IP, checked before any work is done.
+VERIFY_PER_MINUTE = _env_int("VERIFY_PER_MINUTE", 20, 1, 1000)
+VERIFY_PER_DAY = _env_int("VERIFY_PER_DAY", 300, 1, 100000)
+LOOKUP_PER_MINUTE = _env_int("LOOKUP_PER_MINUTE", 60, 1, 1000)
+LOOKUP_PER_DAY = _env_int("LOOKUP_PER_DAY", 2000, 1, 100000)
+
 # Keyless government data endpoints (no API key required)
 USASPENDING_BASE_URL = os.getenv("USASPENDING_BASE_URL", "https://api.usaspending.gov")
 TREASURY_FISCAL_BASE_URL = os.getenv(

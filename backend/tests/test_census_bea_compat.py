@@ -490,8 +490,10 @@ class TestVerifyBridge:
         body = r.json()
         assert body["verdict"] == "Supported" and body["engine"] == "v2"
 
-    def test_health_reports_model_and_sources(self, test_client):
-        body = test_client.get("/health").json()
+    def test_health_reports_model_and_sources(self, test_client, monkeypatch):
+        import config
+        monkeypatch.setattr(config, "HEALTH_TOKEN", "operator-token")
+        body = test_client.get("/health", headers={"x-health-token": "operator-token"}).json()
         assert body["llm_model"] and "gemini-2.5-flash" not in body["llm_model_candidates"]
         assert set(body["sources_configured"]) >= {"gemini", "bls", "bea", "census"}
 

@@ -1,9 +1,11 @@
 import asyncio
+import hmac
 import json
+import pathlib
 from typing import Dict, Any
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import config
@@ -15,24 +17,21 @@ from services.verify_v2 import to_response_dict, verify as verify_v2
 from services.lookup import lookup, to_response_dict as lookup_to_response_dict
 from services import verify_compat
 from utils import gemini_models, spend_guard
-
-
-def _client_ip(request: Request) -> str:
-    """The caller's IP as Vercel reports it. Vercel overwrites these headers at
-    its edge, so a client cannot spoof them to dodge the per-client limit."""
-    for h in ("x-vercel-forwarded-for", "x-real-ip", "x-forwarded-for"):
-        v = request.headers.get(h)
-        if v:
-            return v.split(",")[0].strip()
-    return request.client.host if request.client else ""
+from utils.request_limits import client_ip as _client_ip, limit
 from utils.validation import ValidationError
 from middleware.context import RequestContextMiddleware, get_request_id
+from middleware.security import SecurityMiddleware
 from exceptions import MiradorException, CircuitBreakerOpenException
 
+_DOCS = config.ENABLE_API_DOCS
 app = FastAPI(
     title="Stelthar API",
     description="Government data-backed fact-checking API for Project Mirador",
-    version="2.1.0"
+    version="2.1.0",
+    # The docs pages map every endpoint for anyone probing the API: off by default.
+    docs_url="/docs" if _DOCS else None,
+    redoc_url="/redoc" if _DOCS else None,
+    openapi_url="/openapi.json" if _DOCS else None,
 )
 
 @app.on_event("startup")
@@ -42,13 +41,21 @@ async def startup_event():
 
 app.add_middleware(RequestContextMiddleware)
 
+# Other websites may not call this API from their visitors' browsers. The web
+# page is same-origin and needs no CORS; the extension calls from its own
+# pages and service worker, which have host permission. Extension origins
+# are still allowed, so no installed version can be cut off.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[],
+    allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
+# Outermost: security headers and the body-size cap apply to every response,
+# including errors and CORS preflights.
+app.add_middleware(SecurityMiddleware)
 
 verification_service = VerificationService()
 
@@ -106,13 +113,12 @@ async def mirador_exception_handler(request: Request, exc: MiradorException):
             "details": exc.details
         }
     )
+    # Internal details stay in the log; the caller gets the message only.
     return JSONResponse(
         status_code=500,
         content={
             "detail": exc.message,
-            "type": exc.__class__.__name__,
             "request_id": request_id,
-            "details": exc.details
         }
     )
 
@@ -124,7 +130,8 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         content={
             "detail": exc.detail,
             "request_id": request_id
-        }
+        },
+        headers=getattr(exc, "headers", None),  # e.g. Retry-After on a 429
     )
 
 @app.exception_handler(Exception)
@@ -146,14 +153,85 @@ async def general_exception_handler(request: Request, exc: Exception):
         }
     )
 
+_STATIC = pathlib.Path(__file__).parent / "static"
+# A fixed allow-list: no request can name any other file on disk.
+_STATIC_TYPES = {
+    "app.js": "text/javascript; charset=utf-8",
+    "result-view.js": "text/javascript; charset=utf-8",
+    "site.css": "text/css; charset=utf-8",
+    "logo.png": "image/png",
+    "favicon.png": "image/png",
+}
+
+
 @app.get("/")
-async def health_check():
-    return {"status": "ok", "message": "Stelthar-API is running :)"}
+async def home(request: Request):
+    """The web page for browsers; a status line for API clients and monitors."""
+    if "text/html" not in request.headers.get("accept", ""):
+        return {"status": "ok", "message": "Stelthar-API is running :)"}
+    return HTMLResponse((_STATIC / "index.html").read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/static/{name}")
+async def static_file(name: str):
+    if name not in _STATIC_TYPES:
+        raise HTTPException(status_code=404, detail="Not found")
+    # no-cache = revalidate each time (cheap: ETag), so a deploy shows at once.
+    return FileResponse(_STATIC / name, media_type=_STATIC_TYPES[name],
+                        headers={"Cache-Control": "no-cache"})
+
+
+_GROUP_NAMES = {"black": "Black", "white": "White", "hispanic": "Hispanic", "asian": "Asian",
+                "teens": "teens (16–19)", "youth": "ages 16–24"}
+
+
+@app.get("/v2/coverage")
+async def coverage() -> Dict[str, Any]:
+    """What can be checked against an exact official figure right now.
+
+    Built from the metric registry and the configured keys, so it cannot
+    drift from what the engine actually does."""
+    from claims.metrics import all_metrics
+    from evidence.citation import agency_name
+    from services.verify_v2 import has_structured_adapter
+
+    specs = [s for s in all_metrics() if has_structured_adapter(s)]
+    groups: Dict[str, Any] = {}
+    for spec in specs:
+        if spec.parent:
+            continue
+        agency = groups.setdefault(spec.source, {
+            "source": spec.source, "agency": agency_name(spec.source), "metrics": []})
+        variants = [_GROUP_NAMES.get(v.metric[len(spec.metric) + 1:],
+                                     v.metric[len(spec.metric) + 1:].replace("_", " "))
+                    for v in specs if v.parent == spec.metric]
+        agency["metrics"].append({
+            "metric": spec.metric,
+            "label": spec.label,
+            "places": "U.S. and every state" if "state" in spec.geo_levels else "U.S.",
+            "groups": variants,
+        })
+    order = ["BLS", "BEA", "CENSUS", "TREASURY"]
+    agencies = sorted(groups.values(), key=lambda g: order.index(g["source"])
+                      if g["source"] in order else 99)
+    return {"agencies": agencies, "metric_count": sum(len(g["metrics"]) for g in agencies)}
+
+
+def _health_details_allowed(request: Request) -> bool:
+    token = request.headers.get("x-health-token", "")
+    return bool(config.HEALTH_TOKEN) and hmac.compare_digest(token, config.HEALTH_TOKEN)
+
 
 @app.get("/health")
-async def detailed_health_check():
+async def detailed_health_check(request: Request):
     """What the service will actually use — so a retired model or a missing key
-    shows up here, not as a week of silent "Inconclusive" answers."""
+    shows up here, not as a week of silent "Inconclusive" answers.
+
+    Public callers get the status line only: which keys are set and how much
+    of today's AI budget is left are for the operator (X-Health-Token)."""
+    if not _health_details_allowed(request):
+        return {"status": "healthy", "service": "stelthar-api", "version": app.version}
     sources = {
         "gemini": bool(config.GEMINI_API_KEY),
         "anthropic": bool(config.ANTHROPIC_API_KEY),
@@ -175,7 +253,7 @@ async def detailed_health_check():
         "timestamp": asyncio.get_event_loop().time(),
     }
 
-@app.post("/v2/verify")
+@app.post("/v2/verify", dependencies=[Depends(limit("verify"))])
 async def verify_v2_endpoint(req: VerifyRequest, request: Request) -> Dict[str, Any]:
     """Evidence-first verification: exact number, stated period, direct link.
 
@@ -213,7 +291,7 @@ async def verify_v2_endpoint(req: VerifyRequest, request: Request) -> Dict[str, 
     return to_response_dict(result)
 
 
-@app.post("/v2/lookup")
+@app.post("/v2/lookup", dependencies=[Depends(limit("lookup"))])
 async def lookup_endpoint(req: LookupRequest) -> Dict[str, Any]:
     """Retrieval, not verification: the number and every citation form for it.
 
@@ -242,7 +320,7 @@ async def lookup_endpoint(req: LookupRequest) -> Dict[str, Any]:
     return lookup_to_response_dict(result)
 
 
-@app.post("/verify")
+@app.post("/verify", dependencies=[Depends(limit("verify"))])
 async def verify(req: VerifyRequest, request: Request) -> Dict[str, Any]:
     """The endpoint every installed extension calls.
 
@@ -266,7 +344,7 @@ async def verify(req: VerifyRequest, request: Request) -> Dict[str, Any]:
     return result
 
 
-@app.post("/v1/verify", response_model=VerificationResponse)
+@app.post("/v1/verify", response_model=VerificationResponse, dependencies=[Depends(limit("verify"))])
 async def verify_legacy(req: VerifyRequest) -> VerificationResponse:
     """The original multi-pass planner, kept for comparison and rollback.
 

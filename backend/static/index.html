@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Mirador</title>
+  <meta name="description" content="Check any number against official U.S. government data from BLS, BEA, the Census Bureau and the Treasury, with a citation to the exact source.">
+  <link rel="icon" href="/static/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/" aria-label="Project Mirador home">
+      <img src="/static/logo.png" alt="" width="30" height="30">
+      <span>Mirador</span>
+    </a>
+    <a class="ext" href="https://chromewebstore.google.com/detail/anehbncclhojcaihgeoebennaccpeegn" rel="noopener">Chrome extension</a>
+  </header>
+
+  <main class="main">
+    <h1 id="title">Is that number right?</h1>
+    <p class="lede" id="lede">Check any claim against official U.S. government data.</p>
+
+    <div class="modes" role="tablist" aria-label="Mode">
+      <button type="button" role="tab" class="mode" id="mode-check" aria-selected="true">Check a claim</button>
+      <button type="button" role="tab" class="mode" id="mode-find" aria-selected="false">Find a number</button>
+    </div>
+
+    <form id="form" class="ask" autocomplete="off">
+      <label for="q" class="sr" id="q-label">Claim to check</label>
+      <input id="q" name="q" type="text" maxlength="1000" spellcheck="false"
+        placeholder="Unemployment in Texas was 4.1% in 2023">
+      <button id="go" type="submit" aria-label="Check">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+    <button type="button" id="surprise" class="surprise">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/></svg>
+      Surprise me
+    </button>
+
+    <div id="out" class="out" aria-live="polite"></div>
+  </main>
+
+  <footer class="foot">
+    <details>
+      <summary>How it works</summary>
+      <p>Mirador reads the figure, period and place in a claim, pulls that exact number from the
+        agency’s own data, and compares them at the precision the claim was written to. Close calls
+        are <i>Mostly accurate</i>. Every answer cites its source. When no official series covers a
+        claim, it searches published sources and only reports what a source backs.</p>
+    </details>
+    <details id="coverage">
+      <summary>What can I check?</summary>
+      <div id="coverage-list" class="cov"></div>
+    </details>
+    <p class="fine">Data from the Bureau of Labor Statistics, Bureau of Economic Analysis, Census Bureau
+      and Treasury. Independent; not affiliated with any agency.</p>
+  </footer>
+
+  <script src="/static/result-view.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
