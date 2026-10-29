@@ -10,6 +10,7 @@ which figure it rests on and where that figure came from, how the check was
 done, how to cite it, and what to try when there is no answer.
 """
 from datetime import date
+from html import escape
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -26,6 +27,8 @@ _VERDICTS = {
     V.MISLEADING: ("misleading", "The number may be right, but the framing misleads."),
     V.NO_VERDICT: ("no-verdict", "No official figure settles this claim."),
 }
+# What the card says, where the API's verdict word would read as jargon.
+_LABELS = {V.NO_VERDICT: "Can't verify"}
 
 # why, what to try
 _REASONS = {
@@ -113,10 +116,11 @@ def _data_source(e: Dict[str, Any]) -> Dict[str, Any]:
     data_url = _safe_url(e.get("source_url"))
     url = _READABLE_PAGES.get(sid, data_url)
     place = e.get("geography") or ""
+    publisher = e.get("publisher") or ""
     return {
         "kind": "data",
         "official": True,
-        "agency": agency_name(src),
+        "agency": f"{publisher} (via FRED)" if src.upper() == "FRED" and publisher else agency_name(src),
         "agency_short": agency_short(src),
         "dataset": dataset_name(src, sid, basis),
         "identifier": identifier(src, sid, table=e.get("table"), as_of=e.get("as_of")),
@@ -143,6 +147,8 @@ def _web_source(c: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "title": (c.get("title") or domain)[:200],
         "domain": domain,
         "url": url,
+        # The sentence on that page the answer rests on, word for word.
+        "quote": " ".join(str(c.get("quote") or "").split())[:300],
     }
 
 
@@ -167,6 +173,22 @@ def _short_basis(basis: str) -> str:
     return head if len(head) <= 34 else ""
 
 
+def _relation(p: Dict[str, Any]) -> str:
+    """exact | within (rounds to the claim) | off | meets | fails (thresholds)."""
+    if not p.get("claim"):
+        return ""
+    if p.get("comparator") != "equals":
+        return "meets" if p.get("verdict") == V.SUPPORTED else "fails"
+    if not p.get("gap"):
+        return "exact"
+    return "within" if p.get("verdict") == V.SUPPORTED else "off"
+
+
+def _gap_short(gap: str) -> str:
+    """"0.1 percentage point" -> "0.1 pt"; "$32.82 billion" stays."""
+    return (gap or "").replace(" percentage points", " pts").replace(" percentage point", " pt")
+
+
 def _comparison(p: Dict[str, Any]) -> Dict[str, Any]:
     place = p.get("place") or ""
     basis = p.get("basis") or ""
@@ -182,9 +204,35 @@ def _comparison(p: Dict[str, Any]) -> Dict[str, Any]:
         "source": agency_short(p.get("source") or ""),
         "context": context,
         "note": _note(p),
+        "measure": p.get("measure") or "",
+        "place": "" if place == "United States" else place,
+        "period": when,
+        "basis": _short_basis(basis),
+        "relation": _relation(p),
+        "gap": p.get("gap") or "",
+        "gap_short": _gap_short(p.get("gap") or ""),
         "citation": p.get("citation") or "",
+        "citation_html": p.get("citation_html") or "",
         "url": _safe_url(p.get("url")),
+        "excerpt": _clean_excerpt(p.get("excerpt")),
     }
+
+
+def _clean_excerpt(ex: Any) -> Optional[Dict[str, Any]]:
+    """Plain strings only, a few rows, exactly one cited: the card renders it
+    as text, and a malformed excerpt is dropped rather than half-shown."""
+    if not isinstance(ex, dict) or not isinstance(ex.get("rows"), list):
+        return None
+    rows = []
+    for r in ex["rows"][:6]:
+        if not isinstance(r, dict):
+            return None
+        rows.append({"label": str(r.get("label") or "")[:80], "value": str(r.get("value") or "")[:40],
+                     "cited": bool(r.get("cited"))})
+    if sum(r["cited"] for r in rows) != 1:
+        return None
+    return {"heading": str(ex.get("heading") or "")[:160], "units": str(ex.get("units") or "")[:60],
+            "rows": rows, "note": str(ex.get("note") or "")[:240]}
 
 
 def _status(v) -> str:
@@ -203,7 +251,7 @@ def _status(v) -> str:
 def _confidence(v) -> Dict[str, Any]:
     if v.verdict == V.NO_VERDICT:
         return {"tier": None, "text": ""}
-    if v.tier == "structured":
+    if v.tier in ("structured", "dataset"):
         text = {
             V.HIGH: "The agency's own published figure for the period and place in the claim.",
             V.MEDIUM: "The agency's own published figure, with a note to read.",
@@ -226,6 +274,16 @@ def _method(v, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
             "text": f"The figure was read directly from {who}'s published data. No AI was used.",
             "model_calls": v.model_calls, "elapsed_seconds": secs,
         }
+    if v.tier == "dataset":
+        s0 = next((s for s in sources if s["kind"] == "data"), None)
+        where = f"{s0['agency']}'s {s0['dataset']}" if s0 and s0.get("dataset") else "the agency's data"
+        return {
+            "kind": "dataset",
+            "title": "Found in a government dataset",
+            "text": (f"A short AI step chose the matching series in {where}; the figure itself was "
+                     f"read directly from the data, not written by AI."),
+            "model_calls": v.model_calls, "elapsed_seconds": secs,
+        }
     if v.tier == "grounded":
         web = [s for s in sources if s["kind"] == "web"]
         official = sum(1 for s in web if s["official"])
@@ -246,18 +304,20 @@ def _method(v, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _web_citation(web: List[Dict[str, Any]], reported: Dict[str, str]) -> str:
-    """A citation for a web-search answer: the best official page it rests on."""
+def _web_citation(web: List[Dict[str, Any]], reported: Dict[str, str]):
+    """A citation for a web-search answer: the best official page it rests on.
+    Returns (plain, html)."""
     if not web:
-        return ""
+        return "", ""
+    # Only what the page itself says (its title, site and address): the
+    # model's own wording of a publisher or period is not citable.
     s = next((x for x in web if x["official"]), web[0])
-    org = reported.get("source_org") or s["domain"]
-    value, period = reported.get("value"), reported.get("period")
-    fact = ""
-    if value:
-        fact = f" {value}" + (f" ({period})" if period else "") + "."
-    return (f"{org}, “{s['title']}.”{fact} {s['url']} "
-            f"(accessed {_long_date(date.today().isoformat())}).")
+    body = f"“{s['title']}.” {s['domain']}."
+    tail = f" (accessed {_long_date(date.today().isoformat())})."
+    plain = f"{body} {s['url']}{tail}"
+    html = (f'{escape(body)} <a href="{escape(s["url"], quote=True)}">{escape(s["url"])}</a>'
+            f"{escape(tail)}")
+    return plain, html
 
 
 def _share_text(label: str, v, comparisons, citation: str) -> str:
@@ -279,7 +339,7 @@ def _share_text(label: str, v, comparisons, citation: str) -> str:
 def build_display(v) -> Dict[str, Any]:
     status = _status(v)
     key, meaning = _VERDICTS.get(v.verdict, ("no-verdict", ""))
-    label = v.verdict
+    label = _LABELS.get(v.verdict, v.verdict)
     if status == "unavailable":
         key, label = "unavailable", "Couldn't check"
         meaning = "An outage on our side, not a judgment about the claim."
@@ -313,8 +373,9 @@ def build_display(v) -> Dict[str, Any]:
             notes.append(c)
 
     if v.tier == "grounded":
-        citation = _web_citation(web, reported)
+        citation, citation_html = _web_citation(web, reported)
     else:
+        citation_html = "<br>".join(c["citation_html"] for c in comparisons if c["citation_html"])
         citation = "\n".join(c["citation"] for c in comparisons if c["citation"])
 
     return {
@@ -330,5 +391,6 @@ def build_display(v) -> Dict[str, Any]:
         "method": _method(v, sources),
         "notes": notes,
         "citation": citation,
+        "citation_html": citation_html,
         "share_text": _share_text(label, v, comparisons, citation.split("\n")[0] if citation else ""),
     }

@@ -50,6 +50,7 @@ _AGENCY_NAMES = {
     "TREASURY": "U.S. Department of the Treasury, Fiscal Data",
     "USASPENDING": "USAspending.gov",
     "CONGRESS": "U.S. Congress, Congress.gov",
+    "FRED": "Federal Reserve Bank of St. Louis",
 }
 
 # How an agency is referred to mid-sentence, where the full legal name would
@@ -61,6 +62,7 @@ _AGENCY_SHORT = {
     "TREASURY": "Treasury",
     "USASPENDING": "USAspending",
     "CONGRESS": "Congress.gov",
+    "FRED": "FRED",
 }
 
 _MONTHS = (
@@ -109,6 +111,7 @@ _BASIS_REWRITES = (
     (re.compile(r"^\w+ monthly observation$", re.I), ""),
     (re.compile(r"^annual$", re.I), ""),
     (re.compile(r",?\s*as of \d{4}-\d{2}-\d{2}"), ""),
+    (re.compile(r"^daily figure$", re.I), ""),  # "as of <date>" already says it
     (re.compile(r"^computed as the mean of 12 monthly observations.*$", re.I),
      "average of the 12 monthly figures"),
 )
@@ -131,9 +134,9 @@ def when(period) -> str:
     """"2023", "June 2022", "FY2024", "Q2 2026", "December 29, 2023"."""
     if period.kind == POINT_IN_TIME and period.record_date:
         try:
-            return _format_date(date.fromisoformat(period.record_date[:10]))
+            return "as of " + _format_date(date.fromisoformat(period.record_date[:10]))
         except ValueError:
-            return period.record_date
+            return f"as of {period.record_date}"
     return period.label()
 
 
@@ -150,6 +153,8 @@ def dataset_name(source: str, series_id: Optional[str], basis: str = "") -> str:
     if source == "CENSUS":
         return "American Community Survey 1-year estimates" if "1-year" in (basis or "") \
             else "American Community Survey"
+    if source == "FRED":
+        return "FRED"
     if source == "TREASURY":
         if sid == "DEBT_TO_PENNY":
             return "Debt to the Penny"
@@ -229,9 +234,13 @@ def render(dp: Datapoint, accessed: Optional[date] = None) -> Dict[str, str]:
     # U.S. Bureau of Labor Statistics, "Unemployment rate," Local Area
     # Unemployment Statistics, series LAUST480000000000003, Texas, 2023
     # (annual average): 4.0%. https://... (accessed October 28, 2026).
-    head = [f'{agency_name(dp.source)}, "{dp.label},"']
+    # FRED's recommended form names the original publisher, then FRED.
+    publisher = (dp.extra or {}).get("original_source") if dp.source == "FRED" else ""
+    head = [f'{publisher or agency_name(dp.source)}, "{dp.label},"']
+    if dp.source == "FRED":
+        head.append("retrieved from FRED, Federal Reserve Bank of St. Louis,")
     ident = identifier(dp.source, dp.series_id, table=(dp.extra or {}).get("table"), as_of=dp.as_of)
-    for part in (dataset_name(dp.source, dp.series_id, basis), ident,
+    for part in ("" if dp.source == "FRED" else dataset_name(dp.source, dp.series_id, basis), ident,
                  dp.geography.name if dp.geography else ""):
         if part:
             head.append(f"{part},")
@@ -240,10 +249,12 @@ def render(dp: Datapoint, accessed: Optional[date] = None) -> Dict[str, str]:
     # estimate)" says the same thing twice.
     shown_basis = "" if basis.startswith("ACS 1-year") and "1-year" in dataset else basis
     period = when(dp.observed) + (f" ({shown_basis})" if shown_basis else "")
-    note = " ".join(head) + f" {period}: {value}."
-    if url:
-        note += f" {url}"
-    note += f" (accessed {_format_date(accessed)})."
+    body = " ".join(head) + f" {period}: {value}."
+    tail = f" (accessed {_format_date(accessed)})."
+    note = body + (f" {url}" if url else "") + tail
+    # The same note with a live link, for pasting into Docs, Word or email.
+    note_html = escape(body) + (
+        f' <a href="{escape(url, quote=True)}">{escape(url)}</a>' if url else "") + escape(tail)
 
     return {
         "value": value,
@@ -251,6 +262,7 @@ def render(dp: Datapoint, accessed: Optional[date] = None) -> Dict[str, str]:
         "markdown": markdown,
         "html": html,
         "note": note,
+        "note_html": note_html,
         "attribution": attribution,
         "caveat": basis if len(basis) > _INLINE_BASIS_CHARS else "",
         "agency": agency_name(dp.source),

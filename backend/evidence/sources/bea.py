@@ -24,8 +24,9 @@ from config import BEA_API_KEY, logger
 from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from evidence.cache import TTL_IMMUTABLE, TTL_VOLATILE, cached
 from evidence.datapoint import ANNUAL, QUARTERLY, Datapoint, Geography, Period
+from evidence.excerpt import make as make_excerpt, row as ex_row
 from evidence.sources import SourceUnavailable
-from evidence.units import PERCENT, Quantity, parse_number, scale_from_exponent
+from evidence.units import PERCENT, USD, Quantity, parse_number, scale_from_exponent
 from utils.rate_limiter import get_quota_limiter
 from utils.urls import public_url
 
@@ -132,6 +133,12 @@ def _row_to_datapoint(spec, row: Dict[str, Any], api_url: str) -> Optional[Datap
         value *= scale_from_exponent(row.get("UNIT_MULT"))
 
     desc = str(row.get("LineDescription") or "").strip()
+    mult = {"3": "thousands of ", "6": "millions of ", "9": "billions of "}.get(
+        str(row.get("UNIT_MULT") or "").strip(), "")
+    units = "percent" if spec.family == PERCENT else f"{mult}{'dollars' if spec.family == USD else ''}".strip()
+    excerpt = make_excerpt(
+        [ex_row(f"Line {spec.bea_line} · {desc or spec.label} · {row.get('TimePeriod')}", raw, cited=True)],
+        units=units.removesuffix(" of"))
     return Datapoint(
         quantity=Quantity(magnitude=value, family=spec.family, raw=str(raw)),
         metric=spec.metric,
@@ -151,10 +158,9 @@ def _row_to_datapoint(spec, row: Dict[str, Any], api_url: str) -> Optional[Datap
         raw_value=str(raw),
         extra={"table": spec.bea_table, "line": spec.bea_line,
                "line_description": desc, "api_url": api_url,
-               "metric_name": row.get("METRIC_NAME"),
-               **({"caveat": ("BEA revises quarterly GDP several times (advance, second and "
-                              "third estimates, then annual updates); this is the latest "
-                              "published estimate.")} if quarter else {})},
+               "metric_name": row.get("METRIC_NAME"), "excerpt": excerpt,
+               **({"caveat": "Latest estimate. BEA revises quarterly GDP several times."}
+                  if quarter else {})},
     )
 
 

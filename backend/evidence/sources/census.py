@@ -31,6 +31,7 @@ from config.constants import API_TIMEOUTS, RATE_LIMIT_QUOTAS
 from evidence.cache import TTL_IMMUTABLE, cached
 from evidence.datapoint import ANNUAL, Datapoint, Geography, Period
 from evidence.sources import SourceUnavailable
+from evidence.excerpt import moe_excerpt, units_for
 from evidence.units import Quantity, parse_number
 from utils.rate_limiter import get_quota_limiter
 from utils.urls import public_url
@@ -47,6 +48,13 @@ _SENTINEL_FLOOR = -100_000_000
 # back from last year until a vintage exists.
 _LOOKBACK_YEARS = 4
 
+
+# Census's headline figures for these come from a different survey (CPS ASEC).
+_OTHER_MEASURE = {
+    "poverty_rate": "an official poverty rate from the CPS ASEC, a different survey",
+    "median_household_income": "a CPS ASEC estimate, a different survey",
+    "uninsured_rate": "a CPS ASEC uninsured rate, a different survey",
+}
 
 def _moe_var(variable: str) -> Optional[str]:
     return variable[:-1] + "M" if variable.endswith("E") else None
@@ -146,15 +154,16 @@ def _row_to_datapoint(spec, year: int, dataset: str, blob: Dict[str, Any]) -> Op
     notes = []
     if moe:
         extra["margin_of_error"] = moe
-        notes.append("ACS figures are survey estimates; the published 90% margin of error "
-                     f"is ±{_fmt(moe, spec.family)}.")
+        notes.append(f"Survey estimate, ±{_fmt(moe, spec.family)} (90% margin of error).")
     if spec.alternate_measure:
         # ACS poverty (12.5% for 2023) is not Census's headline poverty rate
         # (11.1%, CPS ASEC). A reader must not take one for the other.
-        notes.append(f"This is the American Community Survey figure. Another official "
-                     f"figure exists: {spec.alternate_measure}.")
+        other = _OTHER_MEASURE.get(spec.metric, "another estimate from a different survey")
+        notes.append(f"American Community Survey figure. Census also publishes {other}.")
     if notes:
         extra["caveat"] = " ".join(notes)
+    extra["excerpt"] = moe_excerpt(raw, rec.get(moe_name) if moe else None,
+                                   units_for(spec.family))
 
     return Datapoint(
         quantity=Quantity(magnitude=value, family=spec.family, raw=str(raw)),

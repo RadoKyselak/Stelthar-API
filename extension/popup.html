@@ -4,96 +4,63 @@
   <title>Project Mirador</title>
   <meta charset="UTF-8">
   <style>
-    :root { --bg:#fafaf9; --card:#ffffff; --ink:#121314; --muted:#6b6f76; --faint:#9a9ea5; --line:#e9e9e6;
-      --focus:#2563eb;
-      --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      color-scheme: light dark; }
+    :root { --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --field:#d1d5db; --bg:#ffffff; --subtle:#f9fafb;
+      --accent:#2563eb; --accent-hover:#1d4ed8; --focus:#2563eb; color-scheme: light dark;
+      --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
     @media (prefers-color-scheme: dark) {
-      :root { --bg:#0e0f10; --card:#161718; --ink:#f1f1f0; --muted:#a3a7ae; --faint:#71757c; --line:#2a2b2e; --focus:#8ab4ff; }
+      :root { --ink:#f3f4f6; --muted:#9ca3af; --line:#2b2f36; --field:#3a3f47; --bg:#17181b; --subtle:#1d1f23;
+        --accent:#3b82f6; --accent-hover:#60a5fa; --focus:#60a5fa; }
     }
     * { box-sizing: border-box; }
-    body { width: 380px; margin: 0; padding: 14px 16px 16px; background: var(--bg); color: var(--ink);
-      font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+    body { width: 380px; margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
+      font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
     :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-    .top { display:flex; align-items:center; justify-content:space-between; margin-bottom: 14px; }
-    .brand { display:flex; align-items:center; gap:9px; font-weight: 750; font-size: 15px; letter-spacing: -0.01em; }
-    .brand img { width: 26px; height: 26px; border-radius: 7px; display:block; }
-    .web { font-size: 12.5px; color: var(--muted); text-decoration: none; }
-    .web:hover { color: var(--ink); }
-    .modes { display:inline-flex; gap:2px; padding:3px; border-radius:999px; background:var(--card);
-      border:1px solid var(--line); margin-bottom: 10px; }
-    .mode { font: 600 12.5px var(--sans); color: var(--muted); background:none; border:0; border-radius:999px;
-      padding: 5px 12px; cursor:pointer; }
-    .mode[aria-selected="true"] { background: var(--ink); color: var(--card); }
-    .ask { display:flex; align-items:flex-end; gap:6px; background:var(--card); border:1.5px solid var(--line);
-      border-radius:14px; padding:5px 5px 5px 13px; }
-    .ask:focus-within { border-color: var(--ink); }
-    textarea { flex:1; min-width:0; border:0; background:none; color:var(--ink); font: 15px/1.4 var(--sans);
-      padding: 8px 0; resize:none; height: 38px; max-height: 120px; }
-    textarea:focus { outline:none; }
-    textarea::placeholder { color: var(--faint); }
-    #go { flex:none; width:38px; height:38px; border-radius:10px; border:0; background:var(--ink); color:var(--card);
-      cursor:pointer; display:grid; place-items:center; }
-    #go:disabled { opacity:.35; cursor:default; }
-    #go svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
-    .row { display:flex; justify-content:space-between; align-items:center; margin-top: 8px; }
-    .surprise { display:inline-flex; align-items:center; gap:6px; font: 600 12.5px var(--sans); color:var(--muted);
-      background:none; border:0; padding:2px; cursor:pointer; }
-    .surprise:hover { color: var(--ink); }
-    .surprise svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8; }
-    .surprise svg circle { fill: currentColor; stroke: none; }
-    .count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
-    .count.over { color: #c4281c; font-weight: 600; }
-    #out { margin-top: 12px; }
-    #out:empty { display:none; }
-    #out > .mv { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
-    #out .mv-single .mv-n.mv-official { font-size: 34px; }
-    details.recent { margin-top: 12px; }
-    details.recent summary { cursor:pointer; list-style:none; font-size:12.5px; font-weight:600; color:var(--muted); }
-    details.recent summary::-webkit-details-marker { display:none; }
-    details.recent summary::after { content:" +"; color:var(--faint); }
-    details.recent[open] summary::after { content:" \2212"; }
-    #history { list-style:none; margin:6px 0 0; padding:0; }
-    #history li { display:flex; gap:8px; align-items:baseline; padding:6px 4px; border-radius:8px; cursor:pointer; }
-    #history li:hover { background: var(--card); }
-    .dot { width:8px; height:8px; border-radius:50%; flex:none; background:#9aa1ab; transform: translateY(-1px); }
-    .dot.supported { background:#12813a; } .dot.mostly-accurate { background:#8aa800; }
-    .dot.contradicted { background:#c4281c; } .dot.misleading { background:#d97706; }
-    .hclaim { min-width:0; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    label { display:block; font-weight:600; font-size:13px; margin-bottom: 6px; }
+    .row { display:flex; gap:8px; align-items:flex-start; }
+    textarea { flex:1; min-width:0; margin:0; border:1px solid var(--field); border-radius:8px;
+      background: var(--bg); color: var(--ink); font: 14px/1.4 var(--font); padding: 9px 11px; resize: none;
+      height: 40px; max-height: 120px; transition: border-color .12s, box-shadow .12s; }
+    textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+    textarea::placeholder { color: var(--muted); }
+    button.go { flex:none; height:40px; border:0; border-radius:8px; background: var(--accent); color: #fff;
+      font: 600 13px var(--font); padding: 0 14px; cursor: pointer; }
+    button.go:hover { background: var(--accent-hover); }
+    .hint { margin: 6px 0 0; font-size:12px; color: var(--muted); }
+
+    #out { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+    #out:empty { display: none; }
+
+    .recent h2 { margin: 18px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .recent ul { margin: 0; padding: 0; list-style: none; }
+    .recent li button { display:flex; gap:9px; align-items:baseline; width:100%; text-align:left; border:0;
+      background:none; padding:7px 8px; margin: 0 -8px; width: calc(100% + 16px); border-radius:8px; cursor:pointer;
+      font: 13.5px/1.4 var(--font); color: var(--ink); }
+    .recent li button:hover { background: var(--subtle); }
+    .recent .t { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+    .recent .v { flex:none; font-size:12px; color: var(--muted); }
+    .fine { margin: 16px 0 0; font-size: 11.5px; color: var(--muted); }
   </style>
 </head>
 <body>
-  <header class="top">
-    <div class="brand"><img src="icons/icon48.png" alt="">Mirador</div>
-    <a class="web" href="https://stelthar-api.vercel.app/" target="_blank" rel="noopener">Web app ↗</a>
-  </header>
-
-  <div class="modes" role="tablist" aria-label="Mode">
-    <button class="mode" role="tab" id="mode-check" aria-selected="true">Check a claim</button>
-    <button class="mode" role="tab" id="mode-find" aria-selected="false">Find a number</button>
-  </div>
-
-  <form id="form" class="ask" autocomplete="off">
-    <label for="q" hidden id="q-label">Claim to check</label>
-    <textarea id="q" rows="1" spellcheck="false" placeholder="Paste or type a claim with a number"></textarea>
-    <button id="go" type="submit" aria-label="Check">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-    </button>
+  <form id="form" autocomplete="off" role="search">
+    <label for="q">Check a claim or find a figure</label>
+    <div class="row">
+      <textarea id="q" rows="1" spellcheck="false" aria-describedby="q-hint"
+        placeholder="e.g. Inflation was 9.1% in June 2022"></textarea>
+      <button class="go" type="submit">Check</button>
+    </div>
   </form>
-  <div class="row">
-    <button type="button" id="surprise" class="surprise">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/></svg>
-      Surprise me
-    </button>
-    <span id="count" class="count"></span>
-  </div>
 
   <div id="out" aria-live="polite"></div>
 
-  <details class="recent" id="recent" hidden>
-    <summary>Recent checks</summary>
-    <ul id="history"></ul>
-  </details>
+  <section class="recent" id="recent" hidden>
+    <h2>Recent</h2>
+    <ul id="items"></ul>
+  </section>
+
+  <p class="fine" id="q-hint">Checked against data from BLS, BEA, the Census Bureau, the Treasury and the
+    Federal Reserve. Independent; not a government service.</p>
 
   <script src="result-view.js"></script>
   <script src="popup.js"></script>

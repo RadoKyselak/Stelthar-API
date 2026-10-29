@@ -1,149 +1,95 @@
 /*
- * Project Mirador: the result view.
+ * Project Mirador: the result card.
  *
- * One renderer for every surface: the in-page panel, the extension popup and
- * the web app. It draws the API's `display` block (for a claim) or a lookup
- * result (for a single figure), so wording and layout match everywhere.
+ * One renderer for both surfaces, the in-page card and the toolbar popup. It
+ * draws the API's `display` block (a claim check) or a lookup result (one
+ * official figure).
  *
- * Safety: results contain text from claims and from web pages, so every
- * string goes in through textContent and only http(s) links are clickable.
+ * Visual language: plain and modern. System type, one accent color, soft
+ * borders, a small tinted status badge, no gradients, glass or animation.
+ * Nothing suggests an official government product (no banner, seal or
+ * flag): this is an independent tool that cites government data.
  *
- * This file is copied to backend/static/result-view.js for the web app; a
- * test fails if the two copies differ.
+ * Safety: results contain text from claims and web pages, so every string
+ * goes in through textContent and only http(s) links are clickable.
  */
 (function (global) {
   "use strict";
 
   const CSS = `
-.mv { --mv-card:#ffffff; --mv-ink:#121314; --mv-muted:#6b6f76; --mv-faint:#9a9ea5; --mv-line:#ebebe8;
-  --mv-sub:#f6f6f4; --mv-link:#121314; --mv-focus:#2563eb;
-  --mv-fg:#5b6068; --mv-bg:#f1f2f3;
+.mv { --ink:#111827; --ink2:#374151; --muted:#6b7280; --line:#e5e7eb; --subtle:#f9fafb; --bg:#ffffff;
+  --accent:#2563eb; --accent-hover:#1d4ed8; --on-accent:#ffffff; --focus:#2563eb;
+  --tone:#4b5563; --tint:#f3f4f6;
   font: 14px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color: var(--mv-ink); -webkit-font-smoothing: antialiased; text-align: left; }
+  color: var(--ink); text-align: left; -webkit-font-smoothing: antialiased; }
 .mv *, .mv *::before, .mv *::after { box-sizing: border-box; }
-.mv[data-verdict="supported"], .mv [data-verdict="supported"] { --mv-fg:#12813a; --mv-bg:#e9f6ee; }
-.mv[data-verdict="mostly-accurate"], .mv [data-verdict="mostly-accurate"] { --mv-fg:#5f7700; --mv-bg:#f3f7e2; }
-.mv[data-verdict="contradicted"], .mv [data-verdict="contradicted"] { --mv-fg:#c4281c; --mv-bg:#fdeeec; }
-.mv[data-verdict="misleading"], .mv [data-verdict="misleading"] { --mv-fg:#b25600; --mv-bg:#fff3e4; }
+.mv [data-verdict="supported"] { --tone:#15803d; --tint:#ecfdf3; }
+.mv [data-verdict="mostly-accurate"] { --tone:#a16207; --tint:#fef9e7; }
+.mv [data-verdict="misleading"] { --tone:#c2410c; --tint:#fff4ed; }
+.mv [data-verdict="contradicted"] { --tone:#b91c1c; --tint:#fef2f2; }
+.mv [data-verdict="unavailable"] { --tone:#0369a1; --tint:#f0f9ff; }
 @media (prefers-color-scheme: dark) {
-  .mv { --mv-card:#161718; --mv-ink:#f1f1f0; --mv-muted:#a3a7ae; --mv-faint:#71757c; --mv-line:#2a2b2e;
-    --mv-sub:#1e1f21; --mv-link:#f1f1f0; --mv-focus:#8ab4ff; --mv-fg:#b7bbc2; --mv-bg:#25272a; }
-  .mv[data-verdict="supported"], .mv [data-verdict="supported"] { --mv-fg:#5fd38a; --mv-bg:#12261a; }
-  .mv[data-verdict="mostly-accurate"], .mv [data-verdict="mostly-accurate"] { --mv-fg:#c6da6b; --mv-bg:#23280f; }
-  .mv[data-verdict="contradicted"], .mv [data-verdict="contradicted"] { --mv-fg:#ff8378; --mv-bg:#2f1614; }
-  .mv[data-verdict="misleading"], .mv [data-verdict="misleading"] { --mv-fg:#ffb35e; --mv-bg:#2d1f0e; }
+  .mv { --ink:#f3f4f6; --ink2:#d1d5db; --muted:#9ca3af; --line:#2b2f36; --subtle:#1d1f23; --bg:#17181b;
+    --accent:#3b82f6; --accent-hover:#60a5fa; --on-accent:#ffffff; --focus:#60a5fa; --tone:#9ca3af; --tint:#24262b; }
+  .mv [data-verdict="supported"] { --tone:#4ade80; --tint:#13261b; }
+  .mv [data-verdict="mostly-accurate"] { --tone:#facc15; --tint:#2a2410; }
+  .mv [data-verdict="misleading"] { --tone:#fb923c; --tint:#2c1d12; }
+  .mv [data-verdict="contradicted"] { --tone:#f87171; --tint:#2c1617; }
+  .mv [data-verdict="unavailable"] { --tone:#38bdf8; --tint:#102530; }
 }
-.mv a { color: var(--mv-link); }
-.mv a:focus-visible, .mv button:focus-visible, .mv summary:focus-visible { outline: 2px solid var(--mv-focus); outline-offset: 2px; border-radius: 4px; }
-.mv-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+.mv a, .mv button { font-family: inherit; }
+.mv a:focus-visible, .mv button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
 
-/* verdict stamp */
-.mv-stamp { display:inline-flex; align-items:center; gap:7px; color:var(--mv-fg);
-  border:2px solid currentColor; border-radius:7px; padding:3px 10px 3px 7px;
-  font-weight:800; font-size:13px; letter-spacing:.07em; text-transform:uppercase;
-  transform-origin: 30% 60%; animation: mv-stamp .32s cubic-bezier(.2,1.5,.45,1) both; }
-.mv-stamp svg { width:17px; height:17px; flex:none; }
-.mv[data-verdict="unavailable"] .mv-stamp, .mv[data-verdict="no-verdict"] .mv-stamp { border-style:dashed; }
-@keyframes mv-stamp { from { opacity:0; transform: scale(1.35) rotate(-6deg); } to { opacity:1; transform:none; } }
+.mv-alert { }
+.mv-alert-h { display: inline-flex; align-items: center; gap: 7px; margin: 0; padding: 3px 10px 3px 8px;
+  border-radius: 6px; background: var(--tint); color: var(--tone); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.mv-alert-h::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.mv-alert-b { margin: 8px 0 0; font-size: 14px; color: var(--ink2); }
 
-/* the two numbers */
-.mv-nums { margin-top:16px; display:grid; gap:14px; }
-.mv-row { display:grid; grid-template-columns: minmax(0,auto) auto minmax(0,1fr); align-items:baseline; column-gap:14px; row-gap:2px; }
-.mv-row.mv-solo { grid-template-columns: minmax(0,1fr); }
-.mv-row-label { grid-column: 1 / -1; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
-  color:var(--mv-faint); margin-bottom:2px; }
-.mv-k { font-size:11px; font-weight:650; letter-spacing:.07em; text-transform:uppercase; color:var(--mv-faint); }
-.mv-n.mv-claim { font-size:20px; font-weight:600; color:var(--mv-muted); font-variant-numeric:tabular-nums;
-  line-height:1.15; overflow-wrap:anywhere; }
-[data-verdict="contradicted"] .mv-n.mv-claim { text-decoration: line-through; text-decoration-thickness: 2px;
-  text-decoration-color: var(--mv-fg); }
-.mv-arrow { color:var(--mv-faint); font-size:18px; }
-.mv-n.mv-official { font-size:34px; font-weight:800; letter-spacing:-0.025em; line-height:1.05;
-  font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
-.mv-ctx { margin-top:4px; font-size:12.5px; color:var(--mv-muted); }
-.mv-note { margin-top:10px; display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:650;
-  color:var(--mv-fg); background:var(--mv-bg); border-radius:999px; padding:3px 10px; }
-.mv-single .mv-n.mv-official { font-size:40px; }
-.mv-ctx { grid-column: -2 / -1; }
+.mv-sec { margin-top: 14px; }
+.mv-label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.mv-fig { margin: 1px 0 0; font-size: 30px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mv-fig.mv-long { font-size: 20px; letter-spacing: -0.01em; }
+.mv-what { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+.mv-note { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
 
-.mv-summary { margin:14px 0 0; font-size:14.5px; line-height:1.5; }
-.mv-try { margin:10px 0 0; font-size:13.5px; color:var(--mv-muted); }
-.mv-try b { color:var(--mv-ink); font-weight:650; }
-.mv-notes { list-style:none; margin:12px 0 0; padding:0; display:grid; gap:4px; }
-.mv-notes li { font-size:12.5px; color:var(--mv-muted); line-height:1.45; padding-left:14px; position:relative; }
-.mv-notes li::before { content:"i"; position:absolute; left:0; top:0; font: italic 700 11px Georgia, serif; color:var(--mv-faint); }
+.mv-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.mv-table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); padding: 0 8px 4px 0; }
+.mv-table td { text-align: left; padding: 6px 8px 6px 0; border-top: 1px solid var(--line); }
+.mv-table td:nth-child(2) { font-weight: 650; }
 
-/* footer: source + actions */
-.mv-foot { margin-top:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.mv-src { flex:1 1 auto; min-width:0; font-size:12.5px; color:var(--mv-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.mv-src a { color:var(--mv-muted); text-decoration:underline; text-decoration-color:var(--mv-line); text-underline-offset:3px; }
-.mv-src a:hover { color:var(--mv-ink); text-decoration-color:currentColor; }
-.mv-btn { font:inherit; font-size:12.5px; font-weight:650; padding:6px 11px; border-radius:999px; cursor:pointer;
-  border:1px solid var(--mv-line); background:var(--mv-card); color:var(--mv-ink); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
-.mv-btn:hover { border-color: var(--mv-faint); }
-.mv-btn.mv-primary { background:var(--mv-ink); border-color:var(--mv-ink); color:var(--mv-card); }
-.mv-btn.mv-primary:hover { opacity:.88; }
-.mv-btn svg { width:14px; height:14px; }
-.mv-btn.mv-done { background:var(--mv-bg); border-color:transparent; color:var(--mv-fg); }
+.mv-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.mv-src { margin: 0 0 10px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.mv a { color: var(--accent); text-decoration: none; }
+.mv a:hover { text-decoration: underline; }
+.mv-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mv-btn { appearance: none; border: 0; border-radius: 8px; cursor: pointer; padding: 7px 12px;
+  font-size: 13px; font-weight: 600; line-height: 1.2; background: var(--accent); color: var(--on-accent); }
+.mv-btn:hover { background: var(--accent-hover); }
+.mv-btn-outline { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.mv-btn-outline:hover { background: var(--subtle); }
+.mv-linkbtn { appearance: none; border: 0; background: none; padding: 0; cursor: pointer; font-size: 13px;
+  font-weight: 500; color: var(--muted); }
+.mv-linkbtn:hover { color: var(--ink); }
+.mv-status { font-size: 12.5px; color: var(--muted); }
+.mv-how { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.mv-loading { margin: 0; font-size: 13px; color: var(--muted); }
 
-/* how this was checked */
-.mv-how { margin-top:14px; border-top:1px solid var(--mv-line); }
-.mv-how summary { cursor:pointer; list-style:none; padding:10px 0 0; font-size:12.5px; font-weight:600; color:var(--mv-muted); }
-.mv-how summary::-webkit-details-marker { display:none; }
-.mv-how summary::after { content:" +"; color:var(--mv-faint); }
-.mv-how[open] summary::after { content:" \\2212"; }
-.mv-how-body { padding-top:8px; display:grid; gap:10px; font-size:12.5px; color:var(--mv-muted); }
-.mv-how-body b { color:var(--mv-ink); font-weight:650; }
-.mv-how-body p { margin:0; }
-.mv-list { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
-.mv-list a { color:var(--mv-ink); text-decoration:none; font-weight:600; }
-.mv-list a:hover { text-decoration:underline; }
-.mv-list span { display:block; color:var(--mv-muted); font-weight:400; overflow-wrap:anywhere; }
-.mv-tag { display:inline-block; margin-left:6px; font-size:10.5px; font-weight:700; letter-spacing:.04em;
-  text-transform:uppercase; color:#12813a; }
-.mv-cite { padding:8px 10px; border-radius:8px; background:var(--mv-sub); color:var(--mv-ink);
-  font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap:anywhere; white-space:pre-wrap; }
-.mv-meta { margin-top:8px; font-size:11.5px; color:var(--mv-faint); }
-.mv-meta button { font:inherit; color:var(--mv-muted); background:none; border:0; padding:0; text-decoration:underline; cursor:pointer; }
-
-/* loading */
-.mv-skel { display:grid; gap:12px; }
-.mv-skel i { display:block; height:14px; border-radius:6px; background: linear-gradient(90deg, var(--mv-sub), var(--mv-line), var(--mv-sub));
-  background-size: 200% 100%; animation: mv-shim 1.1s linear infinite; }
-.mv-skel i:nth-child(1) { width:132px; height:26px; }
-.mv-skel i:nth-child(2) { width:58%; height:38px; }
-.mv-skel i:nth-child(3) { width:40%; }
-@keyframes mv-shim { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-.mv-loading-t { margin-top:12px; font-size:13px; color:var(--mv-muted); }
-@media (prefers-reduced-motion: reduce) { .mv-stamp, .mv-skel i { animation:none; } }
+.mv { --mark:#fef3c7; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { .mv { --mark:#3b3112; } }
+.mv-ex { margin: 12px 0 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.mv-ex-h { margin: 0; padding: 6px 10px; font-size: 11.5px; color: var(--muted); background: var(--subtle);
+  border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.mv-ex-t { width: 100%; border-collapse: collapse; font: 12px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
+.mv-ex-t td { padding: 5px 10px; border-top: 1px solid var(--line); color: var(--ink2); vertical-align: top; }
+.mv-ex-t tr:first-child td { border-top: 0; }
+.mv-ex-t td:last-child { text-align: right; white-space: nowrap; }
+.mv-ex-t tr.mv-cited td { background: var(--mark); color: var(--ink); font-weight: 700; }
+.mv-ex-n { margin: 0; padding: 6px 10px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); }
+.mv-quote { margin: 12px 0 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--line); font-size: 13px; color: var(--ink2); }
+.mv-quote-by { display: block; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
 `;
-
-  const ICONS = {
-    "supported": "M5 12.5l4.2 4.2L19 7",
-    "mostly-accurate": "M5 9.5c2.3-2 4.7-2 7 0s4.7 2 7 0M5 15.5c2.3-2 4.7-2 7 0s4.7 2 7 0",
-    "contradicted": "M6.5 6.5l11 11M17.5 6.5l-11 11",
-    "misleading": "M12 6v8M12 18v.1",
-    "no-verdict": "M7 12h10",
-    "unavailable": "M12 7v6M12 17v.1",
-    "copy": "M9 9h10v10H9zM5 15V5h10",
-    "check": "M5 12.5l4.2 4.2L19 7",
-  };
-
-  const SVGNS = "http://www.w3.org/2000/svg";
-  function icon(name) {
-    const s = document.createElementNS(SVGNS, "svg");
-    s.setAttribute("viewBox", "0 0 24 24");
-    s.setAttribute("fill", "none");
-    s.setAttribute("stroke", "currentColor");
-    s.setAttribute("stroke-width", "2.6");
-    s.setAttribute("stroke-linecap", "round");
-    s.setAttribute("stroke-linejoin", "round");
-    s.setAttribute("aria-hidden", "true");
-    const p = document.createElementNS(SVGNS, "path");
-    p.setAttribute("d", ICONS[name] || ICONS["no-verdict"]);
-    s.appendChild(p);
-    return s;
-  }
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -161,69 +107,36 @@
     }
   }
 
-  function link(href, text, cls) {
+  function link(href, text, title) {
     const url = safeUrl(href);
-    const a = el(url ? "a" : "span", cls, text);
+    const a = el(url ? "a" : "span", "", text);
     if (url) {
       a.href = url;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
     }
+    if (title) a.title = title;
     return a;
   }
 
-  const reducedMotion = () =>
-    typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  // "$6.75 trillion" -> { pre: "$", num: 6.75, decimals: 2, grouped: false, post: " trillion" }
-  function parseNum(text) {
-    const m = /^(.*?)(-?\d[\d,]*\.?\d*)(.*)$/.exec(String(text || ""));
-    if (!m) return null;
-    return { pre: m[1], num: parseFloat(m[2].replace(/,/g, "")),
-      decimals: (m[2].split(".")[1] || "").length, grouped: m[2].includes(","), post: m[3] };
-  }
-
-  function fmt(p, x) {
-    const s = p.grouped
-      ? x.toLocaleString("en-US", { minimumFractionDigits: p.decimals, maximumFractionDigits: p.decimals })
-      : x.toFixed(p.decimals);
-    return p.pre + s + p.post;
-  }
-
-  /** A number element that counts to its value: from the claim's figure, or from zero. */
-  function numberEl(finalText, fromText) {
-    const wrap = el("div", "mv-n");
-    const shown = el("span", "", finalText);
-    shown.setAttribute("aria-hidden", "true");
-    wrap.append(shown, el("span", "mv-sr", finalText));
-    const to = parseNum(finalText);
-    if (!to || reducedMotion()) return wrap;
-    const from = parseNum(fromText);
-    const start = from && from.post === to.post ? from.num : 0;
-    if (start === to.num) return wrap;
-    const t0 = performance.now();
-    const dur = 700;
-    const step = (t) => {
-      const k = Math.min(1, (t - t0) / dur);
-      const e = 1 - Math.pow(1 - k, 3);
-      shown.textContent = k < 1 ? fmt(to, start + (to.num - start) * e) : finalText;
-      if (k < 1) requestAnimationFrame(step);
-    };
-    shown.textContent = fmt(to, start);
-    requestAnimationFrame(step);
-    return wrap;
-  }
-
-  async function copyText(text) {
+  /** Copy plain text, plus HTML (with a live link) where the browser allows. */
+  async function copyText(plain, html) {
     try {
-      await navigator.clipboard.writeText(text);
+      if (html && global.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({
+          "text/plain": new Blob([plain], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+        })]);
+        return true;
+      }
+      await navigator.clipboard.writeText(plain);
       return true;
     } catch (e) {
       try {
         const t = document.createElement("textarea");
-        t.value = text;
-        t.style.position = "fixed";
-        t.style.opacity = "0";
+        t.value = plain;
+        t.setAttribute("readonly", "");
+        t.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
         document.body.appendChild(t);
         t.select();
         const ok = document.execCommand("copy");
@@ -235,256 +148,247 @@
     }
   }
 
-  function copyButton(label, text, primary) {
-    const b = el("button", primary ? "mv-btn mv-primary" : "mv-btn");
+  function citeButton(plain, html) {
+    const wrap = el("div", "mv-actions");
+    const b = el("button", "mv-btn", "Copy citation");
     b.type = "button";
-    const ic = icon("copy");
-    const t = el("span", "", label);
-    b.append(ic, t);
+    const status = el("span", "mv-status");
+    status.setAttribute("role", "status");
     b.addEventListener("click", async () => {
-      const ok = await copyText(text);
-      b.classList.toggle("mv-done", ok);
-      b.classList.toggle("mv-primary", !ok && primary);
-      ic.firstChild.setAttribute("d", ok ? ICONS.check : ICONS.copy);
-      t.textContent = ok ? "Copied" : "Copy failed";
-      setTimeout(() => {
-        b.classList.remove("mv-done");
-        if (primary) b.classList.add("mv-primary");
-        ic.firstChild.setAttribute("d", ICONS.copy);
-        t.textContent = label;
-      }, 1600);
+      const ok = await copyText(plain, html);
+      status.textContent = ok ? "Citation copied." : "Couldn't copy. Select the text instead.";
+      setTimeout(() => { status.textContent = ""; }, 2500);
     });
-    return b;
+    wrap.append(b, status);
+    return wrap;
   }
 
-  function stamp(key, label) {
-    const s = el("span", "mv-stamp");
-    s.append(icon(ICONS[key] ? key : "no-verdict"), document.createTextNode(label));
-    return s;
+  function alertBox(key, heading, body) {
+    const a = el("div", "mv-alert");
+    a.dataset.verdict = key;
+    a.appendChild(el("p", "mv-alert-h", heading));
+    (Array.isArray(body) ? body : [body]).filter(Boolean)
+      .forEach((t) => a.appendChild(el("p", "mv-alert-b", t)));
+    return a;
+  }
+
+  // One plain-language sentence relating the claim to the official figure.
+  function relationText(c) {
+    if (!c.claim) return "";
+    switch (c.relation) {
+      case "exact": return "The claim matches the official figure.";
+      case "within": return `The claim says ${c.claim}, within the margin of the official figure.`;
+      case "off": return `The claim says ${c.claim}, a difference of ${c.gap || c.gap_short}.`;
+      default: return `The claim says ${c.claim}.`;
+    }
+  }
+
+  function describe(c) {
+    const when = [c.period, c.basis].filter(Boolean).join(", ");
+    return [c.measure, c.place, when].filter(Boolean).join(", ");
+  }
+
+  function sourceLine(d) {
+    const p = el("p", "mv-src");
+    const sources = (d.sources || []).filter((s) => s && safeUrl(s.url));
+    const data = sources.filter((s) => s.kind === "data");
+    const web = sources.filter((s) => s.kind !== "data");
+    if (data.length) {
+      p.appendChild(document.createTextNode("Source: "));
+      const seen = new Set();
+      data.forEach((s) => {
+        if (seen.has(s.url)) return;
+        if (seen.size) p.appendChild(document.createTextNode("; "));
+        seen.add(s.url);
+        const detail = [s.dataset, s.identifier].filter(Boolean).join(", ");
+        p.appendChild(link(s.url, s.agency, detail));
+        if (detail) p.appendChild(document.createTextNode(`, ${detail}`));
+      });
+    } else if (web.length) {
+      p.appendChild(document.createTextNode("Sources found by web search: "));
+      const byDomain = new Map();
+      web.forEach((s) => { if (!byDomain.has(s.domain)) byDomain.set(s.domain, s); });
+      Array.from(byDomain.values()).slice(0, 3).forEach((s, i) => {
+        if (i) p.appendChild(document.createTextNode(", "));
+        p.appendChild(link(s.url, s.domain, s.title));
+      });
+    }
+    return p.childNodes.length ? p : null;
   }
 
   // Older API responses carry no `display`; build the minimum from v1 fields.
+  /** The published rows a figure was read from, the cited one marked. */
+  function excerptBox(ex) {
+    if (!ex || !Array.isArray(ex.rows) || !ex.rows.length) return null;
+    const box = el("figure", "mv-ex");
+    const head = [ex.heading, ex.units].filter(Boolean).join(" · ");
+    if (head) box.appendChild(el("figcaption", "mv-ex-h", head));
+    const table = el("table", "mv-ex-t");
+    ex.rows.forEach((r) => {
+      const tr = el("tr", r.cited ? "mv-cited" : "");
+      if (r.cited) tr.setAttribute("aria-label", `Cited: ${r.label}, ${r.value}`);
+      tr.append(el("td", "", r.label), el("td", "", r.value));
+      table.appendChild(tr);
+    });
+    box.appendChild(table);
+    if (ex.note) box.appendChild(el("p", "mv-ex-n", ex.note));
+    return box;
+  }
+
+  /** For a web-search answer: the sentence on the official page it rests on. */
+  function quoteBox(d) {
+    const s = (d.sources || []).find((x) => x && x.kind === "web" && x.quote && safeUrl(x.url)
+      && x.official) || (d.sources || []).find((x) => x && x.kind === "web" && x.quote && safeUrl(x.url));
+    if (!s) return null;
+    const q = el("blockquote", "mv-quote", `“${s.quote}”`);
+    const by = el("span", "mv-quote-by");
+    by.appendChild(link(s.url, s.domain || s.title));
+    q.appendChild(by);
+    return q;
+  }
+
   function displayOf(r) {
     if (r && r.display && r.display.verdict) return r.display;
-    const label = (r && (r.verdict_detail || r.verdict)) || "No verdict";
+    const label = (r && (r.verdict_detail || r.verdict)) || "Can't verify";
     const key = r && r.degraded ? "unavailable" : label.toLowerCase().replace(/\s+/g, "-");
-    return {
-      verdict: { key, label: r && r.degraded ? "Couldn't check" : label, meaning: "" },
-      summary: (r && (r.headline || r.summary)) || "", comparisons: [], notes: [], sources: [],
-      reason: null, citation: "", share_text: (r && r.summary) || "", method: null, confidence: null,
-    };
-  }
-
-  // Claim and official figure on one baseline: labels, then numbers, then context.
-  function rowEl(c, multi) {
-    const row = el("div", c.claim ? "mv-row" : "mv-row mv-solo");
-    row.dataset.verdict = c.verdict_key || "";
-    if (multi && c.label) row.appendChild(el("div", "mv-row-label", c.label));
-    const officialK = el("div", "mv-k mv-official", c.source ? `Official · ${c.source}` : "Official");
-    const officialN = numberEl(c.official, c.claim);
-    officialN.classList.add("mv-official");
-    if (c.claim) {
-      const claimN = el("div", "mv-n mv-claim", c.claim);
-      row.append(el("div", "mv-k", "Claim"), el("div"), officialK,
-        claimN, el("div", "mv-arrow", "→"), officialN);
-      if (c.context) row.append(el("div"), el("div"), el("div", "mv-ctx", c.context));
-    } else {
-      row.append(officialK, officialN);
-      if (c.context) row.appendChild(el("div", "mv-ctx", c.context));
-    }
-    return row;
-  }
-
-  function howEl(d, sources) {
-    const how = el("details", "mv-how");
-    how.appendChild(el("summary", "", "How this was checked"));
-    const body = el("div", "mv-how-body");
-    if (d.method && d.method.title) {
-      const p = el("p");
-      p.appendChild(el("b", "", d.method.title + ". "));
-      p.appendChild(document.createTextNode(d.method.text || ""));
-      if (d.method.elapsed_seconds) p.appendChild(document.createTextNode(` Took ${d.method.elapsed_seconds}s.`));
-      body.appendChild(p);
-    }
-    if (d.confidence && d.confidence.tier) {
-      const p = el("p");
-      p.appendChild(el("b", "", `${d.confidence.tier} confidence. `));
-      p.appendChild(document.createTextNode(d.confidence.text || ""));
-      body.appendChild(p);
-    }
-    if (sources.length) {
-      const ul = el("ul", "mv-list");
-      sources.slice(0, 8).forEach((s) => {
-        const li = el("li");
-        if (s.kind === "data") {
-          li.appendChild(link(s.url, s.agency));
-          li.appendChild(el("span", "", [s.dataset, s.identifier, s.measure].filter(Boolean).join(" · ")));
-        } else {
-          li.appendChild(link(s.url, s.title || s.domain));
-          const meta = el("span", "", s.domain);
-          if (s.official) meta.appendChild(el("b", "mv-tag", "official"));
-          li.appendChild(meta);
-        }
-        ul.appendChild(li);
-      });
-      body.appendChild(ul);
-    }
-    if (d.citation) body.appendChild(el("div", "mv-cite", d.citation));
-    how.appendChild(body);
-    return how;
+    return { verdict: { key, label: r && r.degraded ? "Couldn't check" : label },
+      summary: (r && (r.headline || r.summary)) || "", comparisons: [], notes: [], sources: [] };
   }
 
   /**
-   * Render a claim check.
-   * opts: { onRecheck(): void, cached: bool }
+   * A claim check.
+   * opts: { onRecheck(): void } adds "Check again" (for saved results).
    */
   function render(result, opts) {
     opts = opts || {};
     const d = displayOf(result);
-    const key = (d.verdict && d.verdict.key) || "no-verdict";
+    const key = d.verdict.key || "no-verdict";
     const root = el("div", "mv");
-    root.dataset.verdict = key;
     root.setAttribute("role", "region");
-    root.setAttribute("aria-label", `Verdict: ${d.verdict.label}`);
-
-    const st = stamp(key, d.verdict.label);
-    if (d.verdict.meaning) st.title = d.verdict.meaning;
-    root.appendChild(st);
+    root.setAttribute("aria-label", d.verdict.label);
 
     const comps = (d.comparisons || []).filter((c) => c.official);
-    if (comps.length) {
-      const nums = el("div", comps.length === 1 ? "mv-nums mv-single" : "mv-nums");
-      comps.forEach((c) => nums.appendChild(rowEl(c, comps.length > 1)));
-      root.appendChild(nums);
+    const alertBody = [];
+    if (comps.length === 1) alertBody.push(relationText(comps[0]));
+    else if (comps.length > 1) {
+      comps.filter((c) => c.relation === "off" || c.relation === "within")
+        .forEach((c) => alertBody.push(`${c.label}: ${relationText(c)}`));
+    } else alertBody.push(d.summary);
+    if (d.reason && d.reason.next) alertBody.push(d.reason.next);
+    root.appendChild(alertBox(key, d.verdict.label, alertBody));
+
+    if (comps.length === 1) {
+      const c = comps[0];
+      const sec = el("div", "mv-sec");
+      sec.append(el("div", "mv-label", "Official figure"),
+        el("p", c.official.length > 16 ? "mv-fig mv-long" : "mv-fig", c.official),
+        el("p", "mv-what", describe(c)));
+      const ex = excerptBox(c.excerpt);
+      if (ex) sec.appendChild(ex);
+      root.appendChild(sec);
+    } else if (comps.length > 1) {
+      const sec = el("div", "mv-sec");
+      const table = el("table", "mv-table");
+      const head = el("tr");
+      ["", "Official", "Claim"].forEach((h) => head.appendChild(el("th", "", h)));
+      table.appendChild(head);
       comps.forEach((c) => {
-        if (!c.note) return;
-        const label = comps.length > 1 && c.label ? `${c.label}: ` : "";
-        const n = el("div", "mv-note", label + c.note);
-        n.dataset.verdict = c.verdict_key || "";
-        root.append(n, document.createTextNode(" "));
+        const tr = el("tr");
+        tr.append(el("td", "", c.label || c.period), el("td", "", c.official), el("td", "", c.claim));
+        table.appendChild(tr);
       });
+      const first = comps[0];
+      sec.append(table, el("p", "mv-what", [first.measure, first.place, first.basis].filter(Boolean).join(", ")));
+      comps.slice(0, 2).forEach((c) => { const ex = excerptBox(c.excerpt); if (ex) sec.appendChild(ex); });
+      root.appendChild(sec);
     } else if (d.reported_value) {
-      const nums = el("div", "mv-nums mv-single");
-      nums.appendChild(rowEl({ official: d.reported_value, context: d.reported_context,
-        source: "", verdict_key: key }, false));
-      nums.querySelector(".mv-k").textContent = "Figure found";
-      root.appendChild(nums);
+      const sec = el("div", "mv-sec");
+      // The model's own description of the publisher is not shown: the pages
+      // themselves are linked under Sources.
+      sec.append(el("div", "mv-label", "Figure found by web search"),
+        el("p", d.reported_value.length > 16 ? "mv-fig mv-long" : "mv-fig", d.reported_value));
+      root.appendChild(sec);
+    }
+    if (!comps.length) {
+      const q = quoteBox(d);
+      if (q) root.appendChild(q);
     }
 
-    // Words only where the numbers do not already say it.
-    if (!comps.length && d.summary) root.appendChild(el("p", "mv-summary", d.summary));
-    if (d.reason && d.reason.next) {
-      const p = el("p", "mv-try");
-      p.append(el("b", "", "Try: "), document.createTextNode(d.reason.next));
-      root.appendChild(p);
-    }
+    (d.notes || []).slice(0, 2).forEach((n) => root.appendChild(el("p", "mv-note", n)));
 
-    if (d.notes && d.notes.length) {
-      const ul = el("ul", "mv-notes");
-      d.notes.forEach((n) => ul.appendChild(el("li", "", n)));
-      root.appendChild(ul);
-    }
-
-    const sources = (d.sources || []).filter((s) => s && safeUrl(s.url));
-    const foot = el("div", "mv-foot");
-    const first = sources[0];
-    if (first) {
-      const src = el("div", "mv-src");
-      src.appendChild(document.createTextNode("Source: "));
-      const text = first.kind === "data"
-        ? [first.agency_short, first.identifier].filter(Boolean).join(", ")
-        : first.domain;
-      src.appendChild(link(first.url, `${text} ↗`));
-      const more = sources.length - 1;
-      if (more > 0) src.appendChild(document.createTextNode(` +${more} more`));
-      foot.appendChild(src);
-    }
-    if (d.citation) foot.appendChild(copyButton("Copy citation", d.citation, true));
-    if (d.share_text) foot.appendChild(copyButton("Copy result", d.share_text, false));
-    if (foot.childNodes.length) root.appendChild(foot);
-
-    if ((d.method && d.method.title) || sources.length) root.appendChild(howEl(d, sources));
-
-    if (opts.cached && typeof opts.onRecheck === "function") {
-      const meta = el("div", "mv-meta", "Saved result from earlier today. ");
-      const again = el("button", "", "Check again");
-      again.type = "button";
-      again.addEventListener("click", () => opts.onRecheck());
-      meta.appendChild(again);
-      root.appendChild(meta);
+    const src = sourceLine(d);
+    if (src || d.citation || opts.onRecheck) {
+      const foot = el("div", "mv-foot");
+      if (src) foot.appendChild(src);
+      if (d.method && d.method.kind === "dataset") {
+        foot.appendChild(el("p", "mv-how", "Series matched by AI; the figure comes straight from the agency's data."));
+      }
+      const actions = d.citation ? citeButton(d.citation, d.citation_html) : el("div", "mv-actions");
+      if (typeof opts.onRecheck === "function") {
+        const again = el("button", "mv-linkbtn", "Check again");
+        again.type = "button";
+        again.title = "This result was saved earlier today.";
+        again.addEventListener("click", () => opts.onRecheck());
+        actions.appendChild(again);
+      }
+      if (actions.childNodes.length) foot.appendChild(actions);
+      root.appendChild(foot);
     }
     return root;
   }
 
-  /** Render a lookup ("find a number") result. opts: { onSuggest(query) } */
+  /** One official figure (a lookup). opts: { onSuggest(query) } */
   function renderLookup(r, opts) {
     opts = opts || {};
     const root = el("div", "mv");
     if (!r || !r.ok) {
-      root.appendChild(el("p", "mv-summary", (r && r.headline) || "No official series matches that yet."));
-      const sugg = (r && r.suggestions) || [];
+      const sugg = ((r && r.suggestions) || []).slice(0, 3);
+      const box = alertBox("no-verdict", "No official figure found",
+        (r && r.headline) || "No official series matches that search.");
       if (sugg.length && typeof opts.onSuggest === "function") {
-        const p = el("div", "mv-foot");
-        sugg.slice(0, 5).forEach((s) => {
-          const b = el("button", "mv-btn", s.example);
+        const p = el("p", "mv-alert-b", "Try: ");
+        sugg.forEach((s, i) => {
+          const b = el("button", "mv-linkbtn", s.example);
           b.type = "button";
           b.addEventListener("click", () => opts.onSuggest(s.example));
           p.appendChild(b);
+          if (i < sugg.length - 1) p.appendChild(document.createTextNode(", "));
         });
-        root.appendChild(p);
+        box.appendChild(p);
       }
+      root.appendChild(box);
       return root;
     }
     const c = r.citations || {};
-    const nums = el("div", "mv-nums mv-single");
-    nums.style.marginTop = "0";
-    nums.appendChild(rowEl({ official: c.value || r.value, context: c.attribution, source: "" }, false));
-    nums.querySelector(".mv-k").textContent = r.label || "Official figure";
-    root.appendChild(nums);
-    if (c.caveat) {
-      const ul = el("ul", "mv-notes");
-      ul.appendChild(el("li", "", c.caveat));
-      root.appendChild(ul);
-    }
+    // attribution reads "BLS, Texas, 2023 annual average": agency, then context.
+    const attr = c.attribution || "";
+    const cut = attr.indexOf(", ");
+    const context = cut > 0 ? attr.slice(cut + 2) : "";
+    const sec = el("div");
+    const value = c.value || r.value || "";
+    sec.append(el("div", "mv-label", r.label || "Official figure"),
+      el("p", value.length > 16 ? "mv-fig mv-long" : "mv-fig", value));
+    if (context) sec.appendChild(el("p", "mv-what", context));
+    root.appendChild(sec);
+    if (c.caveat) root.appendChild(el("p", "mv-note", c.caveat));
     const foot = el("div", "mv-foot");
     if (safeUrl(c.url)) {
-      const src = el("div", "mv-src");
-      src.appendChild(document.createTextNode("Source: "));
-      src.appendChild(link(c.url, `${c.agency || "official data"} ↗`));
-      foot.appendChild(src);
+      const p = el("p", "mv-src", "Source: ");
+      p.appendChild(link(c.url, c.agency || "official data"));
+      foot.appendChild(p);
     }
-    if (c.note) foot.appendChild(copyButton("Copy citation", c.note, true));
-    if (c.value) foot.appendChild(copyButton("Copy number", c.value, false));
+    if (c.note) foot.appendChild(citeButton(c.note, c.note_html));
     root.appendChild(foot);
-    if (c.note) {
-      const how = el("details", "mv-how");
-      how.appendChild(el("summary", "", "Citation formats"));
-      const body = el("div", "mv-how-body");
-      [["Full", c.note], ["Inline", c.inline], ["Markdown", c.markdown]].forEach(([k, v]) => {
-        if (!v) return;
-        const p = el("div");
-        p.appendChild(el("b", "", k));
-        const box = el("div", "mv-cite", v);
-        box.style.marginTop = "4px";
-        p.appendChild(box);
-        body.appendChild(p);
-      });
-      how.appendChild(body);
-      root.appendChild(how);
-    }
     return root;
   }
 
-  function loading(text) {
+  function loading() {
     const root = el("div", "mv");
     root.setAttribute("role", "status");
-    const sk = el("div", "mv-skel");
-    sk.append(el("i"), el("i"), el("i"));
-    root.appendChild(sk);
-    const t = el("div", "mv-loading-t", text || "Pulling the official figure…");
+    const t = el("p", "mv-loading", "Checking official data…");
     root.appendChild(t);
     setTimeout(() => {
-      if (root.isConnected) t.textContent = "No direct data feed for this one, so searching published sources (up to 15s)…";
+      if (root.isConnected) t.textContent = "Searching published sources. This can take up to 15 seconds.";
     }, 2500);
     return root;
   }
@@ -492,62 +396,36 @@
   function error(message, opts) {
     opts = opts || {};
     const root = el("div", "mv");
-    root.dataset.verdict = "unavailable";
-    root.appendChild(stamp("unavailable", "Couldn't check"));
-    root.appendChild(el("p", "mv-summary", message || "Something went wrong."));
+    root.appendChild(alertBox("unavailable", "Couldn't check", message || "Something went wrong."));
     if (typeof opts.onRetry === "function") {
-      const f = el("div", "mv-foot");
-      const b = el("button", "mv-btn", "Try again");
+      const foot = el("div", "mv-foot");
+      const b = el("button", "mv-btn mv-btn-outline", "Try again");
       b.type = "button";
       b.addEventListener("click", () => opts.onRetry());
-      f.appendChild(b);
-      root.appendChild(f);
+      foot.appendChild(b);
+      root.appendChild(foot);
     }
     return root;
   }
 
   function verdictKey(label) {
-    return String(label || "No verdict").toLowerCase().replace(/\s+/g, "-");
+    const k = String(label || "").toLowerCase().replace(/\s+/g, "-");
+    return k === "no-verdict" || k === "inconclusive" || k === "can't-verify" ? "no-verdict" : k;
   }
 
-  // Real claims and queries for "Surprise me". Each is answered from an
-  // agency's own data (no AI search) and its verdict is computed live.
-  const EXAMPLES = {
-    claims: [
-      "Unemployment in Texas was 4.1% in 2023",
-      "A dozen eggs cost $4.82 in January 2023",
-      "Inflation hit 9.1% in June 2022",
-      "The government spent over $7 trillion in 2024",
-      "The national debt is over $40 trillion",
-      "Unemployment fell from 8.1% in 2020 to 3.6% in 2023",
-      "The federal deficit was $1.8 trillion in 2024",
-      "Real GDP grew at a 2.2% annual rate in Q2 2026",
-      "Teen unemployment was 11% in 2023",
-      "Electricity costs 17 cents per kWh",
-      "Unemployment in Ohio was 10% in 2023",
-      "U.S. population was about 335 million in 2023",
-      "Federal revenue was $4.9 trillion in 2024",
-      "Unemployment hit 14.8% in April 2020",
-    ],
-    lookups: [
-      "unemployment rate texas 2023",
-      "price of eggs january 2023",
-      "national debt",
-      "federal deficit 2024",
-      "inflation rate june 2022",
-      "population california 2023",
-      "median household income 2023",
-      "price of gas 2023",
-      "teen unemployment rate 2023",
-      "real gdp growth 2023",
-    ],
-  };
-
-  function pick(list, avoid) {
-    const pool = list.filter((x) => x !== avoid);
-    return pool[Math.floor(Math.random() * pool.length)];
+  // A claim states a value; a lookup only names a measure (and maybe a year).
+  function intentOf(text) {
+    const t = String(text || "").replace(/\b(19|20)\d{2}\b/g, " ").replace(/\bq[1-4]\b/gi, " ");
+    return /\d/.test(t) ? "check" : "find";
   }
 
-  global.MiradorView = { css: CSS, render, renderLookup, loading, error, icon, safeUrl, copyText,
-    verdictKey, examples: EXAMPLES, pick };
+  // Real claims, each answered from an agency's own data (no AI search).
+  const EXAMPLES = [
+    "A dozen eggs cost $4.82 in January 2023",
+    "Unemployment in Texas was 4.1% in 2023",
+    "The federal deficit was $1.8 trillion in 2024",
+  ];
+
+  global.MiradorView = { css: CSS, render, renderLookup, loading, error, safeUrl, copyText,
+    verdictKey, intentOf, examples: EXAMPLES };
 })(typeof window !== "undefined" ? window : this);

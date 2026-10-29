@@ -241,6 +241,41 @@ _SPECS: List[MetricSpec] = [
         phrases=("core inflation rate", "core inflation", "core cpi",
                  "inflation excluding food and energy"),
     ),
+    # One category of consumer prices. Every series here was checked against
+    # BLS's published 12-month change (Dec 2023 release) before being wired up.
+    *[
+        MetricSpec(
+            metric=f"cpi_{key}", label=f"CPI-U inflation rate, {label}",
+            source="BLS", family=PERCENT, series_id=series, bls_kind="cpi_yoy",
+            phrases=tuple(
+                [f"{w} inflation" for w in words]
+                + [f"inflation for {w}" for w in words]
+                + [f"{w} {n} {v}" for w in words for n in ("prices", "costs")
+                   for v in ("rose", "increased", "climbed", "jumped", "fell", "dropped",
+                             "declined", "were up", "were down", "went up", "went down",
+                             "grew", "soared", "surged")]),
+            notes="CPI-U, U.S. city average, not seasonally adjusted.",
+        )
+        for key, label, series, words in [
+            ("food", "food", "CUUR0000SAF1", ("food",)),
+            ("food_at_home", "food at home (groceries)", "CUUR0000SAF11",
+             ("grocery", "groceries", "food at home", "supermarket")),
+            ("energy", "energy", "CUUR0000SA0E", ("energy",)),
+            ("gasoline", "gasoline (all types)", "CUUR0000SETB01",
+             ("gas", "gasoline")),
+            ("electricity", "electricity", "CUUR0000SEHF01", ("electricity", "electric")),
+            ("shelter", "shelter", "CUUR0000SAH1", ("shelter", "housing")),
+            ("rent", "rent of primary residence", "CUUR0000SEHA", ("rent", "rental")),
+            ("medical", "medical care", "CUUR0000SAM",
+             ("medical", "medical care", "health care", "healthcare")),
+            ("new_vehicles", "new vehicles", "CUUR0000SETA01",
+             ("new car", "new vehicle", "new-car", "new-vehicle")),
+            ("used_vehicles", "used cars and trucks", "CUUR0000SETA02",
+             ("used car", "used vehicle", "used-car", "used-vehicle")),
+            ("car_insurance", "motor vehicle insurance", "CUUR0000SETE",
+             ("car insurance", "auto insurance", "motor vehicle insurance")),
+        ]
+    ],
     MetricSpec(
         metric="cpi_index", label="CPI-U index level, all items", source="BLS",
         family=INDEX, series_id="CUUR0000SA0", bls_kind="rate",
@@ -367,7 +402,8 @@ _SPECS: List[MetricSpec] = [
         alternate_band=0.20,
         geo_levels=("nation", "state"),
         phrases=("poverty rate", "rate of poverty", "people in poverty",
-                 "living in poverty", "poverty level"),
+                 "living in poverty", "lived in poverty", "live in poverty",
+                 "lives in poverty", "poverty level"),
     ),
     MetricSpec(
         metric="uninsured_rate", label="Uninsured rate", source="CENSUS",
@@ -377,7 +413,8 @@ _SPECS: List[MetricSpec] = [
         alternate_band=0.15,
         geo_levels=("nation", "state"),
         phrases=("uninsured rate", "without health insurance", "uninsured",
-                 "lack health insurance", "health insurance coverage"),
+                 "lack health insurance", "lacked health insurance", "no health insurance",
+                 "health insurance coverage"),
     ),
     MetricSpec(
         metric="median_home_value", label="Median home value", source="CENSUS",
@@ -385,6 +422,13 @@ _SPECS: List[MetricSpec] = [
         geo_levels=("nation", "state"),
         phrases=("median home value", "median house price", "home values",
                  "typical home value", "house prices"),
+    ),
+    MetricSpec(
+        metric="median_gross_rent", label="Median gross rent (monthly)", source="CENSUS",
+        family=USD, census_variable="B25064_001E", min_year=2005,
+        geo_levels=("nation", "state"),
+        phrases=("median rent", "median gross rent", "median monthly rent", "typical rent"),
+        notes="Gross rent: contract rent plus utilities and fuels the renter pays.",
     ),
     MetricSpec(
         metric="bachelors_or_higher", label="Bachelor's degree or higher, ages 25 and over",
@@ -419,6 +463,23 @@ def all_metrics() -> List[MetricSpec]:
 
 def supported_metric_names() -> List[str]:
     return sorted(BY_METRIC)
+
+
+def match_metrics(text: str) -> List[MetricSpec]:
+    """Every series a claim's wording matches, longest phrase first. The
+    parser picks the first one in the claim's units: "gas prices rose 5%"
+    and "gas prices were $3.50" share words but not a series."""
+    if not text:
+        return []
+    haystack = f" {' '.join(text.lower().split())} "
+    out: List[MetricSpec] = []
+    for phrase, spec in _PHRASE_INDEX:
+        if spec in out:
+            continue
+        if f" {phrase} " in haystack or f" {phrase}," in haystack \
+                or f" {phrase}." in haystack or f" {phrase}'s " in haystack:
+            out.append(spec)
+    return out
 
 
 def match_metric(text: str) -> Optional[MetricSpec]:

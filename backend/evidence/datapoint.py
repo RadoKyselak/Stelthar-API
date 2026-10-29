@@ -298,5 +298,6 @@ class Datapoint:
             "source_url": self.source_url,
             "series_id": self.series_id,
             "table": (self.extra or {}).get("table"),
+            "publisher": (self.extra or {}).get("original_source"),
             "as_of": self.as_of,
         }

@@ -79,6 +79,17 @@ AI_MAX_CALLS_PER_DAY = _env_int("AI_MAX_CALLS_PER_DAY", 100, 0, 5000)
 AI_MAX_CALLS_PER_CLIENT_PER_DAY = _env_int("AI_MAX_CALLS_PER_CLIENT_PER_DAY", 10, 0, 500)
 AI_MAX_SPEND_USD_PER_DAY = _env_float("AI_MAX_SPEND_USD_PER_DAY", 1.00, 0.0, 50.0)
 
+# Dataset matching: one tiny model call (no web search, ~1,500 tokens) that
+# picks which real government series a claim is about. About 1/50th the cost
+# of a web search, so it has its own, larger call caps; its spend counts
+# against the same daily dollar cap above.
+AI_PICK_MAX_CALLS_PER_DAY = _env_int("AI_PICK_MAX_CALLS_PER_DAY", 1000, 0, 20000)
+AI_PICK_MAX_CALLS_PER_CLIENT_PER_DAY = _env_int("AI_PICK_MAX_CALLS_PER_CLIENT_PER_DAY", 60, 0, 2000)
+
+# FRED (Federal Reserve Bank of St. Louis): 800,000+ series from BLS, BEA,
+# Census, the Fed and others. Free key: https://fredaccount.stlouisfed.org/apikeys
+FRED_API_KEY = os.getenv("FRED_API_KEY")
+
 # Shared counter store (Upstash Redis REST; Vercel's Upstash/KV integration
 # sets the KV_* names).
 REDIS_REST_URL = os.getenv("UPSTASH_REDIS_REST_URL") or os.getenv("KV_REST_API_URL")

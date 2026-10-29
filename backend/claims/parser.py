@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from claims.geography import resolve_geography
-from claims.metrics import VARIANTS, MetricSpec, match_metric
+from claims.metrics import BY_METRIC, VARIANTS, MetricSpec, match_metric, match_metrics
 from evidence.datapoint import Geography
 from evidence.units import Quantity, parse_quantity
 import evidence.units as _units
@@ -174,6 +174,34 @@ def _select_variant(text: str, spec: Optional[MetricSpec]) -> Optional[MetricSpe
     return hits[0] if len(hits) == 1 else spec
 
 
+# Things that are not the federal debt, though they say "debt".
+_NOT_THE_DEBT_RE = re.compile(
+    r"\binterest\s+(?:payments?\s+|costs?\s+|expenses?\s+|outlays?\s+|spending\s+)?"
+    r"(?:on|for)\s+(?:the\s+|our\s+)?(?:national\s+|federal\s+|public\s+)?debt\b"
+    r"|\b(?:debt\s+interest|net\s+interest)\b"
+    r"|\bdebt\s+(?:ceiling|limit)\b"
+    r"|\bheld\s+by\s+the\s+public\b|\bintragovernmental\b"
+    r"|\b(?:student(?:\s+loan)?|credit[- ]card|household|consumer|medical|corporate|mortgage|"
+    r"auto(?:\s+loan)?|car|state|city|municipal|private|personal|foreign|external)\s+debt\b"
+    r"|\bdebt[- ]to[- ]gdp\b|\bdebt\s+(?:as\s+a\s+)?(?:share|percent(?:age)?)\s+of\b",
+    re.IGNORECASE)
+# "Tuition inflation", "inflation for childcare": one category of prices,
+# not the all-items rate. Categories with their own series match those first.
+_CATEGORY_INFLATION_RE = re.compile(
+    r"\b(?!core\b|headline\b|overall\b|annual\b|consumer\b|cpi\b|price\b|the\b|"
+    r"monthly\b|yearly\b|average\b|high\b|low\b|record\b|u\.?s\.?\b|us\b|american\b|"
+    r"national\b|current\b|recent\b|runaway\b|rising\b|persistent\b|global\b|"
+    r"beating\b|beat\b|outpacing\b|outpaced\b|above\b|below\b|than\b|with\b|of\b|to\b|"
+    r"after\b|for\b|adjusted\b|adjusting\b|and\b|by\b|from\b|at\b|cooling\b|falling\b|"
+    r"slowing\b|easing\b|sticky\b|stubborn\b|hot\b|higher\b|lower\b|soaring\b|"
+    r"official\b|measured\b|year-over-year\b|12-month\b|month-over-month\b)"
+    r"([a-z][a-z-]+)\s+inflation\b"
+    r"|\binflation\s+(?:for|in|on)\s+(?!the\s+u|america|\d|19|20|january|february|march|"
+    r"april|may|june|july|august|september|october|november|december)([a-z][a-z-]+)",
+    re.IGNORECASE)
+_WAGE_RE = re.compile(r"\bwages?\b|\bpaychecks?\b|\bsalar(?:y|ies)\b", re.IGNORECASE)
+
+
 def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[int] = None) -> str:
     """Why the matched series cannot answer this claim, or "" if it can."""
     if spec is None or not text:
@@ -194,6 +222,20 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
         return "the claim is about a quarter or an annualised rate; only annual and monthly figures are wired up"
     if _PER_CAPITA_RE.search(text):
         return "the claim is a per-capita figure; the series is a total"
+    if spec.metric == "national_debt":
+        m = _NOT_THE_DEBT_RE.search(text)
+        if m:
+            return (f"the claim is about \u201c{m.group(0).strip()}\u201d, not the total "
+                    f"federal debt outstanding")
+    if spec.metric == "inflation_rate":
+        if _WAGE_RE.search(text):
+            return "the claim is about wages, not consumer prices"
+        for m in _CATEGORY_INFLATION_RE.finditer(text):
+            word = m.group(1) or m.group(2) or ""
+            if resolve_geography(word) is not None:
+                continue  # "Texas inflation": a place, which the geography check handles
+            return (f"the claim is about one category of prices (\u201c{m.group(0).strip()}\u201d), "
+                    f"not overall consumer inflation")
     if spec.family == _units.USD and _REAL_DOLLARS_RE.search(text):
         return "the claim is inflation-adjusted; the series is in current dollars"
     if spec.metric == "real_gdp_growth" and _NOMINAL_RE.search(text):
@@ -315,6 +357,66 @@ def _strip_years_for_value(text: str, years: List[int]) -> str:
     return re.sub(r"\s+", " ", out).strip()
 
 
+# "Texas had 30.5 million residents", "About 39 million people live in
+# California": a head count, said without the word "population". The number
+# must sit directly before the noun (so "5 million Hispanic residents" and
+# "2 million more people" are not counts of everyone), and nothing may follow
+# but the place and the period ("people without insurance" is a subgroup).
+_HEADCOUNT = r"\d[\d,.]*\s*(?:million|billion|thousand)?\s+(?:people|residents|inhabitants|persons)"
+_POPULATION_RES = (
+    re.compile(r"\b(?:has|had|have|is home to|was home to|counts|counted|numbered|"
+               r"reached|hit|topped|surpassed|exceeded|passed)\s+"
+               r"(?:about |nearly |roughly |almost |around |approximately |some |over |"
+               r"more than |just over |just under |under |fewer than |less than )?"
+               + _HEADCOUNT + r"(?P<tail>.*)$", re.IGNORECASE),
+    re.compile(_HEADCOUNT + r"\s+(?:live|lived|living|reside|resided)\s+in\b(?P<tail>.*)$",
+               re.IGNORECASE),
+)
+# What may follow the count: places (capitalised), the year, and these words.
+_TAIL_WORDS = {"in", "as", "of", "the", "at", "by", "during", "end", "start", "year",
+               "census", "according", "to", "state", "city", "county", "today", "now",
+               "last", "this", "and", "u.s", "us"}
+
+
+def _population_headcount(text: str) -> bool:
+    for rx in _POPULATION_RES:
+        m = rx.search(text or "")
+        if not m:
+            continue
+        for w in re.findall(r"[A-Za-z][A-Za-z.'’-]*", m.group("tail")):
+            if not (w[0].isupper() or w.lower().rstrip(".") in _TAIL_WORDS):
+                return False
+        return True
+    return False
+
+
+_SCALE_WORD_RE = re.compile(r"\b(?:thousand|million|billion|trillion)\b", re.IGNORECASE)
+
+
+def _choose_metric(text: str, claimed: Optional[Quantity]) -> Optional[MetricSpec]:
+    """The best-worded series in the claim's own units.
+
+    A claim stating "26 million" people cannot be checked against a rate, and
+    one stating "5%" cannot be checked against a dollar price. Rather than
+    fetch a series that can only answer "not comparable" (which then sends the
+    claim to the paid web search), it is left unmatched, so the dataset search
+    can look for a series in its units first.
+    """
+    specs = match_metrics(text)
+    if not specs and _population_headcount(text):
+        specs = [BY_METRIC["population"]]
+    fam = claimed.family if claimed is not None else _units.UNKNOWN
+    if fam == _units.UNKNOWN and claimed is not None and _SCALE_WORD_RE.search(claimed.raw or ""):
+        # "26 million Americans": a count with no unit noun. It is never a rate.
+        specs = [sp for sp in specs if sp.family != _units.PERCENT]
+    if fam == _units.UNKNOWN or not specs:
+        return specs[0] if specs else None
+    for spec in specs:
+        if spec.family == fam:
+            return spec
+    return None
+
+
 def parse_claim(text: str) -> ParsedClaim:
     """Parse a claim into a lookup request. Never raises."""
     raw = (text or "").strip()
@@ -322,7 +424,6 @@ def parse_claim(text: str) -> ParsedClaim:
         return ParsedClaim(text="", metric=None, year=None, all_years=[],
                            unparsed_reason="empty claim")
 
-    spec = _select_variant(raw, match_metric(raw))
     quarter, quarter_year = _extract_quarter(raw)
 
     fiscal_year = _extract_fiscal_year(raw)
@@ -355,6 +456,7 @@ def parse_claim(text: str) -> ParsedClaim:
     # "Q2" must not be read as the number 2.
     value_text = _QUARTER_TOKEN_RE.sub(" ", value_text)
     claimed = parse_quantity(value_text)
+    spec = _select_variant(raw, _choose_metric(raw, claimed))
     # A percent claim whose metric is a percent metric: keep as-is. A bare
     # number with no unit against a USD metric is dollars.
     if claimed is not None and spec is not None and claimed.family == "unknown":

@@ -55,6 +55,8 @@ class Citation:
     official: bool = False
     # Indices of answer segments this citation supports.
     supports: List[int] = field(default_factory=list)
+    # The page's own words the answer relied on (Claude's cited_text), when given.
+    quote: str = ""
 
 
 @dataclass

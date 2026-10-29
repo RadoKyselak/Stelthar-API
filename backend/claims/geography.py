@@ -182,6 +182,34 @@ def _proper_noun_is_unresolved(candidate: str) -> bool:
     return True
 
 
+# People named for their state. Ambiguous ones are listed separately: "New
+# Yorkers" may mean the city, "Washingtonians" D.C., "Georgians" the country.
+_DEMONYMS = {
+    "alabamian": "alabama", "alabaman": "alabama", "alaskan": "alaska", "arizonan": "arizona",
+    "arkansan": "arkansas", "californian": "california", "coloradan": "colorado",
+    "delawarean": "delaware", "floridian": "florida", "hawaii resident": "hawaii",
+    "idahoan": "idaho", "illinoisan": "illinois", "hoosier": "indiana", "iowan": "iowa",
+    "kansan": "kansas", "kentuckian": "kentucky", "louisianan": "louisiana",
+    "louisianian": "louisiana", "mainer": "maine", "marylander": "maryland",
+    "michigander": "michigan", "minnesotan": "minnesota", "mississippian": "mississippi",
+    "missourian": "missouri", "montanan": "montana", "nebraskan": "nebraska",
+    "nevadan": "nevada", "new hampshirite": "new hampshire", "new jerseyan": "new jersey",
+    "new jerseyite": "new jersey", "new mexican": "new mexico",
+    "north carolinian": "north carolina", "north dakotan": "north dakota",
+    "ohioan": "ohio", "oklahoman": "oklahoma", "oregonian": "oregon",
+    "pennsylvanian": "pennsylvania", "rhode islander": "rhode island",
+    "south carolinian": "south carolina", "south dakotan": "south dakota",
+    "tennessean": "tennessee", "texan": "texas", "utahn": "utah", "vermonter": "vermont",
+    "virginian": "virginia", "west virginian": "west virginia",
+    "wisconsinite": "wisconsin", "wyomingite": "wyoming",
+}
+_AMBIGUOUS_DEMONYMS = ("new yorker", "washingtonian", "georgian")
+_DEMONYMS_BY_LENGTH = sorted(_DEMONYMS, key=len, reverse=True)
+# "Cook County", "St. Louis County", "Orleans Parish": named before any state
+# check, because "Washington County" is not Washington state.
+_COUNTY_RE = re.compile(r"\b((?:[A-Z][\w.'\-]*\s){0,2}[A-Z][\w.'\-]*)\s+(County|Parish)\b")
+
+
 def resolve_geography(text: str) -> Optional[Geography]:
     """Return the geography a claim is about, or None if it names no place.
 
@@ -196,6 +224,20 @@ def resolve_geography(text: str) -> Optional[Geography]:
     if _DC_RE.search(lowered):
         return Geography(name="District Of Columbia", level="state",
                          fips=_STATE_FIPS["district of columbia"])
+
+    county = _COUNTY_RE.search(text)
+    if county:
+        # Below the state level: no fixed series answers it, so the claim goes
+        # to the dataset search, which can resolve it, or is declined.
+        return Geography(name=f"{county.group(1)} {county.group(2)}", level="county")
+
+    for word in _AMBIGUOUS_DEMONYMS:
+        if re.search(rf"\b{word}s?\b", lowered):
+            return Geography.unknown(word.title() + "s")
+    for word in _DEMONYMS_BY_LENGTH:
+        if re.search(rf"\b{word}s?\b", lowered):
+            state = _DEMONYMS[word]
+            return Geography(name=state.title(), level="state", fips=_STATE_FIPS[state])
 
     for state in _STATES_BY_LENGTH:
         m = _word_bounded(lowered, state)

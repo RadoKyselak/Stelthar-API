@@ -294,6 +294,7 @@ def _grounded_to_result(
             {
                 "title": c.title, "url": c.uri, "domain": c.domain,
                 "is_official_source": c.official,
+                "quote": getattr(c, "quote", "") or "",
             }
             for c in g.citations
         ],
@@ -341,10 +342,28 @@ def _point(v: Verdict, label: Optional[str] = None) -> Dict[str, Any]:
         "source": dp.source,
         "gap": v.gap_display,
         "comparator": v.comparator,
+        "measure": dp.label,
         "citation": cite["note"],
+        "citation_html": cite["note_html"],
         "citation_inline": cite["inline"],
         "url": cite["url"],
+        "excerpt": _excerpt(dp),
     }
+
+
+def _excerpt(dp) -> Optional[Dict[str, Any]]:
+    """The published rows the figure was read from, headed the way the agency
+    labels them: "Local Area Unemployment Statistics · series LAUST48… · Texas"."""
+    from evidence.citation import clean_basis, dataset_name, identifier
+    ex = (dp.extra or {}).get("excerpt")
+    if not ex:
+        return None
+    sid = dp.series_id or ""
+    head = [dataset_name(dp.source, sid, clean_basis(dp.observed.basis or "")),
+            identifier(dp.source, sid, table=(dp.extra or {}).get("table"), as_of=dp.as_of)]
+    if dp.geography.name and dp.geography.name != "United States":
+        head.append(dp.geography.name)
+    return {**ex, "heading": " · ".join(h for h in head if h)}
 
 
 def _verdict_to_result(
@@ -560,6 +579,13 @@ async def verify(claim: str, allow_grounding: bool = True,
             elapsed_seconds=round(time.monotonic() - started, 2),
             parsed=_parsed_summary(parsed),
         )
+
+    # Before any web search: look for the figure in a government dataset.
+    # Costs one small model call at most, often nothing (cached picks).
+    from services import dataset_tier
+    ds = await dataset_tier.verify(text, parsed, client_ip, started)
+    if ds is not None:
+        return ds
 
     hint = ""
     if parsed.structured_blocker and parsed.metric is not None:

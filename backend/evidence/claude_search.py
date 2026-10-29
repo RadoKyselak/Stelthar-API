@@ -111,6 +111,9 @@ def _citations_and_segments(content: List[Any]):
             for c in getattr(block, "citations", None) or []:
                 if getattr(c, "url", None):
                     i = add(c.url, getattr(c, "title", ""))
+                    quoted = " ".join(str(getattr(c, "cited_text", "") or "").split())
+                    if quoted and not citations[i].quote:
+                        citations[i].quote = quoted[:300]
                     if i not in idxs:
                         idxs.append(i)
             for i in idxs:
