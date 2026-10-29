@@ -278,13 +278,10 @@ def _web_citation(web: List[Dict[str, Any]], reported: Dict[str, str]):
     Returns (plain, html)."""
     if not web:
         return "", ""
+    # Only what the page itself says (its title, site and address): the
+    # model's own wording of a publisher or period is not citable.
     s = next((x for x in web if x["official"]), web[0])
-    org = reported.get("source_org") or s["domain"]
-    value, period = reported.get("value"), reported.get("period")
-    fact = ""
-    if value:
-        fact = f" {value}" + (f" ({period})" if period else "") + "."
-    body = f"{org}, “{s['title']}.”{fact}"
+    body = f"“{s['title']}.” {s['domain']}."
     tail = f" (accessed {_long_date(date.today().isoformat())})."
     plain = f"{body} {s['url']}{tail}"
     html = (f'{escape(body)} <a href="{escape(s["url"], quote=True)}">{escape(s["url"])}</a>'

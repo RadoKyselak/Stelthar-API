@@ -188,7 +188,9 @@
       });
     } else if (web.length) {
       p.appendChild(document.createTextNode("Sources found by web search: "));
-      web.slice(0, 3).forEach((s, i) => {
+      const byDomain = new Map();
+      web.forEach((s) => { if (!byDomain.has(s.domain)) byDomain.set(s.domain, s); });
+      Array.from(byDomain.values()).slice(0, 3).forEach((s, i) => {
         if (i) p.appendChild(document.createTextNode(", "));
         p.appendChild(link(s.url, s.domain, s.title));
       });
@@ -250,9 +252,10 @@
       root.appendChild(sec);
     } else if (d.reported_value) {
       const sec = el("div", "mv-sec");
-      sec.append(el("div", "mv-label", "Figure found"),
+      // The model's own description of the publisher is not shown: the pages
+      // themselves are linked under Sources.
+      sec.append(el("div", "mv-label", "Figure found by web search"),
         el("p", d.reported_value.length > 16 ? "mv-fig mv-long" : "mv-fig", d.reported_value));
-      if (d.reported_context) sec.appendChild(el("p", "mv-what", d.reported_context));
       root.appendChild(sec);
     }
 
