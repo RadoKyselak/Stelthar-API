@@ -161,9 +161,6 @@ _STATIC_TYPES = {
     "site.css": "text/css; charset=utf-8",
     "logo.png": "image/png",
     "favicon.png": "image/png",
-    # Self-hosted, so no visitor's browser contacts a font service.
-    "instrument-sans.woff2": "font/woff2",
-    "instrument-serif.woff2": "font/woff2",
 }
 
 
@@ -245,7 +242,10 @@ async def verify_v2_endpoint(req: VerifyRequest, request: Request) -> Dict[str, 
     if not claim:
         raise HTTPException(status_code=400, detail="Claim cannot be empty.")
 
+    from evidence import fact_checks
+    related = fact_checks.start(claim)
     result = await verify_v2(claim, client_ip=_client_ip(request))
+    result.fact_checks = await fact_checks.finish(related)
     logger.info(
         "v2 verification complete",
         extra={

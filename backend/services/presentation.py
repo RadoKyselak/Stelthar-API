@@ -393,4 +393,5 @@ def build_display(v) -> Dict[str, Any]:
         "citation": citation,
         "citation_html": citation_html,
         "share_text": _share_text(label, v, comparisons, citation.split("\n")[0] if citation else ""),
+        "fact_checks": list(getattr(v, "fact_checks", None) or [])[:3],
     }
