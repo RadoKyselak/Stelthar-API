@@ -403,3 +403,42 @@ async def fetch_latest_monthly(
         series_id=series_id, raw_value=str(latest.get("value")),
         extra={"excerpt": _monthly_excerpt(rows, y, mth, series_id, family)},
     )]
+
+
+async def fetch_jobs_change(
+    metric: str, label: str, series_id: str, year: int, month: Optional[int] = None,
+) -> List[Datapoint]:
+    """Jobs added (or lost): the change in payrolls, as the jobs report counts it.
+
+    A month is that month against the one before; a year is December against
+    the previous December. Both levels are shown, so the subtraction is visible.
+    """
+    if month:
+        prev_y, prev_m = (year - 1, 12) if month == 1 else (year, month - 1)
+    else:
+        prev_y, prev_m, month = year - 1, 12, 12
+    rows = await _fetch_raw(series_id, prev_y, year)
+    a, b = _month_row(rows, prev_y, prev_m), _month_row(rows, year, month)
+    va = parse_number(a.get("value")) if a else None
+    vb = parse_number(b.get("value")) if b else None
+    if va is None or vb is None:
+        return []
+    change = vb - va  # thousands, as published
+    yearly = prev_m == 12 and month == 12 and prev_y == year - 1
+    basis = (f"change from December {prev_y} to December {year}" if yearly
+             else f"change from {_MON[prev_m - 1]} {prev_y} to {_MON[month - 1]} {year}")
+    excerpt = make_excerpt([
+        ex_row(f"{_MON[prev_m - 1]} {prev_y}", a.get("value")),
+        ex_row(f"{_MON[month - 1]} {year}", b.get("value")),
+        ex_row("Change", f"{change:+.0f}".replace("+", "+") if abs(change) >= 1 else f"{change:+.1f}", cited=True),
+    ], units="thousands of jobs", note="Seasonally adjusted.")
+    return [Datapoint(
+        quantity=Quantity(magnitude=change * 1000.0, family=JOBS),
+        metric=metric, label=label,
+        observed=(Period(year=year, kind=ANNUAL, basis=basis) if yearly
+                  else Period(year=year, kind=MONTHLY, month=month, basis=basis)),
+        geography=geography_for_series(series_id),
+        source="BLS", source_url=series_permalink(series_id, year=year),
+        series_id=series_id, raw_value=f"{change * 1000:.0f}",
+        extra={"excerpt": excerpt},
+    )]

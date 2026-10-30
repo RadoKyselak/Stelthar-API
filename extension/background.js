@@ -106,74 +106,53 @@ async function verifyClaim(claim, { bypassCache = false } = {}) {
   return result;
 }
 
-async function openPopupWithClaim(claim) {
-  await storageSet({ stelthar_last_claim: claim });
-  try {
-    await chrome.action.openPopup();
-  } catch (e) {
-    // openPopup requires a user gesture Chrome recognizes; the in-page
-    // panel (content.js) is the fallback surface, so failing here is fine.
-  }
-}
+// Everything opens in Chrome's side panel. The extension never runs on the
+// page itself: right-click passes the highlighted text, so no access to
+// websites is needed.
+const PENDING_KEY = "mirador_pending";
+
+// The panel picks this up when it opens, or right away if it is already open.
+const sendToPanel = (text) =>
+  chrome.storage.session.set({ [PENDING_KEY]: { text, at: Date.now() } });
+
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "stelthar-verify",
-    title: "Verify with Project Mirador",
-    contexts: ["selection"],
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: "mirador-check",
+      title: "Check with Project Mirador",
+      contexts: ["selection"],
+    });
   });
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId !== "stelthar-verify" || !info.selectionText) return;
-  const claim = info.selectionText.trim();
-  storageSet({ stelthar_last_claim: claim }).then(() => {
-    if (tab?.id) {
-      chrome.tabs.sendMessage(tab.id, { type: "showPanel", claim }, () => {
-        // Content script may not be injected (chrome:// pages, PDFs) —
-        // fall back to the popup.
-        if (chrome.runtime.lastError) openPopupWithClaim(claim);
-      });
-    } else {
-      openPopupWithClaim(claim);
-    }
-  });
+  if (info.menuItemId !== "mirador-check" || !info.selectionText || !tab) return;
+  // open() must run before anything async, or Chrome no longer counts it as
+  // the user's click.
+  chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+  sendToPanel(info.selectionText.replace(/\s+/g, " ").trim());
 });
 
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== "verify-selection") return;
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) return;
-  try {
-    const [{ result: selection }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => window.getSelection().toString().trim(),
-    });
-    if (selection) {
-      await storageSet({ stelthar_last_claim: selection });
-      chrome.tabs.sendMessage(tab.id, { type: "showPanel", claim: selection }, () => {
-        if (chrome.runtime.lastError) openPopupWithClaim(selection);
-      });
-    }
-  } catch (e) {
-    // Restricted page (chrome://, web store) — nothing we can do.
-  }
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command !== "open-panel" || !tab) return;
+  chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "verify") {
-    // Legacy path from the selection bubble: stash the claim and open the popup.
-    openPopupWithClaim(message.claim);
-    return false;
-  }
-
   if (message.type === "verifyClaim") {
     verifyClaim(message.claim, { bypassCache: message.bypassCache })
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true; // async sendResponse
   }
-
+  if (message.type === "lookup") {
+    runLookup(message.query)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   return false;
 });
 
@@ -183,35 +162,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Verification needs the user to already suspect something, which is rare.
 // Looking a figure up while writing is constant, so the fastest possible
 // surface matters more than the prettiest one: the omnibox needs no click, no
-// popup and no mouse. Type "mir", Tab, "unemployment 2023", Enter — the
-// citation is on the clipboard.
+// panel and no mouse. Type "mir", Tab, "unemployment 2023": the figure shows
+// as you type, and Enter opens it with its citation in the side panel.
 //
 // Suggestions carry the actual number as the user types, because seeing
 // "3.6% — BLS, 2023 annual average" in the dropdown is what tells them the
-// query landed on the series they meant, before they commit to pasting it.
+// query landed on the series they meant.
 // ===========================================================================
 
 const LOOKUP_URL = "https://stelthar-api.vercel.app/v2/lookup";
-
-// "unemployment 2023 /note" -> copy the full footnote instead of the inline form.
-const FORMAT_SUFFIXES = {
-  "/note": "note",
-  "/md": "markdown",
-  "/markdown": "markdown",
-  "/value": "value",
-  "/raw": "value",
-  "/html": "html",
-};
-
-function splitFormat(input) {
-  const trimmed = (input || "").trim();
-  for (const [suffix, format] of Object.entries(FORMAT_SUFFIXES)) {
-    if (trimmed.toLowerCase().endsWith(suffix)) {
-      return { query: trimmed.slice(0, -suffix.length).trim(), format };
-    }
-  }
-  return { query: trimmed, format: "inline" };
-}
 
 const lookupMemo = new Map(); // query -> result, best-effort across a keystroke burst
 
@@ -220,13 +179,21 @@ async function runLookup(query) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const resp = await fetch(LOOKUP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
-      signal: controller.signal,
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    let resp;
+    try {
+      resp = await fetch(LOOKUP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      throw new Error(e.name === "AbortError"
+        ? "The lookup took too long. Try again in a moment."
+        : "Could not reach the lookup service. Check your connection and try again.");
+    }
+    if (resp.status === 429) throw new Error("Daily limit reached. Try again tomorrow.");
+    if (!resp.ok) throw new Error(`The lookup service had a problem (${resp.status}). Try again in a moment.`);
     const result = await resp.json();
     lookupMemo.set(query, result);
     if (lookupMemo.size > 40) lookupMemo.delete(lookupMemo.keys().next().value);
@@ -250,7 +217,7 @@ chrome.omnibox.setDefaultSuggestion({
 });
 
 chrome.omnibox.onInputChanged.addListener((input, suggest) => {
-  const { query, format } = splitFormat(input);
+  const query = (input || "").trim();
   if (query.length < 2) return;
 
   clearTimeout(inputDebounce);
@@ -262,8 +229,7 @@ chrome.omnibox.onInputChanged.addListener((input, suggest) => {
         chrome.omnibox.setDefaultSuggestion({
           description:
             `<match>${xmlEscape(c.value || r.value)}</match> ` +
-            `<dim>${xmlEscape(c.attribution || "")}</dim> — press Enter to copy` +
-            (format !== "inline" ? ` <dim>as ${xmlEscape(format)}</dim>` : ""),
+            `<dim>${xmlEscape(c.attribution || "")}</dim> — press Enter to open`,
         });
         const rows = [];
         if (c.caveat) {
@@ -292,78 +258,32 @@ chrome.omnibox.onInputChanged.addListener((input, suggest) => {
       );
     } catch (e) {
       chrome.omnibox.setDefaultSuggestion({
-        description: `<dim>Lookup unavailable (${xmlEscape(e.message)})</dim>`,
+        description: `<dim>${xmlEscape(e.message)}</dim>`,
       });
     }
   }, 220);
 });
 
-async function ensureClipboardDocument() {
-  const existing = await chrome.runtime.getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
-  });
-  if (existing && existing.length) return;
-  await chrome.offscreen.createDocument({
-    url: "offscreen.html",
-    reasons: ["CLIPBOARD"],
-    justification: "Copy a citation to the clipboard from the omnibox.",
-  });
-}
-
-async function copyCitation(plain, html) {
-  await ensureClipboardDocument();
-  const reply = await chrome.runtime.sendMessage({
-    target: "offscreen-clipboard",
-    plain,
-    html,
-  });
-  return Boolean(reply && reply.ok);
-}
-
-function notify(title, message) {
-  chrome.notifications.create({
-    type: "basic",
-    iconUrl: "icons/icon128.png",
-    title,
-    message,
-  });
-}
-
-chrome.omnibox.onInputEntered.addListener(async (input) => {
-  const { query, format } = splitFormat(input);
-  if (!query) return;
-  try {
-    const r = await runLookup(query);
-    if (!r.ok) {
-      notify("Mirador — no figure copied", r.headline || "No official series matches that.");
-      return;
-    }
-    const c = r.citations || {};
-    const plain = c[format] || c.inline || c.value || "";
-    // Only the inline form has a rich equivalent; a footnote pastes as text.
-    const html = format === "inline" ? c.html : "";
-    const copied = await copyCitation(plain, html);
-    notify(
-      copied ? "Copied to clipboard" : "Could not reach the clipboard",
-      copied ? plain + (c.caveat ? `\n\nNote: ${c.caveat}` : "") : plain
-    );
-  } catch (e) {
-    notify("Mirador — lookup failed", e.message);
-  }
+// Enter opens the figure, with its citation and Copy button, in the side
+// panel. The panel needs a window id at the moment of the keypress, so the
+// last focused window is tracked ahead of time (no permission needed).
+let lastWindowId = null;
+const rememberWindow = () =>
+  chrome.windows.getLastFocused().then((w) => { lastWindowId = w.id; }).catch(() => {});
+rememberWindow();
+chrome.windows.onFocusChanged.addListener((id) => {
+  if (id !== chrome.windows.WINDOW_ID_NONE) lastWindowId = id;
 });
+chrome.omnibox.onInputStarted.addListener(rememberWindow);
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "lookup") {
-    runLookup(message.query)
-      .then((result) => sendResponse({ ok: true, result }))
-      .catch((error) => sendResponse({ ok: false, error: error.message }));
-    return true;
-  }
-  if (message.type === "copyCitation") {
-    copyCitation(message.plain, message.html)
-      .then((ok) => sendResponse({ ok }))
-      .catch((error) => sendResponse({ ok: false, error: error.message }));
-    return true;
-  }
-  return false;
+chrome.omnibox.onInputEntered.addListener((input) => {
+  const query = (input || "").trim();
+  if (!query) return;
+  // Only if Chrome refuses the panel: show the same page in a tab instead.
+  const inTab = () =>
+    chrome.tabs.create({ url: chrome.runtime.getURL("panel.html") + "?q=" + encodeURIComponent(query) });
+  if (lastWindowId == null) { inTab(); return; }
+  chrome.sidePanel.open({ windowId: lastWindowId })
+    .then(() => sendToPanel(query))
+    .catch(inTab);
 });

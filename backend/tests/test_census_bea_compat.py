@@ -590,9 +590,10 @@ class TestQualifierBlockers:
         "GDP shrank 2.2% in 2020", "The economy contracted by 2.5% in 2022",
     ])
     def test_contraction_is_never_settled_unsigned(self, claim):
-        """'shrank 2.2%' asserts -2.2%; the value parser reads it unsigned."""
+        """'shrank 2.2%' asserts -2.2%: it is read as growth, with the sign."""
         p = parse_claim(claim)
-        assert p.metric is None or p.metric.metric != "real_gdp_growth"
+        assert p.metric is not None and p.metric.metric == "real_gdp_growth"
+        assert p.claimed_value.magnitude < 0
 
 
 @pytest.mark.asyncio

@@ -19,11 +19,12 @@ from datetime import datetime, timezone
 from typing import List, Optional, Set
 
 import config
-from claims.parser import ParsedClaim
+from claims.parser import ParsedClaim, income_band
 from claims.verdict import HIGH, MEDIUM, NO_VERDICT, assess
 from config import logger
 from evidence import ai_search
 from evidence.datasets import Candidate, census_profile, fred, picker
+from evidence.sources import bea_regional, cpi_local, laus_local
 from evidence.sources import SourceUnavailable
 
 TIER_DATASET = "dataset"
@@ -49,6 +50,11 @@ def _model_allowed(text: str) -> bool:
 async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], started: float):
     if parsed.claimed_value is None or parsed.is_trend_claim or parsed.has_unresolved_period:
         return None
+    if income_band(text):
+        return None  # HUD income limits are not in any Census table offered here
+    local = await _local_series(text, parsed, started)
+    if local is not None:
+        return local
     # Only the label-matched twins below work without a model.
     model_ok = _model_allowed(text)
 
@@ -58,11 +64,13 @@ async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], start
     cands: List[Candidate] = []
     census_year = None
     census_geo = None
+    census_survey = "acs1"
     try:
         annual_claim = not parsed.month and not parsed.quarter and parsed.year_basis != "fiscal"
         if census_profile.available() and annual_claim:
             years = [parsed.year] if parsed.year else [datetime.now(timezone.utc).year - y for y in (1, 2)]
             for y in years:
+                survey = "acs1"
                 if not await census_profile.catalog(y):
                     continue  # that ACS year is not published yet
                 if geo is None or geo.level == "nation":
@@ -70,24 +78,28 @@ async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], start
                 elif geo.level == "state":
                     g = geo
                 elif geo.name:
-                    g = await census_profile.resolve_place(geo.name, y, text)
-                    logger.info("Dataset place %r (%s) -> %s", geo.name, y, g.name if g else None)
-                    if g is None:
+                    got = await census_profile.locate(geo.name, y, text, geo.level)
+                    logger.info("Dataset place %r (%s) -> %s", geo.name, y, got[0].name if got else None)
+                    if got is None:
                         break  # a place we cannot pin down: no Census answer
+                    g, survey = got
                 else:
                     break
                 # Same measure as a fixed series, at a county or city: no model needed.
                 same = (await census_profile.twin(parsed.metric.metric, y)
                         if parsed.metric is not None and not parsed.structured_blocker else None)
                 if same is not None:
-                    return await _answer(text, parsed, same, "value", y, g, started,
-                                         model_calls=0, cost=0.0)
+                    got = await _answer(text, parsed, same, "value", y, g, started,
+                                        model_calls=0, cost=0.0, survey=survey)
+                    if got is not None or survey == "acs1" or parsed.year:
+                        return got
+                    continue  # that 5-year release is not out yet: the year before
                 if not model_ok:
                     break
                 found = await census_profile.candidates(text, y, drop, want, limit=30)
                 if found:
                     cands += found
-                    census_year, census_geo = y, g
+                    census_year, census_geo, census_survey = y, g, survey
                     break
         # FRED series here are national; a state or city claim is not offered them.
         if model_ok and fred.available() and (geo is None or geo.level == "nation"):
@@ -107,15 +119,85 @@ async def verify(text: str, parsed: ParsedClaim, client_ip: Optional[str], start
         return None
 
     return await _answer(text, parsed, c, choice.stat, census_year, census_geo, started,
-                         model_calls=choice.model_calls, cost=choice.cost_usd)
+                         model_calls=choice.model_calls, cost=choice.cost_usd, survey=census_survey)
+
+
+_SUBSTATE = ("place", "county", "metro", "zcta", "unknown")
+
+
+async def _find(geo, text: str, levels=("place", "county", "metro")):
+    """A city, county or metro area named in a claim, with its Census codes."""
+    if not census_profile.available() or not geo or not geo.name:
+        return None
+    hint = geo.level if geo.level in levels else None
+    for back in (1, 2):
+        y = datetime.now(timezone.utc).year - back
+        try:
+            got = await census_profile.locate(geo.name, y, text, hint)
+        except SourceUnavailable:
+            return None
+        if got is not None:
+            return got[0] if got[0].level in levels else None
+    return None
+
+
+async def _local_series(text: str, parsed: ParsedClaim, started: float):
+    """A fixed measure for a place finer than its national series: GDP for a
+    state, county or metro (BEA Regional); unemployment for a city, county or
+    metro (BLS LAUS). Read from the agency, no model call."""
+    spec, geo = parsed.metric, parsed.geography
+    if spec is None or parsed.structured_blocker or geo is None or geo.level == "nation":
+        return None
+    now = datetime.now(timezone.utc).year
+    try:
+        if spec.metric in ("gdp", "real_gdp_growth") and not parsed.quarter and not parsed.month \
+                and bea_regional.available():
+            g = geo if geo.level == "state" and geo.fips else (
+                await _find(geo, text, ("county", "metro")) if geo.level in _SUBSTATE else None)
+            if g is None:
+                return None
+            for y in ([parsed.year] if parsed.year else [now - 1, now - 2]):
+                dps = await bea_regional.fetch_gdp(spec.metric, spec.label, g, y)
+                if dps:
+                    return _finish(text, parsed, dps, started, f"dataset: BEA Regional {dps[0].series_id}")
+            return None
+        if spec.metric in ("inflation_rate", "core_inflation_rate") and geo.level in _SUBSTATE:
+            dps = await cpi_local.fetch(spec.metric, spec.label, geo, parsed.year, parsed.month,
+                                        parsed.present)
+            if dps:
+                return _finish(text, parsed, dps, started, f"dataset: BLS CPI {dps[0].series_id}")
+            return None
+        if spec.metric == "unemployment_rate" and geo.level in _SUBSTATE:
+            g = await _find(geo, text)
+            if g is None:
+                return None
+            dps = await laus_local.fetch(spec.metric, spec.label, spec.family, g, parsed.year,
+                                         parsed.month, parsed.present)
+            if dps:
+                return _finish(text, parsed, dps, started, f"dataset: BLS LAUS {dps[0].series_id}")
+    except SourceUnavailable as e:
+        logger.warning("Local series unavailable: %s", e)
+    return None
+
+
+def _finish(text, parsed, dps, started, note: str):
+    from services.verify_v2 import _verdict_to_result  # avoid an import cycle
+    judged = replace(parsed, geography=dps[0].geography)
+    result = _verdict_to_result(text, judged, assess(judged, dps), started)
+    if result.verdict == NO_VERDICT:
+        return None
+    result.tier = TIER_DATASET
+    result.model_calls = 0
+    result.notes.append(note + ", matched by name, no model call")
+    return result
 
 
 async def _answer(text, parsed, c: Candidate, stat: str, census_year, census_geo, started,
-                  *, model_calls: int, cost: float):
+                  *, model_calls: int, cost: float, survey: str = "acs1"):
     from services.verify_v2 import _verdict_to_result  # avoid an import cycle
     try:
         if c.provider == "census_profile":
-            dp = await census_profile.fetch(c, census_year, census_geo)
+            dp = await census_profile.fetch(c, census_year, census_geo, survey)
         else:
             dp = await fred.fetch(c, parsed.year, parsed.month, stat)
     except SourceUnavailable as e:
@@ -126,7 +208,7 @@ async def _answer(text, parsed, c: Candidate, stat: str, census_year, census_geo
 
     # A resolved city or county replaces the unresolved name the parser saw.
     judged = parsed
-    if dp.geography.level in ("place", "county"):
+    if dp.geography.level in ("place", "county", "metro", "zcta"):
         judged = replace(parsed, geography=dp.geography)
     v = assess(judged, [dp])
     result = _verdict_to_result(text, judged, v, started)

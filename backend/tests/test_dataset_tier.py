@@ -78,12 +78,15 @@ class TestCandidates:
 
 
 class TestPlaces:
-    ROWS = [["Chicago city, Illinois", "17", "14000"], ["Portland city, Oregon", "41", "59000"],
-            ["Portland city, Maine", "23", "60545"], ["Cook County, Illinois", "17", "031"]]
+    ROWS = [["Chicago city, Illinois", 2_660_000, "1714000"], ["Portland city, Oregon", 630_000, "4159000"],
+            ["Portland city, Maine", 68_000, "2360545"], ["Portland city, Texas", 230_000, "4858904"],
+            ["Cook County, Illinois", 5_100_000, "17031"]]
 
     @pytest.fixture(autouse=True)
     def places(self, monkeypatch):
-        async def fake(year, level):
+        async def fake(year, level, survey="acs1", state=""):
+            if survey != "acs1":
+                return []
             return [r for r in self.ROWS if ("County" in r[0]) == (level == "county")]
         monkeypatch.setattr(cp, "_places", fake)
 
@@ -92,6 +95,8 @@ class TestPlaces:
         assert (g.name, g.level, g.fips) == ("Chicago city, Illinois", "place", "1714000")
 
     async def test_ambiguous_city_needs_the_state(self):
+        # Oregon's Portland is under three times the size of the next namesake
+        # in this list (Texas), so nothing is guessed.
         assert await cp.resolve_place("Portland", 2023, "Portland's median rent") is None
         g = await cp.resolve_place("Portland", 2023, "Portland, Maine had a median rent")
         assert g.fips == "2360545"

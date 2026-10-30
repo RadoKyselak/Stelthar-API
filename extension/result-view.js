@@ -28,15 +28,6 @@
 .mv [data-verdict="misleading"] { --tone:#c2410c; --tint:#fff4ed; }
 .mv [data-verdict="contradicted"] { --tone:#b91c1c; --tint:#fef2f2; }
 .mv [data-verdict="unavailable"] { --tone:#0369a1; --tint:#f0f9ff; }
-@media (prefers-color-scheme: dark) {
-  .mv { --ink:#f3f4f6; --ink2:#d1d5db; --muted:#9ca3af; --line:#2b2f36; --subtle:#1d1f23; --bg:#17181b;
-    --accent:#3b82f6; --accent-hover:#60a5fa; --on-accent:#ffffff; --focus:#60a5fa; --tone:#9ca3af; --tint:#24262b; }
-  .mv [data-verdict="supported"] { --tone:#4ade80; --tint:#13261b; }
-  .mv [data-verdict="mostly-accurate"] { --tone:#facc15; --tint:#2a2410; }
-  .mv [data-verdict="misleading"] { --tone:#fb923c; --tint:#2c1d12; }
-  .mv [data-verdict="contradicted"] { --tone:#f87171; --tint:#2c1617; }
-  .mv [data-verdict="unavailable"] { --tone:#38bdf8; --tint:#102530; }
-}
 .mv a, .mv button { font-family: inherit; }
 .mv a:focus-visible, .mv button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
 
@@ -75,9 +66,12 @@
 .mv-status { font-size: 12.5px; color: var(--muted); }
 .mv-how { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 .mv-loading { margin: 0; font-size: 13px; color: var(--muted); }
+.mv-fc { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.mv-fc-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.mv-fc-list li { margin-top: 8px; font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.mv-fc-meta { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); }
 
 .mv { --mark:#fef3c7; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-@media (prefers-color-scheme: dark) { .mv { --mark:#3b3112; } }
 .mv-ex { margin: 12px 0 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .mv-ex-h { margin: 0; padding: 6px 10px; font-size: 11.5px; color: var(--muted); background: var(--subtle);
   border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
@@ -247,6 +241,34 @@
     return q;
   }
 
+  const FC_MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  function shortDate(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+    return m && +m[2] >= 1 && +m[2] <= 12 ? `${FC_MON[+m[2] - 1]} ${+m[3]}, ${m[1]}` : "";
+  }
+
+  /** Other outlets' published fact-checks of similar claims: shown, never used. */
+  function factChecks(d) {
+    const list = (d.fact_checks || [])
+      .filter((f) => f && f.publisher && f.rating && safeUrl(f.url)).slice(0, 3);
+    if (!list.length) return null;
+    const sec = el("div", "mv-fc");
+    sec.setAttribute("aria-label", "Other fact-checkers");
+    sec.appendChild(el("div", "mv-label", "Other fact-checkers on similar claims"));
+    const ul = el("ul", "mv-fc-list");
+    list.forEach((f) => {
+      const li = el("li");
+      li.appendChild(link(f.url, f.title || f.claim || f.publisher));
+      li.appendChild(el("span", "mv-fc-meta",
+        [`${f.publisher}: \u201c${f.rating}\u201d`, shortDate(f.date)].filter(Boolean).join(" \u00b7 ")));
+      ul.appendChild(li);
+    });
+    sec.append(ul, el("p", "mv-how",
+      "Their ratings, found with Google's fact-check search. Not part of this check."));
+    return sec;
+  }
+
   function displayOf(r) {
     if (r && r.display && r.display.verdict) return r.display;
     const label = (r && (r.verdict_detail || r.verdict)) || "Can't verify";
@@ -334,6 +356,8 @@
       if (actions.childNodes.length) foot.appendChild(actions);
       root.appendChild(foot);
     }
+    const fc = factChecks(d);
+    if (fc) root.appendChild(fc);
     return root;
   }
 

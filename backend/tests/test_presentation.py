@@ -144,7 +144,7 @@ class TestFormatting:
 
 
 class TestRenderer:
-    @pytest.mark.parametrize("name", ["result-view.js", "content.js", "popup.js"])
+    @pytest.mark.parametrize("name", ["result-view.js", "panel.js", "background.js"])
     def test_extension_never_injects_html(self, name):
         import re
         src = (ROOT / "extension" / name).read_text()

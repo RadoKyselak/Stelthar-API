@@ -116,6 +116,16 @@ _SPECS: List[MetricSpec] = [
         notes="Level in thousands as published; normalised to jobs.",
     ),
     MetricSpec(
+        # Selected by the parser ("added 3 million jobs"), not by a phrase.
+        metric="jobs_added", label="Jobs added (change in nonfarm payrolls)", source="BLS",
+        family=JOBS, series_id="CES0000000001", bls_kind="change",
+        phrases=("jobs added", "job gains", "job growth", "payroll gains", "payroll growth"),
+        alternate_measure="the first estimate in BLS's monthly jobs report, which BLS revises "
+                          "in the following two months and again each February",
+        alternate_band=0.25,
+        notes="Change in seasonally adjusted total nonfarm payrolls.",
+    ),
+    MetricSpec(
         metric="avg_hourly_earnings", label="Average hourly earnings, private",
         source="BLS", family=USD, series_id="CES0500000003", bls_kind="rate",
         phrases=("average hourly earnings", "average hourly wage", "hourly earnings"),
@@ -325,9 +335,20 @@ _SPECS: List[MetricSpec] = [
     ),
     # Recognised so it is NOT read as the budget deficit; no adapter yet.
     MetricSpec(
-        metric="trade_deficit", label="Trade deficit", source="BEA", family=USD,
+        metric="trade_deficit", label="Trade deficit in goods and services", source="FRED",
+        family=USD, series_id="BOPGSTB",
         phrases=("trade deficit", "trade gap", "trade balance"),
-        structured=False,
+        notes="Census/BEA international trade, via FRED's public download.",
+        alternate_measure="the figure first announced by Census and BEA, which they revise "
+                          "each month and again every June",
+        alternate_band=0.1,
+    ),
+    MetricSpec(
+        metric="minimum_wage", label="Federal minimum wage", source="FRED", family=USD,
+        series_id="FEDMINNFRWG",
+        phrases=("federal minimum wage", "minimum wage"),
+        notes="Department of Labor, via FRED's public download. National only: "
+              "state and city minimum wages differ.",
     ),
 
     # ---- Macro aggregates (BEA NIPA) -------------------------------------
@@ -350,9 +371,11 @@ _SPECS: List[MetricSpec] = [
                  "growth rate of the economy", "how fast the economy grew",
                  "gdp grew", "real gdp grew", "economy grew", "gdp rose",
                  "gdp increased", "gdp expanded", "economy expanded",
-                 "gdp growth rate", "growth in gdp"),
-        # Contraction verbs are deliberately absent: "GDP shrank 2.2%" asserts
-        # -2.2%, and the value parser reads magnitudes unsigned.
+                 "gdp growth rate", "growth in gdp",
+                 # Falls: the parser makes "GDP shrank 2.2%" a value of -2.2%.
+                 "gdp fell", "real gdp fell", "gdp shrank", "real gdp shrank",
+                 "gdp contracted", "real gdp contracted", "gdp declined", "gdp dropped",
+                 "economy shrank", "economy contracted"),
     ),
     MetricSpec(
         metric="personal_income", label="Personal income", source="BEA",
@@ -437,6 +460,32 @@ _SPECS: List[MetricSpec] = [
         geo_levels=("nation", "state"),
         phrases=("bachelor's degree or higher", "college graduates", "college educated",
                  "with a college degree", "bachelors degree"),
+    ),
+
+    # ---- Rates (FRED's public download; no key) ---------------------------
+    MetricSpec(
+        metric="mortgage_rate", label="30-year fixed-rate mortgage average",
+        source="FRED", family=PERCENT, series_id="MORTGAGE30US",
+        notes="Freddie Mac Primary Mortgage Market Survey, weekly.",
+        phrases=("mortgage rates", "mortgage rate", "30-year mortgage", "30-year fixed",
+                 "30 year mortgage", "30 year fixed", "mortgage interest rates",
+                 "mortgage interest rate", "home loan rates", "rates on mortgages"),
+    ),
+    MetricSpec(
+        metric="fed_funds_rate", label="Federal funds target rate",
+        source="FRED", family=PERCENT, series_id="DFEDTARU",
+        notes="Federal Reserve target range, daily.",
+        phrases=("federal funds rate", "fed funds rate", "federal funds target",
+                 "fed's benchmark rate", "fed's benchmark interest rate", "fed's key rate",
+                 "fed's key interest rate", "fed's policy rate", "benchmark interest rate",
+                 "fed raised interest rates", "fed raised rates", "fed hiked interest rates",
+                 "fed hiked rates", "fed cut interest rates", "fed cut rates",
+                 "fed lowered interest rates", "fed lowered rates",
+                 "federal reserve raised interest rates", "federal reserve raised rates",
+                 "federal reserve hiked interest rates", "federal reserve hiked rates",
+                 "federal reserve cut interest rates", "federal reserve cut rates",
+                 "federal reserve lowered interest rates", "federal reserve lowered rates",
+                 "fed held rates", "fed kept rates", "fed interest rate", "fed rate"),
     ),
 ]
 

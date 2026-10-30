@@ -90,6 +90,10 @@ AI_PICK_MAX_CALLS_PER_CLIENT_PER_DAY = _env_int("AI_PICK_MAX_CALLS_PER_CLIENT_PE
 # Census, the Fed and others. Free key: https://fredaccount.stlouisfed.org/apikeys
 FRED_API_KEY = os.getenv("FRED_API_KEY")
 
+# Google Fact Check Tools API: published fact-checks of similar claims, shown
+# beside a check (never part of it). Free key, restricted to that one API.
+GOOGLE_FACTCHECK_API_KEY = os.getenv("GOOGLE_FACTCHECK_API_KEY")
+
 # Shared counter store (Upstash Redis REST; Vercel's Upstash/KV integration
 # sets the KV_* names).
 REDIS_REST_URL = os.getenv("UPSTASH_REDIS_REST_URL") or os.getenv("KV_REST_API_URL")

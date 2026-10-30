@@ -132,14 +132,18 @@ def to_legacy_shape(v: VerificationV2) -> Dict[str, Any]:
 async def verify(claim: str, client_ip: Optional[str] = None) -> Dict[str, Any]:
     """Never raises: the old client shows a raw 500 as a failure banner, where a
     degraded response at least says the outage is ours."""
+    from evidence import fact_checks
+    related = fact_checks.start(claim)
     try:
-        return to_legacy_shape(await verify_v2(claim, client_ip=client_ip))
+        v = await verify_v2(claim, client_ip=client_ip)
     except Exception:  # noqa: BLE001
         from config import logger
         logger.exception("verify_compat failed for %r", (claim or "")[:120])
-        return to_legacy_shape(VerificationV2(
+        v = VerificationV2(
             claim=claim, verdict=NO_VERDICT, confidence="Low",
             headline=("Verification could not be completed due to an internal error. "
                       "This is not a judgment about the claim."),
             reason="source_unavailable", notes=["degraded: internal error"],
-        ))
+        )
+    v.fact_checks = await fact_checks.finish(related)
+    return to_legacy_shape(v)

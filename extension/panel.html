@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Project Mirador</title>
+  <meta charset="UTF-8">
+  <style>
+    /* Black and white like the website, with its yellow marker; a plain field and black pill buttons. */
+    :root { --ink:#000; --muted:#6b6b6b; --line:#e4e4df; --field:#d6d6d1; --bg:#fff; --subtle:#f6f6f3; --mark:#ffe58a;
+      --ok:#1b6b3a; --warn:#8a5a00; --bad:#a11b1b; color-scheme: light;
+      --font: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      --display: "SF Pro Display", var(--font); }
+    * { box-sizing: border-box; }
+    body { min-width: 300px; margin: 0; background: var(--bg); color: var(--ink);
+      font: 500 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+    ::selection { background: var(--mark); color: #000; }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+    button { font-family: inherit; }
+
+    /* The field */
+    form { padding: 18px 16px 0; }
+    label { display: block; margin-bottom: 12px; font: 500 22px/1.15 var(--display); letter-spacing: -.01em; }
+    .row { display: flex; gap: 6px; align-items: center; padding: 5px; background: var(--bg);
+      border: 1px solid var(--field); border-radius: 12px; transition: border-color .12s; }
+    .row:focus-within { border-color: var(--ink); }
+    textarea { flex: 1; min-width: 0; margin: 0; padding: 10px 6px; border: 0; outline: 0; background: none; resize: none;
+      height: 40px; max-height: 120px; color: var(--ink); font: 500 14.5px/1.4 var(--font); }
+    textarea::placeholder { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    button.go { flex: none; height: 36px; padding: 0 16px; border: 0; border-radius: 999px; cursor: pointer;
+      background: var(--ink); color: var(--bg); font: 500 13px var(--font); transition: opacity .12s; }
+    button.go:hover { opacity: .85; }
+    button.go:active { opacity: .7; }
+
+    /* After a check only what was asked shows; the button returns once it is edited. */
+    body.answered label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    body.answered form { padding-top: 16px; }
+    body.answered:not(.editing) button.go { display: none; }
+
+    #out { margin: 20px 16px 0; }
+    #out:empty { display: none; }
+
+    /* First run: a few claims to try */
+    .try { margin: 18px 16px 0; }
+    .try h2, .recent h2 { margin: 0 0 6px; font-size: 12px; font-weight: 500; color: var(--muted); }
+    .try ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+    .try button { width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--subtle); cursor: pointer;
+      text-align: left; color: var(--ink); font: 500 13.5px/1.35 var(--font); }
+    .try button:hover { background: var(--line); }
+
+    /* Recent checks */
+    .recent { margin: 24px 16px 0; }
+    .recent .hd { display: flex; align-items: baseline; justify-content: space-between; }
+    .recent .clear { border: 0; background: none; padding: 0; cursor: pointer; font: 500 12px var(--font); color: var(--muted); }
+    .recent .clear:hover { color: var(--ink); text-decoration: underline; }
+    .recent ul { margin: 0; padding: 0; list-style: none; }
+    .recent li button { display: flex; gap: 10px; align-items: baseline; width: calc(100% + 16px); margin: 0 -8px; padding: 7px 8px;
+      border: 0; border-radius: 8px; background: none; cursor: pointer; text-align: left; color: var(--ink); font: 500 13.5px/1.4 var(--font); }
+    .recent li button:hover { background: var(--subtle); }
+    .recent .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .recent .v { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+    .recent .v::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .5; }
+    .recent .v[data-verdict="supported"]::before { background: var(--ok); opacity: 1; }
+    .recent .v[data-verdict="mostly-accurate"]::before, .recent .v[data-verdict="misleading"]::before { background: var(--warn); opacity: 1; }
+    .recent .v[data-verdict="contradicted"]::before { background: var(--bad); opacity: 1; }
+
+    .fine { margin: 24px 16px 16px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+    .fine p { margin: 0; }
+    .fine p + p { margin-top: 6px; }
+
+    /* Opened from the address bar in a full tab: content in a column. */
+    body.tab form { padding: 48px max(24px, calc(50% - 280px)) 8px; }
+    body.tab label { font-size: 30px; }
+    body.tab #out, body.tab .try, body.tab .recent, body.tab .fine { width: min(560px, calc(100% - 48px)); margin-left: auto; margin-right: auto; }
+  </style>
+</head>
+<body>
+  <form id="form" autocomplete="off" role="search">
+    <label for="q">Check a claim or find a figure</label>
+    <div class="row">
+      <textarea id="q" rows="1" spellcheck="false" aria-describedby="q-hint"
+        placeholder="e.g. Unemployment was 3.6% in 2023"></textarea>
+      <button class="go" type="submit">Check</button>
+    </div>
+  </form>
+
+  <div id="out" aria-live="polite"></div>
+
+  <section class="try" id="try" hidden>
+    <h2>Try one</h2>
+    <ul id="examples"></ul>
+  </section>
+
+  <section class="recent" id="recent" hidden>
+    <div class="hd"><h2>Recent</h2><button type="button" class="clear" id="clear">Clear</button></div>
+    <ul id="items"></ul>
+  </section>
+
+  <div class="fine" id="q-hint">
+    <p>Tip: highlight text on any page, right-click, and choose Check with Project Mirador.</p>
+    <p>Checked against data from BLS, BEA, the Census Bureau, the Treasury, the Federal Reserve,
+      the Labor Department and Freddie Mac.
+      Independent; not a government service.</p>
+  </div>
+
+  <script src="result-view.js"></script>
+  <script src="skin.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>
