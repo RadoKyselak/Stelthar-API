@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from claims.parser import ParsedClaim
-from evidence.datapoint import Datapoint, Request
+from evidence.datapoint import POINT_IN_TIME, Datapoint, Request
 from evidence.citation import agency_short
 from evidence.units import PERCENT, humanize, humanize_claim
 
@@ -41,6 +41,10 @@ NO_VERDICT = "No verdict"
 # (4.1% against 4.0%) AND within this share of the official figure, so a
 # coarse claim ("3%" against 3.6%) is still Contradicted.
 NEAR_MISS_MAX_RELATIVE = 0.05
+# Any gap this small is a near miss, however precisely the claim was written.
+TINY_RELATIVE_GAP = 0.002
+# Rounding never makes a figure more than this far off "Supported".
+ROUNDING_MAX_RELATIVE = 0.10
 
 # Reasons a verdict could not be reached. Each is actionable.
 NO_SERIES = "no_official_series_for_this_claim"
@@ -133,10 +137,23 @@ def _is_near_miss(
     if precision is None or precision <= 0:
         return False
     diff = abs(claimed - official)
+    denom = abs(official) if abs(official) > 1e-12 else 1.0
+    # A few cents on a $34 wage (a later revision, usually) is close, not false.
+    if diff / denom <= TINY_RELATIVE_GAP:
+        return True
     if diff > ((tolerance or 0.0) + precision) * (1 + 1e-9):
         return False
-    denom = abs(official) if abs(official) > 1e-12 else 1.0
     return diff / denom <= NEAR_MISS_MAX_RELATIVE
+
+
+def _long_date(iso: str) -> str:
+    """2024-12-31 -> December 31, 2024 (anything else is returned as given)."""
+    import calendar as _cal
+    try:
+        y, m, d = (int(x) for x in str(iso)[:10].split("-"))
+        return f"{_cal.month_name[m]} {d}, {y}"
+    except (ValueError, IndexError):
+        return str(iso)
 
 
 def _gap_phrase(delta: float, family: str) -> str:
@@ -273,6 +290,14 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
     delta = official.quantity.magnitude - claimed.magnitude
     denom = abs(official.quantity.magnitude)
     rel = (delta / denom) if denom > 1e-12 else None
+    # A round count or amount covers a wide band ("3 million" spans 2.5 to 3.5
+    # million). Inside it but well off the figure is close, not right. Rates
+    # are left alone: "4%" for 3.6% is how people round a rate.
+    loose = bool(agrees and parsed.comparator == "equals" and rel is not None
+                 and official.quantity.family != "percent"
+                 and abs(rel) > ROUNDING_MAX_RELATIVE)
+    if loose:
+        agrees = False
 
     phrase = _phrase_for(parsed.comparator)
     if phrase:
@@ -280,9 +305,16 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
     else:
         claim_side = f"Claim says {claimed_display}."
 
+    when = official.observed.describe(short=True)
+    if official.observed.kind == POINT_IN_TIME and official.observed.record_date:
+        when = f"as of {_long_date(official.observed.record_date)}"  # not "for as of 2024-12-31"
+    else:
+        when = f"for {when}"
+    # Name who published it ("Freddie Mac reports"), not the site that relays it.
+    who = (official.extra or {}).get("publisher_short") or agency_short(official.source)
     headline = (
-        f"{claim_side} {agency_short(official.source)} reports {official.display_value()} "
-        f"for {official.observed.describe(short=True)}."
+        f"{claim_side} {who} reports {official.display_value()} "
+        f"{when}."
     )
 
     # Confidence reflects what is actually known about the evidence, not how
@@ -304,7 +336,7 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
 
     if agrees:
         outcome = SUPPORTED
-    elif parsed.comparator == "equals" and _is_near_miss(
+    elif loose or parsed.comparator == "equals" and _is_near_miss(
         claimed.magnitude, official.quantity.magnitude, claimed.precision, tolerance,
     ):
         outcome = MOSTLY_ACCURATE

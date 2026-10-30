@@ -97,6 +97,7 @@ africa scandinavia eurozone
     "saudi arabia", "sri lanka", "united arab emirates", "united kingdom",
     "great britain", "northern ireland", "european union", "south america",
     "latin america", "north america", "the middle east", "the caribbean",
+    "uk", "u.k.", "uae", "u.a.e.",
 ])
 
 _NON_US_BY_LENGTH = sorted(_NON_US, key=len, reverse=True)
@@ -210,6 +211,139 @@ _DEMONYMS_BY_LENGTH = sorted(_DEMONYMS, key=len, reverse=True)
 _COUNTY_RE = re.compile(r"\b((?:[A-Z][\w.'\-]*\s){0,2}[A-Z][\w.'\-]*)\s+(County|Parish)\b")
 
 
+
+# ------------------------------------------------------------------ local places
+# A claim about a city, metro area or ZIP code is resolved to that place, never
+# to the state or the nation around it. The names are kept as written; the
+# Census place lists turn them into codes when a lookup needs one.
+
+USPS = {
+    "AL": "alabama", "AK": "alaska", "AZ": "arizona", "AR": "arkansas", "CA": "california",
+    "CO": "colorado", "CT": "connecticut", "DE": "delaware", "DC": "district of columbia",
+    "FL": "florida", "GA": "georgia", "HI": "hawaii", "ID": "idaho", "IL": "illinois",
+    "IN": "indiana", "IA": "iowa", "KS": "kansas", "KY": "kentucky", "LA": "louisiana",
+    "ME": "maine", "MD": "maryland", "MA": "massachusetts", "MI": "michigan", "MN": "minnesota",
+    "MS": "mississippi", "MO": "missouri", "MT": "montana", "NE": "nebraska", "NV": "nevada",
+    "NH": "new hampshire", "NJ": "new jersey", "NM": "new mexico", "NY": "new york",
+    "NC": "north carolina", "ND": "north dakota", "OH": "ohio", "OK": "oklahoma", "OR": "oregon",
+    "PA": "pennsylvania", "RI": "rhode island", "SC": "south carolina", "SD": "south dakota",
+    "TN": "tennessee", "TX": "texas", "UT": "utah", "VT": "vermont", "VA": "virginia",
+    "WA": "washington", "WV": "west virginia", "WI": "wisconsin", "WY": "wyoming",
+    "PR": "puerto rico",
+}
+
+# Nicknames for cities, as people write them.
+_CITY_NICKNAMES = {
+    "nyc": "New York City", "n.y.c.": "New York City", "the big apple": "New York City",
+    "la": "Los Angeles, California", "l.a.": "Los Angeles, California",
+    "sf": "San Francisco, California", "s.f.": "San Francisco, California",
+    "philly": "Philadelphia, Pennsylvania", "vegas": "Las Vegas, Nevada",
+    "nola": "New Orleans, Louisiana", "chi-town": "Chicago, Illinois",
+    "atl": "Atlanta, Georgia", "motor city": "Detroit, Michigan",
+}
+_NICKNAME_RE = re.compile(
+    r"(?<!, )(?<![\w.])(NYC|N\.Y\.C\.|L\.A\.|LA|SF|S\.F\.|ATL)(?![\w.])"
+    r"|\b(?i:the big apple|philly|vegas|nola|chi-town|motor city)\b")
+
+# Regions that are metro areas, by the name of their main city.
+_METRO_NICKNAMES = {
+    "bay area": "San Francisco", "san francisco bay area": "San Francisco",
+    "silicon valley": "San Jose", "twin cities": "Minneapolis", "dfw": "Dallas",
+    "metroplex": "Dallas", "tri-state area": "New York", "tristate area": "New York",
+    "inland empire": "Riverside", "research triangle": "Raleigh", "the triangle": "Raleigh",
+    "hampton roads": "Virginia Beach", "puget sound": "Seattle", "south florida": "Miami",
+    "the dmv": "Washington", "chicagoland": "Chicago", "the valley of the sun": "Phoenix",
+}
+_METRO_NICKNAME_RE = re.compile(
+    r"\b(?i:(?:the\s+)?(?:san francisco\s+)?bay area|silicon valley|twin cities|metroplex|"
+    r"tri-?state area|inland empire|research triangle|hampton roads|puget sound(?: region)?|"
+    r"south florida|chicagoland|the valley of the sun|the dmv)\b|\bDFW\b")
+_METRO_RE = re.compile(
+    r"\b(?:(?i:greater)\s+([A-Z][\w.'’]*(?:[\s-]+[A-Z][\w.'’]*){0,3})"
+    r"|([A-Z][\w.'’]*(?:[\s-]+[A-Z][\w.'’]*){0,4})\s+(?i:metro(?:politan)?(?:\s+(?:statistical\s+)?area|\s+region)?"
+    r"|(?:area|region)(?!\s+(?:median|code))))\b")
+_ZIP_RE = re.compile(
+    r"\b(?i:zip(?:\s*code)?|zcta|postal\s+code)s?\s*#?\s*(\d{5})\b"
+    r"|(?<![$\d,.])\b(?i:in|for)\s+(\d{5})(?![\d,.%]|\s*(?:people|residents|jobs|homes|dollars))")
+_STATE_NAMES_RE = "|".join(re.escape(n.title()) for n in sorted(_STATE_FIPS, key=len, reverse=True))
+_CITY_STATE_RE = re.compile(
+    r"\b((?:[A-Z][\w.'’-]*\s+){0,3}[A-Z][\w.'’-]*),\s+"
+    r"(" + _STATE_NAMES_RE + r"|[A-Z]{2}(?![\w])|[A-Z]\.[A-Z]\.)")
+# Capitalised words that start a sentence or clause, not a place name.
+_LEADING_NOT_PLACE = frozenset("""
+in at for of the however meanwhile today overall nationally since now also and but
+while last this even yet so from across like unlike than both by on as after before
+during under over between according statewide still then thus indeed notably
+""".split())
+
+
+def _state_from(token: str) -> str:
+    """"Texas", "TX" or "T.X." -> "texas"; "" when it is not a state."""
+    t = token.replace(".", "").strip()
+    if t.upper() in USPS and (len(t) == 2):
+        return USPS[t.upper()]
+    return t.lower() if t.lower() in _STATE_FIPS else ""
+
+
+def _metro_name(raw: str) -> str:
+    return " ".join(raw.replace("’", "'").split()).strip(" .,'")
+
+
+def _local_place(text: str) -> Optional[Geography]:
+    """A ZIP code, metro area, nicknamed city or "City, State", or None."""
+    m = _ZIP_RE.search(text)
+    if m:
+        z = m.group(1) or m.group(2)
+        return Geography(name=f"ZIP Code {z}", level="zcta", fips=z)
+
+    m = _METRO_NICKNAME_RE.search(text)
+    if m:
+        key = re.sub(r"^the\s+", "", m.group(0).lower()) if m.group(0).lower() not in _METRO_NICKNAMES else m.group(0).lower()
+        key = key.replace("tristate", "tri-state").replace("puget sound region", "puget sound")
+        name = _METRO_NICKNAMES.get(key) or _METRO_NICKNAMES.get("the " + key) or _METRO_NICKNAMES.get(m.group(0).lower())
+        if name:
+            return Geography(name=name, level="metro")
+    m = _METRO_RE.search(text)
+    if m:
+        name = _metro_name(m.group(1) or m.group(2))
+        words = name.split()
+        while words and words[0].lower() in _LEADING_NOT_PLACE:
+            words = words[1:]
+        name = " ".join(words)
+        if re.sub(r"[.,\s]", "", name).lower() in ("dc", "washingtondc"):
+            name = "Washington"
+        low = name.lower()
+        if name and low not in _NOT_A_PLACE and low not in _NON_US and not any(
+                _word_bounded(low, p) for p in _NATIONAL_PHRASES):
+            return Geography(name=name, level="metro")
+
+    m = _NICKNAME_RE.search(text)
+    if m:
+        name = _CITY_NICKNAMES[m.group(0).lower()]
+        if re.match(r"\s+(?i:county)\b", text[m.end():]):
+            city, _, state = name.partition(", ")
+            return Geography(name=f"{city} County, {state}" if state else f"{city} County", level="county")
+        return Geography(name=name, level="place")
+
+    for m in _CITY_STATE_RE.finditer(text):
+        state = _state_from(m.group(2))
+        if not state or state == "district of columbia":
+            continue  # "Washington, D.C." is the District, handled below
+        words = m.group(1).split()
+        while words and words[0].lower() in _LEADING_NOT_PLACE:
+            words = words[1:]
+        city = " ".join(words)
+        low = city.lower()
+        if not city or low in _STATE_FIPS or low in _NOT_A_PLACE or low in _NON_US:
+            continue
+        if any(_word_bounded(low, p) for p in _NATIONAL_PHRASES):
+            continue
+        if re.search(r"\b(county|parish|borough)$", low):
+            return Geography(name=f"{city}, {state.title()}", level="county")
+        return Geography(name=f"{city}, {state.title()}", level="place")
+    return None
+
+
 def resolve_geography(text: str) -> Optional[Geography]:
     """Return the geography a claim is about, or None if it names no place.
 
@@ -220,6 +354,10 @@ def resolve_geography(text: str) -> Optional[Geography]:
     if not text:
         return None
     lowered = " ".join(text.lower().split())
+
+    local = _local_place(text)
+    if local is not None:
+        return local
 
     if _DC_RE.search(lowered):
         return Geography(name="District Of Columbia", level="state",
@@ -247,7 +385,8 @@ def resolve_geography(text: str) -> Optional[Geography]:
             # Capture the whole place name for the citation and for the
             # grounded-search query, e.g. "new york city".
             tail = lowered[m.end():m.end() + 24].strip().split()
-            place = f"{state} {tail[0]}".strip() if tail else state
+            word = re.sub(r"(['\u2019]s)?[^\w]*$", "", tail[0]) if tail else ""
+            place = f"{state} {word}".strip()
             return Geography(name=place.title(), level="place")
         return Geography(name=state.title(), level="state", fips=_STATE_FIPS[state])
 
@@ -259,7 +398,8 @@ def resolve_geography(text: str) -> Optional[Geography]:
     # otherwise swallow "South America" and "Latin America".
     for country in _NON_US_BY_LENGTH:
         if _word_bounded(lowered, country):
-            return Geography.unknown(country.title())
+            name = country.upper() if len(country.replace(".", "")) <= 3 else country.title()
+            return Geography.unknown(name)
 
     for scope in _SUPRANATIONAL:
         if _word_bounded(lowered, scope):

@@ -32,7 +32,8 @@ import evidence.units as _units
 # Comparators, longest first so "at least" beats "least".
 _COMPARATORS = [
     ("greater than", (" more than ", " greater than ", " over ", " above ",
-                      " exceeded ", " exceeds ", " higher than ", " north of ")),
+                      " exceeded ", " exceeds ", " higher than ", " north of ",
+                      " passed ", " surpassed ", " topped ", " crossed ")),
     ("at least", (" at least ", " no less than ", " or more",)),
     ("less than", (" less than ", " under ", " below ", " fewer than ",
                    " lower than ", " beneath ")),
@@ -54,6 +55,31 @@ _MONTH_YEAR_RE = re.compile(
 # Bill designators and other numerals that look like years but are not.
 _NON_YEAR_CONTEXT_RE = re.compile(
     r"(?:h\.\s?r\.|h\.\s?res\.|s\.\s?res\.|s\.|bill|section|§|act of)\s*\d{0,4}$",
+    re.IGNORECASE,
+)
+
+_JOBS_CHANGE_RE = re.compile(
+    r"\b(added|adds|add|created|creates|create|gained|gains|lost|lose|loses|shed|sheds|cut|"
+    r"eliminated)\s+(?:a\s+(?:net\s+|record\s+)?|about\s+|nearly\s+|roughly\s+|around\s+|almost\s+|"
+    r"more than\s+|over\s+|just over\s+|just under\s+|under\s+|some\s+)?[\d,.]+\s*"
+    r"(?:million|thousand|k|m)?\s+(?:new\s+|net\s+)?jobs\b",
+    re.IGNORECASE,
+)
+
+_PRICES_ROSE_RE = re.compile(
+    r"^\s*(?:u\.?s\.?\s+|american\s+|overall\s+|consumer\s+)?prices\s+"
+    r"(?:rose|increased|went up|were up|are up|climbed|jumped|grew|fell|declined|dropped)\b",
+    re.IGNORECASE,
+)
+
+# Change-rate series where a fall is a negative value.
+_SIGNED_CHANGE_METRICS = frozenset({
+    "real_gdp_growth", "inflation_rate", "core_inflation_rate", "producer_price_inflation",
+})
+_FELL_BY_RE = re.compile(
+    r"\b(?:fell|fall|falls|shrank|shrink|shrinks|contracted|contract|contracts|declined|"
+    r"declines|dropped|drops|decreased|decreases|went down)\s+(?:by\s+)?"
+    r"(?:about\s+|nearly\s+|roughly\s+|around\s+|almost\s+)?\d",
     re.IGNORECASE,
 )
 
@@ -124,6 +150,15 @@ _REAL_DOLLARS_RE = re.compile(
 )
 _NOMINAL_RE = re.compile(r"\bnominal\b|\bcurrent[- ]dollars?\b", re.IGNORECASE)
 
+
+_SUPERLATIVE_RE = re.compile(
+    r"\b(?:the\s+|a\s+|an\s+)?(?:(?:lowest|highest|biggest|largest|smallest|fastest|slowest|"
+    r"steepest|sharpest)\s+(?:level\s+|rate\s+|reading\s+)?(?:in|since)\s+(?:over\s+|more than\s+|"
+    r"nearly\s+|almost\s+|about\s+|roughly\s+)?\d{1,3}\s+years|"
+    r"\d{1,3}[- ]year\s+(?:low|high|record|peak))\b",
+    re.IGNORECASE,
+)
+_SPAN_RE = re.compile(r"\b\d{1,3}-(?:year|month|week|day)\b", re.IGNORECASE)
 
 _AGE_BOUND_RE = re.compile(
     r"\b\d{1,2}\s*(?:to|-|through)\s*\d{1,2}[- ]?(?:year[- ]olds?|years?(?:\s+old)?)\b"
@@ -196,16 +231,40 @@ _CATEGORY_INFLATION_RE = re.compile(
     r"slowing\b|easing\b|sticky\b|stubborn\b|hot\b|higher\b|lower\b|soaring\b|"
     r"official\b|measured\b|year-over-year\b|12-month\b|month-over-month\b)"
     r"([a-z][a-z-]+)\s+inflation\b"
-    r"|\binflation\s+(?:for|in|on)\s+(?!the\s+u|america|\d|19|20|january|february|march|"
+    r"|\binflation\s+(?:for|in|on)\s+(?!the\s+(?:u\.?s\b|united\b|nation\b|country\b|america))(?:the\s+)?(?!the\b|u\.?s\b|united\b|nation\b|country\b|america|\d|19|20|january|february|march|"
     r"april|may|june|july|august|september|october|november|december)([a-z][a-z-]+)",
     re.IGNORECASE)
 _WAGE_RE = re.compile(r"\bwages?\b|\bpaychecks?\b|\bsalar(?:y|ies)\b", re.IGNORECASE)
+
+
+# HUD's Area Median Income and the income bands set from it ("middle income",
+# "80% of AMI", "a family of four") are not Census median household income:
+# HUD adjusts for household size and sets one figure per metro area, so the
+# two differ by tens of thousands of dollars. Neither a fixed series nor the
+# Census dataset search can answer these; they go to the AI search with a hint.
+_INCOME_BAND_RE = re.compile(
+    r"\barea median income\b|\bAMI\b|\bincome (?:limits?|thresholds?|eligibility|brackets?|bands?|tiers?)\b"
+    r"|\b(?:middle|moderate|low|very[- ]low|extremely[- ]low)[- ]income\b(?!\s+(?:countr|nation|econom))"
+    r"|\bmiddle[- ]class\b|\b(?:family|household) of (?:one|two|three|four|five|six|seven|eight|[1-8])\b"
+    r"|\b\d{2,3}\s?(?:%|percent) of (?:the )?(?:area )?median\b",
+    re.IGNORECASE)
+_INCOME_METRICS = ("median_household_income", "personal_income")
+
+
+def income_band(text: str) -> str:
+    """The phrase that makes a claim about HUD income limits or an income band, or ""."""
+    m = _INCOME_BAND_RE.search(text or "")
+    return m.group(0).strip() if m else ""
 
 
 def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[int] = None) -> str:
     """Why the matched series cannot answer this claim, or "" if it can."""
     if spec is None or not text:
         return ""
+    band = income_band(text) if spec.metric in _INCOME_METRICS else ""
+    if band:
+        return (f"the claim is about an income band or HUD's area median income (\u201c{band}\u201d), "
+                f"which HUD sets per metro area and household size; it is not Census median household income")
     # A subgroup mention is fine when it overlaps the metric's own universe
     # (its qualifier, or a defining age bound such as "25 and older").
     allowed = []
@@ -234,6 +293,8 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
             word = m.group(1) or m.group(2) or ""
             if resolve_geography(word) is not None:
                 continue  # "Texas inflation": a place, which the geography check handles
+            if m.group(2) and word[:1].isupper() and resolve_geography(text) is not None:
+                continue  # "inflation in the Chicago area": a place, not a kind of price
             return (f"the claim is about one category of prices (\u201c{m.group(0).strip()}\u201d), "
                     f"not overall consumer inflation")
     if spec.family == _units.USD and _REAL_DOLLARS_RE.search(text):
@@ -285,6 +346,10 @@ class ParsedClaim:
     # Set when the claim qualifies the metric in a way the series cannot
     # honour (subgroup, quarter, per-capita, real vs nominal).
     structured_blocker: str = ""
+    # Present tense with no year ("unemployment is 4%"): about the latest figure.
+    present: bool = False
+    # Part of the claim the lookup does not check, said so on the answer.
+    aside: str = ""
 
     @property
     def is_actionable(self) -> bool:
@@ -331,14 +396,27 @@ def _extract_fiscal_year(text: str) -> Optional[int]:
     return 2000 + int(two) if two else None
 
 
+# A comparison word only counts when a figure follows it: "under 4%" compares,
+# "under Trump" and "rose 3% over the year" do not.
+_FIGURE_AHEAD_RE = re.compile(
+    r"\s*(?:just |about |roughly |around |nearly |almost |some |a |an )?[$€£]?\d")
+
+
 def _extract_comparator(text: str) -> str:
     padded = f" {text.lower()} "
     best, best_pos = "equals", len(padded) + 1
     for name, needles in _COMPARATORS:
         for n in needles:
-            pos = padded.find(n)
-            if pos != -1 and pos < best_pos:
-                best, best_pos = name, pos
+            start = 0
+            while True:
+                pos = padded.find(n, start)
+                if pos == -1 or pos >= best_pos:
+                    break
+                trailing = n.startswith(" or ")  # "5% or more": the figure comes first
+                if trailing or _FIGURE_AHEAD_RE.match(padded, pos + len(n)):
+                    best, best_pos = name, pos
+                    break
+                start = pos + 1
     return best
 
 
@@ -428,6 +506,7 @@ def parse_claim(text: str) -> ParsedClaim:
 
     fiscal_year = _extract_fiscal_year(raw)
     years = _extract_years(raw)
+    present = False
     month = None
     mm = _MONTH_YEAR_RE.search(raw)
     if mm:
@@ -444,6 +523,7 @@ def parse_claim(text: str) -> ParsedClaim:
         # the latest available figure, which is not the same as this year's
         # annual average. Leave year unset; the adapter fetches latest.
         year, basis = None, "calendar"
+        present = True
     else:
         year, basis = None, "calendar"
 
@@ -453,10 +533,32 @@ def parse_claim(text: str) -> ParsedClaim:
     # are not claimed values; left in, they made a one-number claim look like
     # a two-number trend claim.
     value_text = _AGE_BOUND_RE.sub(" ", _strip_years_for_value(raw, years))
+    # "30-year mortgage", "a 40-year high", "the lowest in 54 years" name spans,
+    # not claimed values. A superlative is said to be unchecked, never ignored.
+    superlative = _SUPERLATIVE_RE.search(value_text)
+    aside = ""
+    if superlative:
+        aside = (f"The claim also says it was {superlative.group(0).strip().rstrip(',.')}; "
+                 f"this check covers the figure only.")
+    value_text = _SPAN_RE.sub(" ", _SUPERLATIVE_RE.sub(" ", value_text))
     # "Q2" must not be read as the number 2.
     value_text = _QUARTER_TOKEN_RE.sub(" ", value_text)
     claimed = parse_quantity(value_text)
     spec = _select_variant(raw, _choose_metric(raw, claimed))
+    # "The economy added 3 million jobs": the change in payrolls, not the level.
+    jobs = _JOBS_CHANGE_RE.search(raw)
+    if jobs and claimed is not None and claimed.family == "jobs" and (
+            spec is None or spec.metric in ("nonfarm_employment", "jobs_added")):
+        spec = BY_METRIC.get("jobs_added")
+        if jobs.group(1).lower() in ("lost", "shed", "cut", "eliminated", "lose", "loses", "sheds"):
+            claimed = Quantity(magnitude=-abs(claimed.magnitude), family=claimed.family,
+                               approximate=claimed.approximate, raw=claimed.raw,
+                               precision=claimed.precision)
+    # "Prices rose 3.4% over the year": prices in general, so CPI inflation.
+    # Only at the start, so "egg prices rose" never becomes overall inflation.
+    if spec is None and claimed is not None and claimed.family == "percent" \
+            and _PRICES_ROSE_RE.match(raw):
+        spec = BY_METRIC.get("inflation_rate")
     # A percent claim whose metric is a percent metric: keep as-is. A bare
     # number with no unit against a USD metric is dollars.
     if claimed is not None and spec is not None and claimed.family == "unknown":
@@ -464,6 +566,14 @@ def parse_claim(text: str) -> ParsedClaim:
         # blanket 1% band instead of "to the nearest million".
         claimed = Quantity(
             magnitude=claimed.magnitude, family=spec.family,
+            approximate=claimed.approximate, raw=claimed.raw, precision=claimed.precision,
+        )
+
+    # "GDP fell 2.2%" is a growth rate of -2.2%; "inflation fell to 3%" is a level.
+    if (claimed is not None and spec is not None and spec.metric in _SIGNED_CHANGE_METRICS
+            and claimed.magnitude > 0 and _FELL_BY_RE.search(raw)):
+        claimed = Quantity(
+            magnitude=-claimed.magnitude, family=claimed.family,
             approximate=claimed.approximate, raw=claimed.raw, precision=claimed.precision,
         )
 
@@ -485,6 +595,8 @@ def parse_claim(text: str) -> ParsedClaim:
 
     return ParsedClaim(
         text=raw,
+        present=present,
+        aside=aside,
         metric=spec,
         year=year,
         year_basis=basis,

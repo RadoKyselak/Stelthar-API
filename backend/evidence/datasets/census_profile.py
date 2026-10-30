@@ -208,54 +208,220 @@ async def twin(metric: str, year: int) -> Optional[Candidate]:
 
 
 # ------------------------------------------------------------------ places
+# Any place Census publishes a profile for: cities and towns, counties (and
+# New York City's boroughs), metro and micro areas, and ZIP codes. The 1-year
+# survey covers places of 65,000+; smaller ones come from the 5-year survey,
+# which is said in the answer.
 
 _SUFFIX = re.compile(r"\s+(city|town|village|borough|municipality|CDP|"
                      r"city and borough|consolidated government|metro government|"
                      r"unified government|urban county|metropolitan government)"
                      r"(\s*\(balance\))?.*$", re.I)
+_LAST_SUFFIX = re.compile(r"\s+(city|town|village|borough|municipality|CDP)$", re.I)
+_LEVEL_FOR = {"place": "place", "county": "county",
+              "metro": "metropolitan statistical area/micropolitan statistical area",
+              "zcta": "zip code tabulation area"}
+_MONTH = 30 * 24 * 3600
+
+# Names people use that Census does not: (level, Census short name, state).
+_ALIASES = {
+    "nyc": ("place", "new york", "new york"),
+    "new york city": ("place", "new york", "new york"),
+    "brooklyn": ("county", "kings", "new york"),
+    "manhattan": ("county", "new york", "new york"),
+    "bronx": ("county", "bronx", "new york"),
+    "the bronx": ("county", "bronx", "new york"),
+    "queens": ("county", "queens", "new york"),
+    "staten island": ("county", "richmond", "new york"),
+    "honolulu": ("place", "urban honolulu", "hawaii"),
+    "nashville": ("place", "nashville", "tennessee"),
+    "louisville": ("place", "louisville", "kentucky"),
+}
 
 
-async def _places(year: int, level: str) -> List[List[str]]:
-    """[[NAME, state, code], ...] for every place or county ACS 1-year covers."""
+async def _places(year: int, level: str, survey: str = "acs1", state: str = "") -> List[List[Any]]:
+    """[[NAME, population, code], ...] for every place of one kind a survey
+    covers. The code is state+place or state+county FIPS, or the CBSA code."""
     async def load():
-        params = {"get": "NAME", "for": f"{level}:*", "in": "state:*"}
+        params = {"get": "NAME,B01003_001E", "for": f"{_LEVEL_FOR[level]}:*"}
+        if level in ("place", "county"):
+            params["in"] = f"state:{state}" if state else "state:*"
         if CENSUS_API_KEY:
             params["key"] = CENSUS_API_KEY
-        data = await _get_json(f"{_BASE}/{year}/acs/acs1", params)
-        return data[1:] if isinstance(data, list) and len(data) > 1 else []
-    return await cached("census_places", f"{year}:{level}", 30 * 24 * 3600, load) or []
+        data = await _get_json(f"{_BASE}/{year}/acs/{survey}", params)
+        if not isinstance(data, list) or len(data) < 2:
+            return []
+        head, out = data[0], []
+        for row in data[1:]:
+            rec = dict(zip(head, row))
+            code = (rec.get("state", "") + rec.get(level, "")) if level in ("place", "county") \
+                else rec.get(_LEVEL_FOR[level], "")
+            try:
+                pop = int(float(rec.get("B01003_001E") or 0))
+            except (TypeError, ValueError):
+                pop = 0
+            out.append([rec.get("NAME", ""), pop, code])
+        return out
+    return await cached("census_places2", f"{survey}:{year}:{level}:{state}", _MONTH, load) or []
 
 
 def _norm(s: str) -> str:
-    return re.sub(r"[^a-z ]", "", s.lower().replace("saint ", "st ").replace("st. ", "st ")).strip()
+    return " ".join(re.sub(r"[^a-z ]", "", s.lower().replace("saint ", "st ")
+                           .replace("st. ", "st ").replace("ft. ", "fort ")).split())
 
 
-async def resolve_place(name: str, year: int, claim: str) -> Optional[Geography]:
-    """"Chicago" -> Chicago city, Illinois. A county when the name says so.
-    When several places share the name and the claim names no state, the
-    most populous is not guessed: the claim is declined."""
-    raw = re.sub(r"^(the\s+)?city of\s+", "", (name or "").strip(), flags=re.I)
-    level = "county" if re.search(r"\b(county|parish|borough)\b", raw, re.I) else "place"
-    rows = await _places(year, level)
-    if not rows:
-        logger.info("No %s list for ACS %s", level, year)
+def _names(base: str, level: str) -> set:
+    """The ways a Census place name can be written: "Kansas City city" is
+    "Kansas City"; "New York city" is "New York" and "New York City";
+    "Nashville-Davidson metropolitan government (balance)" is also "Nashville";
+    "San Buenaventura (Ventura) city" is also "Ventura"."""
+    if level == "county":
+        return {_norm(re.sub(r"\s+(county|parish|borough|census area|city and borough|municipality)$",
+                             "", base, flags=re.I))}
+    out = set()
+    for alt in re.findall(r"\(([^)]+)\)", base):
+        if alt.lower() != "balance":
+            out.add(_norm(alt))
+    plain = re.sub(r"\s*\([^)]*\)", "", base)
+    short = _SUFFIX.sub("", plain)
+    out.add(_norm(short))
+    one = _LAST_SUFFIX.sub("", plain)
+    out.add(_norm(one))
+    if one != plain:
+        out.add(_norm(one + " city"))
+    if re.search(r"government|\(balance\)", base, re.I):
+        out.add(_norm(re.split(r"[-/]", short)[0]))
+    return out
+
+
+def _metro_parts(nm: str) -> Tuple[List[str], set, bool]:
+    """"Dallas-Fort Worth-Arlington, TX Metro Area" ->
+    (["dallas", "fort worth", "arlington"], {"texas"}, True)."""
+    from claims.geography import USPS
+    base, _, rest = nm.partition(", ")
+    parts = [_norm(x) for x in base.split("-")]
+    abbrevs = (rest.split() or [""])[0].split("-")
+    states = {USPS[a] for a in abbrevs if a in USPS}
+    return parts, states, "metro area" in rest.lower() or "metropolitan" in rest.lower()
+
+
+def _states_named(text: str) -> set:
+    from claims.geography import USPS, _STATE_FIPS
+    low = text.lower()
+    out = {st for st in _STATE_FIPS if re.search(rf"(?<![a-z]){re.escape(st)}(?![a-z])", low)}
+    out |= {USPS[a] for a in re.findall(r",\s*([A-Z]{2})\b", text) if a in USPS}
+    return out
+
+
+def _choose(matches: List[Tuple[str, int, str, set]], only_state: str, named: set):
+    """One place out of several with the same name: the state the claim names,
+    else the one at least three times as populous as the next (Portland,
+    Oregon over Portland, Maine). Otherwise none: guessing would be wrong."""
+    if only_state:
+        matches = [m for m in matches if only_state in m[3]]
+    elif len(matches) > 1 and named:
+        hit = [m for m in matches if m[3] & named]
+        if hit:
+            matches = hit
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        ranked = sorted(matches, key=lambda m: -m[1])
+        if ranked[0][1] >= 3 * max(ranked[1][1], 1):
+            return ranked[0]
+    return None
+
+
+def _match(rows, level: str, target: str) -> List[Tuple[str, int, str, set]]:
+    out = []
+    for nm, pop, code in rows:
+        if level == "metro":
+            parts, states, _ = _metro_parts(nm)
+            want = target.split("|")
+            if all(w in parts for w in want):
+                out.append((nm, pop, code, states))
+            continue
+        base, _, state = nm.partition(", ")
+        if target in _names(base, level):
+            out.append((nm, pop, code, {state.lower()}))
+    if level == "metro" and len(out) > 1:
+        # A metro named after the city first ("Atlanta-Sandy Springs-…") over
+        # one that only lists it; metropolitan over micropolitan.
+        lead = [m for m in out if _metro_parts(m[0])[0][0] == target.split("|")[0]]
+        out = lead or out
+        big = [m for m in out if _metro_parts(m[0])[2]]
+        out = big or out
+    return out
+
+
+async def locate(name: str, year: int, claim: str, level: Optional[str] = None
+                 ) -> Optional[Tuple[Geography, str]]:
+    """(the place, the survey that covers it: "acs1" or "acs5"), or None.
+
+    "Chicago" -> Chicago city, Illinois. "Austin, TX" -> Austin city, Texas.
+    "Bay Area" (as a metro) -> San Francisco-Oakland-Fremont, CA Metro Area.
+    "ZIP Code 10001" -> ZCTA 10001 (5-year survey only)."""
+    from claims.geography import _STATE_FIPS, _state_from
+    raw = re.sub(r"^(the\s+)?(city|town|village) of\s+", "", (name or "").strip(), flags=re.I)
+    raw = re.sub(r"['’]s$", "", raw).strip(" .,")
+    z = re.fullmatch(r"(?:ZIP(?: Code)?\s*)?(\d{5})", raw, flags=re.I)
+    if level == "zcta" or z:
+        if not z:
+            return None
+        return Geography(name=f"ZIP Code {z.group(1)}", level="zcta", fips=z.group(1)), "acs5"
+
+    only_state = ""
+    if ", " in raw:
+        head, _, tail = raw.rpartition(", ")
+        st = _state_from(tail)
+        if st:
+            raw, only_state = head, st
+    if level not in ("place", "county", "metro"):
+        level = "county" if re.search(r"\b(county|parish|borough)\b", raw, re.I) else "place"
     target = _norm(re.sub(r"\b(county|parish)\b", "", raw, flags=re.I) if level == "county" else raw)
+    if level == "metro":
+        # "Dallas-Fort Worth" names two of the metro's cities.
+        target = "|".join(n for n in (_norm(x) for x in re.split(r"[-\u2013/]", raw)) if n)
+    alias = _ALIASES.get(target) if level != "metro" else None
+    if alias and (not only_state or only_state == alias[2]):
+        level, target, only_state = alias
     if not target:
         return None
-    matches = []
-    for nm, st, code in rows:
-        base, _, state = nm.partition(", ")
-        short = _SUFFIX.sub("", base)
-        short = re.sub(r"\s+(county|parish|borough)$", "", short, flags=re.I) if level == "county" else short
-        if _norm(short) == target:
-            matches.append((nm, st, code, state))
-    if len(matches) > 1:
-        named = [m for m in matches if m[3] and m[3].lower() in claim.lower()]
-        matches = named if len(named) == 1 else matches
-    if len(matches) != 1:
-        return None
-    nm, st, code, _ = matches[0]
-    return Geography(name=nm, level=level, fips=f"{st}{code}")
+    rest = claim.replace(name or "", " ")
+    named = _states_named(rest)
+    st_fips = _STATE_FIPS.get(only_state or (next(iter(named)) if len(named) == 1 else ""), "")
+
+    tries = [(level, "acs1", "")]
+    if level == "place":
+        tries.append(("county", "acs1", ""))   # "Westchester" is a county
+    if level == "metro":
+        tries.append(("metro", "acs5", ""))    # small micro areas
+    elif st_fips:
+        tries += [(level, "acs5", st_fips)]    # towns under 65,000
+        if level == "place":
+            tries.append(("county", "acs5", st_fips))
+    elif level == "county":
+        tries.append(("county", "acs5", ""))
+
+    for lvl, survey, st in tries:
+        rows = await _places(year, lvl, survey, st)
+        if not rows:
+            logger.info("No %s list for %s %s %s", lvl, survey, year, st)
+            continue
+        found = _match(rows, lvl, target)
+        if not found:
+            continue
+        pick = _choose(found, only_state, named)
+        if pick is None:
+            return None  # several places by that name, and nothing to choose by
+        nm, _, code, _ = pick
+        return Geography(name=nm, level=lvl, fips=code), survey
+    return None
+
+
+async def resolve_place(name: str, year: int, claim: str, level: Optional[str] = None) -> Optional[Geography]:
+    got = await locate(name, year, claim, level)
+    return got[0] if got else None
 
 
 def _geo_params(geo: Optional[Geography]) -> Dict[str, str]:
@@ -265,17 +431,16 @@ def _geo_params(geo: Optional[Geography]) -> Dict[str, str]:
         return {"for": f"state:{geo.fips}"}
     if geo.level in ("place", "county") and geo.fips and len(geo.fips) > 2:
         return {"for": f"{geo.level}:{geo.fips[2:]}", "in": f"state:{geo.fips[:2]}"}
+    if geo.level in ("metro", "zcta") and geo.fips:
+        return {"for": f"{_LEVEL_FOR[geo.level]}:{geo.fips}"}
     raise ValueError(f"unsupported geography {geo}")
 
 
 def _geo_id(geo: Optional[Geography]) -> str:
     if geo is None or geo.level == "nation":
         return "010XX00US"
-    if geo.level == "state":
-        return f"040XX00US{geo.fips}"
-    if geo.level == "county":
-        return f"050XX00US{geo.fips}"
-    return f"160XX00US{geo.fips}"
+    prefix = {"state": "040", "county": "050", "metro": "310", "zcta": "860"}.get(geo.level, "160")
+    return f"{prefix}XX00US{geo.fips}"
 
 
 def _moe_var(var: str) -> str:
@@ -292,17 +457,18 @@ def _family(units: str, label: str):
     return "unknown", 1.0
 
 
-async def fetch(c: Candidate, year: int, geo: Optional[Geography]) -> Optional[Datapoint]:
+async def fetch(c: Candidate, year: int, geo: Optional[Geography],
+                survey: str = "acs1") -> Optional[Datapoint]:
     var = c.id
     params = {"get": f"NAME,{var},{_moe_var(var)}", **_geo_params(geo)}
     if CENSUS_API_KEY:
         params["key"] = CENSUS_API_KEY
 
     async def load():
-        data = await _get_json(f"{_BASE}/{year}/{_DATASET}", params)
+        data = await _get_json(f"{_BASE}/{year}/acs/{survey}/profile", params)
         return data if isinstance(data, list) and len(data) > 1 else None
 
-    data = await cached("census_profile_value", f"{year}:{var}:{params.get('for')}:{params.get('in','')}",
+    data = await cached("census_profile_value", f"{survey}:{year}:{var}:{params.get('for')}:{params.get('in','')}",
                         30 * 24 * 3600, load)
     if not data:
         return None
@@ -326,11 +492,14 @@ async def fetch(c: Candidate, year: int, geo: Optional[Geography]) -> Optional[D
     family, scale = _family(c.units, label)
     name = row.get("NAME") or (geo.name if geo else "United States")
     geography = geo if geo is not None else Geography.national()
-    if geography.level in ("place", "county"):
+    if geography.level in ("place", "county", "metro", "zcta"):
         geography = Geography(name=name, level=geography.level, fips=geography.fips)
     table = c.meta.get("table", var[:4])
-    extra: Dict[str, Any] = {"table": table, "dataset": _DATASET}
+    extra: Dict[str, Any] = {"table": table, "dataset": f"acs/{survey}/profile"}
     notes = []
+    if survey == "acs5":
+        notes.append(f"5-year estimate: the average of {year - 4} to {year}, the only survey "
+                     f"Census publishes for places this size.")
     if moe is not None:
         extra["margin_of_error"] = moe * scale
         unit = "%" if family == PERCENT else ""
@@ -345,10 +514,11 @@ async def fetch(c: Candidate, year: int, geo: Optional[Geography]) -> Optional[D
         quantity=Quantity(magnitude=value * scale, family=family, raw=str(raw)),
         metric=f"census:{var}",
         label=measure,
-        observed=Period(year=year, kind=ANNUAL, basis="ACS 1-year estimate"),
+        observed=Period(year=year, kind=ANNUAL,
+                        basis="ACS 1-year estimate" if survey == "acs1" else f"ACS 5-year estimate, {year - 4}\u2013{year}"),
         geography=geography,
         source="CENSUS",
-        source_url=f"https://data.census.gov/table/ACSDP1Y{year}.{table}?g={_geo_id(geo)}",
+        source_url=f"https://data.census.gov/table/ACSDP{1 if survey == 'acs1' else 5}Y{year}.{table}?g={_geo_id(geo)}",
         series_id=var,
         raw_value=str(raw),
         extra=extra,

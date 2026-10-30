@@ -77,6 +77,9 @@ class VerificationV2:
     # Web-search answers: the figure the search reported, kept apart from the
     # explanation so a client can show each once.
     reported: Dict[str, str] = field(default_factory=dict)
+    # Other outlets' published fact-checks of similarly worded claims (Google
+    # Fact Check Tools). Shown beside the verdict; never used to reach it.
+    fact_checks: List[Dict[str, str]] = field(default_factory=list)
 
 
 async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
@@ -88,7 +91,7 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
         if spec.treasury_metric in ("deficit", "receipts", "outlays"):
             return await treasury_source.fetch_budget_total(spec.treasury_metric, year)
         return await treasury_source.fetch_national_debt(
-            year=year, year_basis=parsed.year_basis
+            year=year, year_basis=parsed.year_basis, month=parsed.month
         )
 
     if spec.source == "BLS":
@@ -103,6 +106,29 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
                 spec.metric, spec.label, series_id, spec.family
             )
         spec = replace(spec, series_id=series_id)
+        if spec.bls_kind == "change":
+            if year is None:
+                return []  # "added jobs" with no period: nothing to subtract
+            return await bls_source.fetch_jobs_change(
+                spec.metric, spec.label, spec.series_id, year, parsed.month)
+        if year is None and parsed.present and parsed.month is None:
+            # "Unemployment is 4%" is about the latest month, not last year's average.
+            if spec.bls_kind == "cpi_yoy":
+                latest = await bls_source.fetch_latest_monthly(
+                    spec.metric, spec.label, spec.series_id, spec.family)
+                if latest:
+                    obs = latest[0].observed
+                    got = await bls_source.fetch_inflation(
+                        spec.metric, spec.label, spec.series_id, obs.year, month=obs.month)
+                    if got:
+                        return got
+            elif spec.bls_kind == "rate":
+                if geo is not None and geo.level == "state" and geo.fips and spec.state_series_monthly:
+                    spec = replace(spec, series_id=spec.state_series_monthly.format(fips=geo.fips))
+                got = await bls_source.fetch_latest_monthly(
+                    spec.metric, spec.label, spec.series_id, spec.family)
+                if got:
+                    return got
         if year is None:
             # A present-tense claim wants the most recent complete year.
             from datetime import datetime, timezone
@@ -131,6 +157,12 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
             geo = None  # national; finer levels are blocked before this point
         return await census_source.fetch(spec, year, geo)
 
+    if spec.source == "FRED":
+        from evidence.sources import fred_free
+        claimed = parsed.claimed_value.magnitude if parsed.claimed_value else None
+        return await fred_free.fetch(spec.metric, parsed.text, claimed, year, parsed.month,
+                                     parsed.present or year is None)
+
     if spec.source == "BEA":
         if parsed.quarter is not None and year is not None:
             return await bea_source.fetch_quarter(spec, year, parsed.quarter)
@@ -143,7 +175,7 @@ def has_structured_adapter(spec: Optional[MetricSpec]) -> bool:
     """True when a typed adapter can fetch this metric today."""
     if spec is None or not spec.structured:
         return False
-    if spec.source in ("BLS", "TREASURY"):
+    if spec.source in ("BLS", "TREASURY", "FRED"):
         return True
     # Census and BEA refuse keyless requests. Without a key the claim goes to
     # grounded search, as it did before these adapters existed, rather than
@@ -379,7 +411,7 @@ def _verdict_to_result(
         official_value=v.official_display or None,
         delta=v.delta_display or None,
         relative_delta=v.relative_delta,
-        caveats=v.caveats,
+        caveats=list(v.caveats or []) + ([parsed.aside] if parsed.aside and v.evidence else []),
         evidence=[d.to_dict() for d in v.evidence],
         tier=TIER_STRUCTURED,
         model_calls=0,
@@ -608,6 +640,17 @@ async def verify(claim: str, allow_grounding: bool = True,
                 f"the official series covers. Find a figure for that specific place."
             )
 
+    from claims.parser import income_band
+    band = income_band(text)
+    if band:
+        hint = (
+            f"The claim is about an income band or HUD's Area Median Income (\u201c{band}\u201d), "
+            f"not Census median household income. Use HUD's published income limits for that "
+            f"area, year and household size (huduser.gov), or the local housing agency's own "
+            f"table built from them (for New York City, HPD's area median income chart). If "
+            f"the claim gives a definition, such as a range for \u201cmiddle income\u201d, say "
+            f"whose definition it matches, if any; there is no single official one."
+        )
     g = await _safe_ground(text, hint, client_ip, parsed.metric is not None)
     if not g.ok and g.skipped:
         # Deliberately not sent: a limit, or a claim the gate keeps away from

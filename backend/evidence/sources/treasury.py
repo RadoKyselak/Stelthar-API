@@ -88,6 +88,7 @@ def _row_to_datapoint(row: Dict[str, Any], url: str, want_fiscal: bool) -> Optio
 async def fetch_national_debt(
     year: Optional[int] = None,
     year_basis: str = "calendar",
+    month: Optional[int] = None,
 ) -> List[Datapoint]:
     """Fetch the debt for a year, or the latest figure when year is None.
 
@@ -109,6 +110,12 @@ async def fetch_national_debt(
     if year is not None:
         if want_fiscal:
             query["filter"] = f"record_fiscal_year:eq:{year}"
+        elif month is not None:
+            # "Passed $34 trillion in January 2024": that month's last record.
+            import calendar as _cal
+            last = _cal.monthrange(year, month)[1]
+            query["filter"] = (f"record_date:gte:{year}-{month:02d}-01,"
+                               f"record_date:lte:{year}-{month:02d}-{last:02d}")
         else:
             # Calendar window. Descending sort + size 1 gives the year's final
             # record, which is the figure a reader means by "in <year>".
@@ -126,7 +133,7 @@ async def fetch_national_debt(
     from datetime import datetime as _dt, timezone as _tz
     ttl = TTL_IMMUTABLE if (year is not None and year < _dt.now(_tz.utc).year) else TTL_VOLATILE
     try:
-        blob = await cached("treasury", f"{metric_key}:{year}:{year_basis}", ttl, _load)
+        blob = await cached("treasury", f"{metric_key}:{year}:{year_basis}:{month if not want_fiscal else ''}", ttl, _load)
     except httpx.HTTPError as e:
         logger.warning("Treasury fetch failed: %s", e)
         return []

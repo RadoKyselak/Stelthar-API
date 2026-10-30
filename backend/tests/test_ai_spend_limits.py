@@ -291,9 +291,11 @@ class TestDailyLimits:
 # ------------------------------------------------------------------ through the API
 
 class TestEndpoints:
+    # A state minimum wage: the free federal series cannot answer it, so it is
+    # the kind of claim that reaches the paid search.
     async def test_limit_reached_is_reported_as_an_outage_not_a_verdict(self, test_client, monkeypatch, fake_claude):
         monkeypatch.setattr(config, "AI_MAX_CALLS_PER_DAY", 0)
-        r = test_client.post("/verify", json={"claim": "The federal minimum wage is $7.25 an hour"})
+        r = test_client.post("/verify", json={"claim": "Washington's minimum wage is $16.28 an hour"})
         body = r.json()
         assert r.status_code == 200
         assert body["verdict"] == "Inconclusive" and body["degraded"] is True
@@ -309,7 +311,7 @@ class TestEndpoints:
         fake_claude.assert_not_awaited()
 
     async def test_grounded_answer_end_to_end(self, test_client, fake_claude):
-        r = test_client.post("/verify", json={"claim": "The federal minimum wage is $7.25 an hour"})
+        r = test_client.post("/verify", json={"claim": "Washington's minimum wage is $16.28 an hour"})
         body = r.json()
         assert body["verdict"] == "Supported" and body["tier"] == "grounded"
         assert any("dol.gov" in s["url"] for s in body["sources"])
@@ -338,7 +340,7 @@ class TestConfidenceWithoutSpanCitations:
             if b.type == "text":
                 b.citations = []
         fake_claude.return_value = resp
-        body = test_client.post("/verify", json={"claim": "The federal minimum wage is $7.25 an hour"}).json()
+        body = test_client.post("/verify", json={"claim": "Washington's minimum wage is $16.28 an hour"}).json()
         assert body["verdict"] == "Supported"
         assert body["confidence_tier"] == "Medium"
         assert "0%" not in body["summary"]
