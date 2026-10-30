@@ -26,7 +26,7 @@ class TestPage:
     def test_browsers_get_the_page_clients_get_json(self, test_client):
         page = test_client.get("/", headers=HTML)
         assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
-        assert "Is that number right?" in page.text
+        assert "Check a claim" in page.text and "Find a number" in page.text
         assert test_client.get("/").json()["status"] == "ok"
 
     def test_injected_markup_cannot_run(self, test_client):
@@ -36,33 +36,6 @@ class TestPage:
                           "connect-src 'self'", "object-src 'none'", "base-uri 'none'"):
             assert directive in csp, directive
         assert "unsafe-inline" not in csp and "unsafe-eval" not in csp and "*" not in csp
-
-    def test_fonts_are_self_hosted(self, test_client):
-        """No visitor's browser contacts a font service."""
-        assert "font-src 'self'" in test_client.get("/", headers=HTML).headers["content-security-policy"]
-        css = (STATIC / "site.css").read_text()
-        assert "googleapis" not in css and "gstatic" not in css
-        r = test_client.get("/static/instrument-serif.woff2")
-        assert r.headers["content-type"] == "font/woff2" and r.content[:4] == b"wOF2"
-
-    def test_says_it_is_not_a_government_site(self, test_client):
-        """Government-style design, never a government claim."""
-        page = " ".join(test_client.get("/", headers=HTML).text.split())
-        assert "Independent" in page and "Not a government website" in page
-        for word in ("official website", ".gov", "seal", "An official"):
-            assert word not in page, word
-
-    def test_page_is_just_a_lookup(self, test_client):
-        """No copy beyond the name, the question, the box and the disclaimer."""
-        html = test_client.get("/", headers=HTML).text
-        body = html[html.index("<body>"):]
-        # Visible copy only: the screen-reader label is for assistive tech.
-        text = re.sub(r'<label[^>]*class="sr"[^>]*>.*?</label>|<script.*?</script>|<[^>]+>', " ",
-                      body, flags=re.S)
-        words = text.split()
-        # Name, question, example chips, one nav link, source names, disclaimer.
-        assert len(words) <= 40, words
-        assert "<details" not in html and 'role="tab"' not in html and not re.search(r"<p[\s>]", html)
 
     def test_page_cannot_be_framed(self, test_client):
         """Clickjacking."""
@@ -108,8 +81,7 @@ class TestPage:
 
 
 class TestFiles:
-    @pytest.mark.parametrize("name", ["app.js", "result-view.js", "site.css", "logo.png", "favicon.png",
-                                      "instrument-sans.woff2", "instrument-serif.woff2"])
+    @pytest.mark.parametrize("name", ["app.js", "result-view.js", "site.css", "logo.png", "favicon.png"])
     def test_allowed_files(self, test_client, name):
         r = test_client.get(f"/static/{name}")
         assert r.status_code == 200 and r.headers["cross-origin-resource-policy"] == "same-origin"

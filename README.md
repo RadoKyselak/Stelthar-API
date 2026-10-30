@@ -61,7 +61,7 @@ Stelthar's fact-checking API verifies claims by comparing them against official 
 -  **Evidence-based verdicts**: Supported, Contradicted, or Inconclusive
 -  **Confidence scoring** that reflects data coverage and match quality
 -  **Direct links** to the primary sources used for verification
--  **Browser extension integration** for on-page highlight-and-check functionality
+-  **Browser extension** that checks highlighted text in a side panel, with no access to the pages you visit
 -  **API-first design** for easy integration into apps, dashboards, and extensions
 
 ---
@@ -69,7 +69,7 @@ Stelthar's fact-checking API verifies claims by comparing them against official 
 ## 🔍 How It Works
 
 1. **Highlight**: Select any text claim on a webpage
-2. **Verify**: Click the Project Mirador extension icon
+2. **Verify**: Right-click and choose **Check with Project Mirador**; the answer opens in the side panel
 3. **Review**: Receive an instant verdict with:
    - Supported/Contradicted/Inconclusive status
    - Confidence score (0-100%)
@@ -91,8 +91,8 @@ Stelthar's fact-checking API verifies claims by comparing them against official 
 1. Visit the [Chrome Web Store](https://chromewebstore.google.com/detail/anehbncclhojcaihgeoebennaccpeegn?utm_source=item-share-cb)
 2. Click **"Add to Chrome"**
 3. Pin the extension to your toolbar for easy access
-4. Navigate to any webpage and highlight text to fact-check
-5. Click the Project Mirador icon to verify the claim
+4. Highlight text on any webpage, right-click, and choose **Check with Project Mirador**
+5. Or click the icon (or press Cmd/Ctrl+Shift+Y) to type a claim or look up a figure
 
 ### API Usage
 
@@ -200,7 +200,7 @@ https://stelthar-api.vercel.app
 
 Every verify response carries a `display` block: the verdict, each figure compared
 (claim beside official, with the gap), the sources (agency, dataset, series, link) and a
-ready-to-paste citation. The extension's popup and in-page card both render this block.
+ready-to-paste citation. The extension's side panel renders this block.
 | `POST /v1/verify` | Legacy multi-pass planner, kept for comparison. |
 | `GET /health` | Model in use, configured sources. |
 

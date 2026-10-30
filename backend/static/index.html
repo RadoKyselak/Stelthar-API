@@ -3,53 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mirador</title>
-  <meta name="description" content="Check a number against official U.S. government data, with the exact source.">
+  <title>Check a claim or find a number</title>
+  <meta name="description" content="Check a claim or find a number in official U.S. government data, with the exact source.">
   <link rel="icon" href="/static/favicon.png" type="image/png">
-  <link rel="preload" href="/static/instrument-serif.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/static/instrument-sans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/site.css">
 </head>
 <body>
-  <header class="nav">
-    <span class="nav-side" aria-hidden="true"></span>
-    <a class="brand" href="/" aria-label="Mirador home">
-      <img src="/static/logo.png" alt="" width="30" height="30">
-      <span>Mirador</span>
-    </a>
-    <span class="nav-side nav-end">
-      <a class="pill" href="https://chromewebstore.google.com/detail/anehbncclhojcaihgeoebennaccpeegn" rel="noopener">Get the extension</a>
-    </span>
-  </header>
-
-  <main class="main">
-    <section class="hero">
-      <h1>Is that number right?</h1>
+  <section class="hero">
+    <div class="inner">
+      <div class="modes" role="tablist" aria-label="Mode">
+        <button type="button" role="tab" class="tab" id="mode-check" aria-selected="true">Check a claim</button>
+        <button type="button" role="tab" class="tab" id="mode-find" aria-selected="false">Find a number</button>
+      </div>
       <form id="form" class="ask" role="search" autocomplete="off">
-        <label for="q" class="sr">A claim to check, or a figure to find</label>
-        <svg class="ask-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+        <label for="q" class="sr" id="q-label">Claim to check</label>
         <input id="q" name="q" type="text" maxlength="1000" spellcheck="false"
           placeholder="Unemployment in Texas was 4.1% in 2023">
-        <button id="go" type="submit" aria-label="Look up">
+        <button id="go" type="submit" aria-label="Check">
+          <span>Search</span>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
       </form>
-      <div class="chips" aria-label="Examples">
-        <button type="button" class="chip" data-q="Unemployment in Texas was 4.1% in 2023">Texas unemployment, 2023</button>
-        <button type="button" class="chip" data-q="Rent inflation hit 8% in 2023">Rent inflation, 2023</button>
-        <button type="button" class="chip" data-q="national debt">National debt today</button>
-      </div>
-    </section>
-
+    </div>
+  </section>
+  <main class="main">
     <div id="out" class="out" aria-live="polite"></div>
-
-    <ul class="sources" aria-label="Data sources">
-      <li>BLS</li><li>BEA</li><li>Census</li><li>Treasury</li>
-    </ul>
   </main>
-
-  <footer class="foot">Independent · Not a government website</footer>
-
+  <footer class="foot">Independent fact checker · Not a government website</footer>
   <script src="/static/result-view.js"></script>
   <script src="/static/app.js"></script>
 </body>
