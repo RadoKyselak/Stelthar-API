@@ -124,7 +124,8 @@ class TestLookupDeclines:
         assert "BEA" in r.headline
 
     async def test_geography_below_series_level(self):
-        # States are covered (BLS LAUS); cities are not.
+        # States are covered (BLS LAUS); cities need the Census place list,
+        # and there is no Census key here.
         r = await lookup("unemployment in Kansas City 2023")
         assert not r.ok and r.reason == GEOGRAPHY_UNSUPPORTED
 

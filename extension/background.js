@@ -148,7 +148,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async sendResponse
   }
   if (message.type === "lookup") {
-    runLookup(message.query)
+    runLookup(message.query, !!message.deep)
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -174,17 +174,20 @@ const LOOKUP_URL = "https://stelthar-api.vercel.app/v2/lookup";
 
 const lookupMemo = new Map(); // query -> result, best-effort across a keystroke burst
 
-async function runLookup(query) {
-  if (lookupMemo.has(query)) return lookupMemo.get(query);
+// deep: an explicit search from the panel. Only then may the server have
+// Claude search the datasets; the omnibox, which runs per keystroke, never does.
+async function runLookup(query, deep = false) {
+  const memoKey = (deep ? "deep:" : "") + query;
+  if (lookupMemo.has(memoKey)) return lookupMemo.get(memoKey);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), deep ? 40000 : 15000);
   try {
     let resp;
     try {
       resp = await fetch(LOOKUP_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, deep }),
         signal: controller.signal,
       });
     } catch (e) {
@@ -195,7 +198,7 @@ async function runLookup(query) {
     if (resp.status === 429) throw new Error("Daily limit reached. Try again tomorrow.");
     if (!resp.ok) throw new Error(`The lookup service had a problem (${resp.status}). Try again in a moment.`);
     const result = await resp.json();
-    lookupMemo.set(query, result);
+    lookupMemo.set(memoKey, result);
     if (lookupMemo.size > 40) lookupMemo.delete(lookupMemo.keys().next().value);
     return result;
   } finally {

@@ -32,6 +32,9 @@ class LookupRequest(BaseModel):
     queries the omnibox is built for.
     """
     query: str = Field(..., min_length=2, max_length=200)
+    # True on an explicit search (Enter / Find), never on a keystroke: only
+    # then may Claude search the datasets when the rules find nothing.
+    deep: bool = False
 
     @field_validator('query')
     @classmethod

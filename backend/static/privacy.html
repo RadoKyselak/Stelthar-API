@@ -28,8 +28,9 @@
         figures the claim is about.</li>
       <li>The claim's text is also sent to Google's Fact Check Tools search, to find other outlets' published
         fact-checks of similar claims.</li>
-      <li>When no official data series covers a claim, its text may be sent to an AI provider (Anthropic) to
-        search published sources. This is capped at a small number of checks per day.</li>
+      <li>When the built-in rules can't read a claim, or a search you submit, its text may be sent to an AI
+        provider (Anthropic) to find the figure in government datasets or, for claims, in published sources.
+        This is capped at a small number of requests per day.</li>
     </ul>
 
     <h2>What is kept</h2>

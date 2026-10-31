@@ -55,7 +55,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const retry = { onRetry: () => find(query) };
     show(View.loading());
     try {
-      const reply = await chrome.runtime.sendMessage({ type: "lookup", query });
+      // An explicit search: a miss may go to Claude's dataset search.
+      const reply = await chrome.runtime.sendMessage({ type: "lookup", query, deep: true });
       if (mine !== ticket) return;
       if (!reply || !reply.ok) {
         show(View.error((reply && reply.error) || "The lookup didn't work. Try again in a moment.", retry));

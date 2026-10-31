@@ -380,6 +380,8 @@
         });
         box.appendChild(p);
       }
+      if (r && r.deeper) box.appendChild(el("p", "mv-alert-b",
+        "Press Enter to have Claude search all the government datasets for it."));
       root.appendChild(box);
       return root;
     }
@@ -395,6 +397,7 @@
     if (context) sec.appendChild(el("p", "mv-what", context));
     root.appendChild(sec);
     if (c.caveat) root.appendChild(el("p", "mv-note", c.caveat));
+    if (r.note) root.appendChild(el("p", "mv-note", r.note));
     const foot = el("div", "mv-foot");
     if (safeUrl(c.url)) {
       const p = el("p", "mv-src", "Source: ");

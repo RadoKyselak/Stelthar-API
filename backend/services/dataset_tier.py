@@ -23,7 +23,7 @@ from claims.parser import ParsedClaim, income_band
 from claims.verdict import HIGH, MEDIUM, NO_VERDICT, assess
 from config import logger
 from evidence import ai_search
-from evidence.datasets import Candidate, census_profile, fred, picker
+from evidence.datasets import Candidate, census_profile, finder, fred, picker
 from evidence.sources import bea_regional, cpi_local, laus_local
 from evidence.sources import SourceUnavailable
 
@@ -41,8 +41,11 @@ def _drop_words(parsed: ParsedClaim) -> Set[str]:
 
 
 def _model_allowed(text: str) -> bool:
-    """The pick is a model call: same switch, gate and limits as the AI tier."""
+    """The pick is a model call: same switch, gate and limits as the AI tier.
+    When the finder is on, it does this job (and more), so the pick is off."""
     if not config.ANTHROPIC_API_KEY or config.AI_SEARCH_PROVIDER != "claude":
+        return False
+    if finder.available():
         return False
     return not ai_search.gate(text, names_a_metric=True)
 
@@ -132,52 +135,108 @@ async def _find(geo, text: str, levels=("place", "county", "metro")):
     hint = geo.level if geo.level in levels else None
     for back in (1, 2):
         y = datetime.now(timezone.utc).year - back
-        try:
-            got = await census_profile.locate(geo.name, y, text, hint)
-        except SourceUnavailable:
-            return None
+        # An outage propagates: "Census is down" must not read as "no such place".
+        got = await census_profile.locate(geo.name, y, text, hint)
         if got is not None:
             return got[0] if got[0].level in levels else None
     return None
 
 
+# Why local_datapoints found nothing. Each needs a different message.
+NO_LOCAL_SERIES = "no_local_series"   # not published below national/state level
+PLACE_NOT_FOUND = "place_not_found"   # no Census place by that name
+NOT_PUBLISHED = "not_published"       # the place exists; that period does not
+
+
+async def local_datapoints(text: str, parsed: ParsedClaim, census: bool = True):
+    """(datapoints, why) for a fixed measure at a place finer than its own
+    series: GDP for a state, county or metro (BEA Regional); unemployment for
+    a city, county or metro (BLS LAUS); inflation for a BLS price area; and,
+    with `census`, the Census profile twin (population, median income, ...)
+    for any city, county, metro or ZIP code. Read from the agency, no model
+    call. Raises SourceUnavailable on an outage."""
+    spec, geo = parsed.metric, parsed.geography
+    now = datetime.now(timezone.utc).year
+    if spec is None or geo is None or not geo.name:
+        return [], NO_LOCAL_SERIES
+    if geo.level in _SUBSTATE and not census_profile.available():
+        # Cities, counties and metros are found through Census's place lists;
+        # without its key that is "not available here", not "no such place".
+        if not (spec.metric in ("inflation_rate", "core_inflation_rate") and cpi_local.area_for(geo)):
+            return [], NO_LOCAL_SERIES
+    if spec.metric in ("gdp", "real_gdp_growth"):
+        if parsed.quarter or parsed.month or not bea_regional.available():
+            return [], NO_LOCAL_SERIES
+        if geo.level == "state" and geo.fips:
+            g = geo
+        elif geo.level in _SUBSTATE:
+            g = await _find(geo, text, ("county", "metro"))
+        else:
+            return [], NO_LOCAL_SERIES
+        if g is None:
+            return [], PLACE_NOT_FOUND
+        for y in ([parsed.year] if parsed.year else [now - 1, now - 2]):
+            dps = await bea_regional.fetch_gdp(spec.metric, spec.label, g, y)
+            if dps:
+                return dps, ""
+        return [], NOT_PUBLISHED
+    if spec.metric in ("inflation_rate", "core_inflation_rate") and geo.level in _SUBSTATE:
+        if cpi_local.area_for(geo) is None:
+            return [], NO_LOCAL_SERIES  # BLS prices only 23 metro areas
+        dps = await cpi_local.fetch(spec.metric, spec.label, geo, parsed.year, parsed.month,
+                                    parsed.present)
+        return (dps, "") if dps else ([], NOT_PUBLISHED)
+    if spec.metric == "unemployment_rate" and geo.level in _SUBSTATE:
+        g = await _find(geo, text)
+        if g is None:
+            return [], PLACE_NOT_FOUND
+        dps = await laus_local.fetch(spec.metric, spec.label, spec.family, g, parsed.year,
+                                     parsed.month, parsed.present)
+        return (dps, "") if dps else ([], NOT_PUBLISHED)
+    if census and census_profile.available() and geo.level in _SUBSTATE + ("state",) \
+            and not parsed.month and not parsed.quarter:
+        for y in ([parsed.year] if parsed.year else [now - 1, now - 2]):
+            if not await census_profile.catalog(y):
+                continue  # that ACS year is not published yet
+            c = await census_profile.twin(spec.metric, y)
+            if c is None:
+                return [], NO_LOCAL_SERIES
+            if geo.level == "state":
+                g, survey = geo, "acs1"
+            else:
+                got = await census_profile.locate(geo.name, y, text,
+                                                  geo.level if geo.level != "unknown" else None)
+                if got is None:
+                    return [], PLACE_NOT_FOUND
+                g, survey = got
+            dp = await census_profile.fetch(c, y, g, survey)
+            if dp is not None:
+                return [dp], ""
+        return [], NOT_PUBLISHED
+    return [], NO_LOCAL_SERIES
+
+
+_LOCAL_NOTE = {"gdp": "BEA Regional", "real_gdp_growth": "BEA Regional",
+               "inflation_rate": "BLS CPI", "core_inflation_rate": "BLS CPI",
+               "unemployment_rate": "BLS LAUS"}
+
+
 async def _local_series(text: str, parsed: ParsedClaim, started: float):
-    """A fixed measure for a place finer than its national series: GDP for a
-    state, county or metro (BEA Regional); unemployment for a city, county or
-    metro (BLS LAUS). Read from the agency, no model call."""
+    """A claim about GDP, unemployment or inflation at a place finer than the
+    national series, judged from local_datapoints. The Census twins are
+    handled by verify() itself."""
     spec, geo = parsed.metric, parsed.geography
     if spec is None or parsed.structured_blocker or geo is None or geo.level == "nation":
         return None
-    now = datetime.now(timezone.utc).year
     try:
-        if spec.metric in ("gdp", "real_gdp_growth") and not parsed.quarter and not parsed.month \
-                and bea_regional.available():
-            g = geo if geo.level == "state" and geo.fips else (
-                await _find(geo, text, ("county", "metro")) if geo.level in _SUBSTATE else None)
-            if g is None:
-                return None
-            for y in ([parsed.year] if parsed.year else [now - 1, now - 2]):
-                dps = await bea_regional.fetch_gdp(spec.metric, spec.label, g, y)
-                if dps:
-                    return _finish(text, parsed, dps, started, f"dataset: BEA Regional {dps[0].series_id}")
-            return None
-        if spec.metric in ("inflation_rate", "core_inflation_rate") and geo.level in _SUBSTATE:
-            dps = await cpi_local.fetch(spec.metric, spec.label, geo, parsed.year, parsed.month,
-                                        parsed.present)
-            if dps:
-                return _finish(text, parsed, dps, started, f"dataset: BLS CPI {dps[0].series_id}")
-            return None
-        if spec.metric == "unemployment_rate" and geo.level in _SUBSTATE:
-            g = await _find(geo, text)
-            if g is None:
-                return None
-            dps = await laus_local.fetch(spec.metric, spec.label, spec.family, g, parsed.year,
-                                         parsed.month, parsed.present)
-            if dps:
-                return _finish(text, parsed, dps, started, f"dataset: BLS LAUS {dps[0].series_id}")
+        dps, _ = await local_datapoints(text, parsed, census=False)
     except SourceUnavailable as e:
         logger.warning("Local series unavailable: %s", e)
-    return None
+        return None
+    if not dps:
+        return None
+    return _finish(text, parsed, dps, started,
+                   f"dataset: {_LOCAL_NOTE.get(spec.metric, 'local')} {dps[0].series_id}")
 
 
 def _finish(text, parsed, dps, started, note: str):
@@ -222,4 +281,45 @@ async def _answer(text, parsed, c: Candidate, stat: str, census_year, census_geo
                         + (f"pick cost ${cost:.5f}" if model_calls else "matched by label, no model call"))
     if result.verdict == NO_VERDICT:
         return None
+    return result
+
+
+async def verify_found(text: str, parsed: ParsedClaim, client_ip: Optional[str], started: float):
+    """The claim's figure found by Claude in the government datasets, judged
+    by the usual rules. None when nothing fits, so web search can try."""
+    if parsed.claimed_value is None or parsed.is_trend_claim or parsed.has_unresolved_period:
+        return None
+    if income_band(text) or not finder.available():
+        return None
+    if ai_search.gate(text, names_a_metric=True):
+        return None
+    found = await finder.find(text, "check", client_ip=client_ip,
+                              figure=parsed.claimed_value.raw or "")
+    dp = found.datapoint
+    if dp is None or not found.exact:
+        return None
+    # The figure must be for the claim's place and year: Claude chose the
+    # series, and a national number must never stand in for a city's.
+    asked = parsed.geography
+    if asked is not None and asked.level != "nation" and dp.geography.level == "nation":
+        return None
+    if asked is not None and asked.level == "nation" and dp.geography.level != "nation":
+        return None
+    if parsed.year and dp.observed.year and dp.observed.year != parsed.year:
+        return None
+    from services.verify_v2 import _verdict_to_result  # avoid an import cycle
+    judged = replace(parsed, geography=dp.geography,
+                     metric=parsed.metric if parsed.metric and parsed.metric.metric == dp.metric else None)
+    result = _verdict_to_result(text, judged, assess(judged, [dp]), started)
+    if result.verdict == NO_VERDICT:
+        return None
+    result.tier = TIER_DATASET
+    result.model_calls = found.model_calls
+    # A model chose the series, so the answer is never rated above Medium.
+    if result.confidence == HIGH:
+        result.confidence = MEDIUM
+    result.notes.append(
+        f"dataset: found by Claude in {dp.source} {dp.series_id}"
+        + (" (cached, no model call)" if found.cached else f", {found.model_calls} round(s), "
+                                                            f"${found.cost_usd:.4f}"))
     return result
