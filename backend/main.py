@@ -173,6 +173,13 @@ async def home(request: Request):
                         headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/privacy")
+async def privacy():
+    """The privacy policy the Chrome Web Store listing links to."""
+    return HTMLResponse((_STATIC / "privacy.html").read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/static/{name}")
 async def static_file(name: str):
     if name not in _STATIC_TYPES:

@@ -88,3 +88,15 @@ button, input { font-family: inherit; }
   .out .mv-fig.mv-long { font-size: 40px; }
   .out .mv-alert-b { font-size: 18px; }
 }
+
+/* Text pages (privacy). */
+.doc { max-width: 680px; margin: 0 auto; padding: 56px 24px 72px; flex: 1; color: var(--body); }
+.doc h1 { margin: 0; font: 500 clamp(36px, 5vw, 48px)/1.1 var(--sans); letter-spacing: -.01em; color: var(--ink); }
+.doc h2 { margin: 40px 0 8px; font: 500 20px/1.3 var(--sans); color: var(--ink); }
+.doc p, .doc li { font: 500 16px/1.6 var(--sans); }
+.doc ul { margin: 0; padding-left: 20px; }
+.doc li { margin-top: 10px; }
+.doc a { color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.doc-back { margin: 0 0 28px; }
+.doc-meta { margin: 10px 0 0; color: var(--meta); font-size: 14px; }
+.foot a { color: inherit; }
