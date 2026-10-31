@@ -86,6 +86,15 @@ AI_MAX_SPEND_USD_PER_DAY = _env_float("AI_MAX_SPEND_USD_PER_DAY", 1.00, 0.0, 50.
 AI_PICK_MAX_CALLS_PER_DAY = _env_int("AI_PICK_MAX_CALLS_PER_DAY", 1000, 0, 20000)
 AI_PICK_MAX_CALLS_PER_CLIENT_PER_DAY = _env_int("AI_PICK_MAX_CALLS_PER_CLIENT_PER_DAY", 60, 0, 2000)
 
+# Dataset finder: when the rules cannot read a claim or a search, Claude reads
+# it and looks the figure up in the government datasets through tools (no web
+# search). A few short rounds, about $0.002. Its own call caps; its spend
+# counts against the same daily dollar cap. "off" turns it off.
+AI_FINDER = (os.getenv("AI_FINDER") or "on").strip().lower() not in ("0", "off", "false", "no")
+AI_FINDER_MAX_TURNS = _env_int("AI_FINDER_MAX_TURNS", 5, 2, 6)
+AI_FINDER_MAX_CALLS_PER_DAY = _env_int("AI_FINDER_MAX_CALLS_PER_DAY", 500, 0, 10000)
+AI_FINDER_MAX_CALLS_PER_CLIENT_PER_DAY = _env_int("AI_FINDER_MAX_CALLS_PER_CLIENT_PER_DAY", 40, 0, 1000)
+
 # FRED (Federal Reserve Bank of St. Louis): 800,000+ series from BLS, BEA,
 # Census, the Fed and others. Free key: https://fredaccount.stlouisfed.org/apikeys
 FRED_API_KEY = os.getenv("FRED_API_KEY")

@@ -81,25 +81,29 @@
     }
   }
 
-  async function find(text) {
+  // deep: an explicit search (Enter or Find). Only then may a miss go to
+  // Claude, which costs a little; never on a keystroke.
+  async function find(text, deep) {
     text = (text || "").trim();
     const mine = ++ticket;
     if (text.length < 2) { out.replaceChildren(); return; }
+    if (deep) out.replaceChildren(V.loading());
     try {
-      const r = await postJSON("/v2/lookup", { query: text.slice(0, 200) });
+      const r = await postJSON("/v2/lookup", { query: text.slice(0, 200), deep: !!deep });
       if (mine !== ticket) return;
       out.replaceChildren(V.renderLookup(r, {
-        onSuggest: (s) => { q.value = s; syncButton(); find(s); },
+        onSuggest: (s) => { q.value = s; syncButton(); find(s, true); },
       }));
       if (r.ok) remember(text);
     } catch (e) {
-      if (mine === ticket) out.replaceChildren(V.error(e.message, { onRetry: () => find(text) }));
+      if (mine === ticket) out.replaceChildren(V.error(e.message, { onRetry: () => find(text, deep) }));
     }
   }
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (mode === "check") check(q.value); else find(q.value);
+    clearTimeout(debounce); // a pending keystroke search must not replace this one
+    if (mode === "check") check(q.value); else find(q.value, true);
   });
   q.addEventListener("input", () => {
     syncButton();

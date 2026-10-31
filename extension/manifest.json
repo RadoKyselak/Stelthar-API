@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Project Mirador",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Check a claim or look up an official U.S. statistic in a side panel, with the exact source: BLS, BEA, Census and Treasury data.",
   "permissions": [
     "sidePanel",

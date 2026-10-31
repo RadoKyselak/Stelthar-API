@@ -618,6 +618,11 @@ async def verify(claim: str, allow_grounding: bool = True,
     ds = await dataset_tier.verify(text, parsed, client_ip, started)
     if ds is not None:
         return ds
+    # Then Claude, with the same datasets as tools: about $0.002, against a
+    # web search's ~$0.03, and the figure is still the agency's own.
+    ds = await dataset_tier.verify_found(text, parsed, client_ip, started)
+    if ds is not None:
+        return ds
 
     hint = ""
     if parsed.structured_blocker and parsed.metric is not None:

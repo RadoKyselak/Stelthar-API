@@ -266,22 +266,24 @@ async def verify_v2_endpoint(req: VerifyRequest, request: Request) -> Dict[str, 
 
 
 @app.post("/v2/lookup", dependencies=[Depends(limit("lookup"))])
-async def lookup_endpoint(req: LookupRequest) -> Dict[str, Any]:
+async def lookup_endpoint(req: LookupRequest, request: Request) -> Dict[str, Any]:
     """Retrieval, not verification: the number and every citation form for it.
 
     `/v2/verify` answers "is this claim true", which needs the caller to
     already suspect something. This answers "what is the official figure", which
     is what someone writing with data needs many times a day.
 
-    Tier 1 only — `model_calls` is always 0. A lookup that silently costs a
-    model call stops being instant, and the grounded tier cannot return a series
-    id and a stated period anyway, which is the point of the citation.
+    The rules answer for free. With `deep` (an explicit search, never a
+    keystroke), a miss goes to Claude, which looks the figure up in the same
+    government datasets through tools; `model_calls` says when it did. Never
+    a web search: that cannot return a series id and a stated period, which
+    is the point of the citation.
 
     On a miss, `suggestions` names fetchable metrics rather than only reporting
     the failure: coverage here is narrow on purpose, so the boundary has to be
     visible to be usable.
     """
-    result = await lookup(req.query.strip())
+    result = await lookup(req.query.strip(), deep=req.deep, client_ip=_client_ip(request))
     logger.info(
         "lookup complete",
         extra={

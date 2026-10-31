@@ -237,6 +237,45 @@ async def reserve_pick(client_ip: Optional[str]) -> Reservation:
     return Reservation(True)
 
 
+# Dataset finder: per round, the input is bounded by compact tool results
+# (finder.py truncates them) and the output by FINDER_MAX_OUTPUT_TOKENS.
+FINDER_MAX_INPUT_TOKENS_PER_TURN = 14_000
+FINDER_MAX_OUTPUT_TOKENS = 700
+
+
+def worst_case_finder_cost(model: Optional[str] = None) -> float:
+    turns = config.AI_FINDER_MAX_TURNS
+    return turns * estimate_cost(model or config.CLAUDE_SEARCH_MODEL,
+                                 FINDER_MAX_INPUT_TOKENS_PER_TURN, FINDER_MAX_OUTPUT_TOKENS, 0)
+
+
+async def reserve_finder(client_ip: Optional[str]) -> Reservation:
+    """Permission for ONE dataset-finder run (all of its rounds). Its own call
+    caps; the same daily dollar cap, checked against its worst case."""
+    if config.AI_FINDER_MAX_CALLS_PER_DAY <= 0 or config.AI_MAX_SPEND_USD_PER_DAY <= 0:
+        return Reservation(False, "ai_disabled", "The dataset finder is turned off.")
+    store = _get_store()
+    day = _day()
+    try:
+        spent_usd = (await store.get(f"ai:{day}:spend_micro")) / 1e6
+        if spent_usd + worst_case_finder_cost() > config.AI_MAX_SPEND_USD_PER_DAY:
+            return Reservation(False, "daily_spend_cap", "Today's AI budget is used up.")
+        calls = await store.incr(f"ai:{day}:finder_calls")
+        if calls > config.AI_FINDER_MAX_CALLS_PER_DAY:
+            return Reservation(False, "daily_call_cap", "Today's dataset-search limit is reached.")
+        key = client_key(client_ip)
+        if key:
+            mine = await store.incr(f"ai:{day}:finder_client:{key}")
+            if mine > config.AI_FINDER_MAX_CALLS_PER_CLIENT_PER_DAY:
+                return Reservation(False, "per_client_cap",
+                                   "You've reached today's dataset-search limit.")
+    except StoreUnavailable as e:
+        logger.error("Spend guard store unavailable, refusing finder run: %s", e)
+        return Reservation(False, "budget_store_unavailable",
+                           "Dataset search is temporarily unavailable.")
+    return Reservation(True)
+
+
 async def record_spend(usd: float) -> None:
     if usd <= 0:
         return

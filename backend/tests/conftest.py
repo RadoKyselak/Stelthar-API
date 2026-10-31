@@ -53,6 +53,14 @@ def generous_request_limits(monkeypatch):
         monkeypatch.setattr(config, name, 10**6)
 
 
+@pytest.fixture(autouse=True)
+def finder_off(monkeypatch):
+    """The dataset finder calls Claude. Off unless a test turns it on (with a
+    fake client), so no test can reach Anthropic even with a test key set."""
+    import config
+    monkeypatch.setattr(config, "AI_FINDER", False)
+
+
 @pytest.fixture
 def test_client():
     """Create a TestClient for FastAPI app."""

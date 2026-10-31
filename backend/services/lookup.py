@@ -24,11 +24,14 @@ from datetime import date
 from typing import Any, Dict, List, Optional
 
 from claims.metrics import BY_METRIC, MetricSpec, all_metrics
+from claims.geography import USPS, Geography, _state_from, resolve_geography
 from claims.parser import parse_claim
 from config import logger
 from evidence.citation import render
 from evidence.datapoint import Datapoint
 from evidence.sources import SourceUnavailable
+from evidence.datasets import finder
+from services import dataset_tier
 from services.verify_v2 import fetch_structured, has_structured_adapter
 
 # Reasons a lookup produced nothing. Each names a different fix, because
@@ -42,6 +45,7 @@ GEOGRAPHY_UNSUPPORTED = "no_official_series_at_that_geography"
 PERIOD_UNAVAILABLE = "not_published_for_that_period"
 SOURCE_DOWN = "source_unavailable"
 AMBIGUOUS = "query_matches_more_than_one_series"
+PLACE_UNKNOWN = "place_not_recognised"
 
 # Terse forms people type into a search box but never write into a sentence.
 # They live here rather than in claims/metrics.py because that registry indexes
@@ -97,6 +101,11 @@ class LookupResult:
     degraded: bool = False
     model_calls: int = 0
     elapsed_seconds: float = 0.0
+    # How the figure was found, when it was not by the rules alone.
+    note: str = ""
+    # The rules found nothing, and an explicit search (Enter / Find) would
+    # have Claude look through the datasets.
+    deeper: bool = False
 
 
 def _suggest(query: str, limit: int = 5) -> List[Dict[str, str]]:
@@ -144,8 +153,167 @@ def _to_evidence(dp: Datapoint) -> Dict[str, Any]:
     return dp.to_dict()
 
 
-async def lookup(query: str, accessed: Optional[date] = None) -> LookupResult:
-    """Resolve a query to one official figure and every citation form for it."""
+# Words a search box adds around a metric and a place that are neither.
+_FILLER = re.compile(
+    r"\b(19\d{2}|20\d{2}|q[1-4]|fy\s?\d{2,4}|what|whats|is|was|are|the|of|in|for|at|"
+    r"current|currently|latest|today|now|recent|annual|yearly|monthly|average|avg|"
+    r"total|number|estimate|estimated|rate|data|stats|statistics|official|how|much|many)\b",
+    re.IGNORECASE)
+
+
+def _with_state(rest: str) -> str:
+    """"austin tx" -> "austin, tx"; "salem new york" -> "salem, new york"."""
+    words = rest.replace(",", " ").split()
+    for n in (2, 1):
+        tail = " ".join(words[-n:])
+        if len(words) > n and _state_from(tail):
+            return " ".join(words[:-n]) + ", " + (tail.upper() if len(tail) == 2 else tail)
+    return rest
+
+
+def _titled(name: str) -> str:
+    """"los angeles" -> "Los Angeles"; "austin, TX" keeps its "TX"."""
+    return " ".join(w if w.isupper() else w.capitalize() for w in name.split())
+
+
+def _place_in_query(text: str, parsed, spec: MetricSpec) -> Optional[Geography]:
+    """The place a search-box query names, wherever it sits.
+
+    Claims say "in Chicago"; queries say "chicago population" or "los angeles
+    population", often in lower case, which the claim parser does not read
+    as a place. What is left once the metric and period words are removed is
+    the place. A name it cannot classify comes back at level "unknown", so
+    it is looked up, never dropped: dropping it answers for the whole
+    country, which is a different number from the one asked for."""
+    g = parsed.geography
+    if g is not None and g.level not in ("unknown", "state"):
+        return g
+    rest = f" {text.lower()} "
+    terms = list(spec.phrases) + [spec.label]
+    terms += [k for k, v in _QUERY_ALIASES.items() if v == spec.metric]
+    for term in sorted(terms, key=len, reverse=True):
+        rest = re.sub(rf"\b{re.escape(term.lower())}\b", " ", rest)
+    rest = re.sub(r"['\u2019]s\b", " ", rest)
+    rest = _FILLER.sub(" ", rest)
+    rest = re.sub(r"[^\w\s,.-]", " ", rest)
+    rest = re.sub(r"\s+,", ",", " ".join(rest.split())).strip(" ,.-")
+    if not rest:
+        return g
+    if g is not None and g.level == "state":
+        # "salem oregon population": the parser saw Oregon; Salem is the place.
+        if g.fips == "11":
+            return g  # "Washington, DC" is the District
+        state = g.name.lower()
+        abbr = next((k.lower() for k, v in USPS.items() if v == state), "")
+        head = re.sub(rf"\b({re.escape(state)}|{abbr}|state)\b", " ", rest)
+        head = " ".join(head.replace(",", " ").split()).strip(" ,.-")
+        if not head:
+            return g
+        rest = f"{head}, {state}"
+    named = _titled(_with_state(rest))
+    city_of_state = ", " in named  # "Salem, Oregon" is the city, not Oregon
+    for cand in (named, rest.upper() if len(rest) <= 3 else None):
+        found = resolve_geography(cand) if cand else None
+        if found is None or found.level == "unknown":
+            continue
+        if city_of_state and found.level in ("state", "nation"):
+            continue
+        return found
+    return Geography(name=named, level="unknown")
+
+
+_LEVEL_WORDS = {"nation": "the U.S.", "state": "states", "county": "counties",
+                "place": "cities", "metro": "metro areas", "zcta": "ZIP codes"}
+
+
+def _found(text: str, found: List[Datapoint], accessed: Optional[date]) -> LookupResult:
+    best = found[0]
+    return LookupResult(
+        query=text, ok=True,
+        metric=best.metric, label=best.label,
+        value=best.display_value(),
+        headline=f"{best.label}: {best.display_value()} — {best.observed.describe()}",
+        citations=render(best, accessed=accessed),
+        evidence=_to_evidence(best),
+        also=[_to_evidence(d) for d in found[1:4]],
+    )
+
+
+async def _local_lookup(text: str, parsed, spec: MetricSpec,
+                        accessed: Optional[date]) -> LookupResult:
+    """A city, county, metro, ZIP code (or a state the fixed series skips),
+    read from the same free agency APIs the checker uses. No model call."""
+    where = parsed.geography.name
+    try:
+        dps, why = await dataset_tier.local_datapoints(text, replace(parsed, metric=spec))
+    except SourceUnavailable as e:
+        logger.warning("Lookup source unavailable: %s", e)
+        return LookupResult(
+            query=text, ok=False, reason=SOURCE_DOWN, degraded=True,
+            metric=spec.metric, label=spec.label,
+            headline=(f"{e.source} could not be reached ({e.reason}). This is an "
+                      f"outage on our side, not a statement about the data."))
+    if dps:
+        return _found(text, dps, accessed)
+    if why == dataset_tier.PLACE_NOT_FOUND:
+        return LookupResult(
+            query=text, ok=False, reason=PLACE_UNKNOWN,
+            metric=spec.metric, label=spec.label,
+            headline=(f"No U.S. city, county or metro area named \u201c{where}\u201d was "
+                      f"found. Adding the state can help, e.g. \u201cSpringfield, IL\u201d."))
+    if why == dataset_tier.NOT_PUBLISHED:
+        return LookupResult(
+            query=text, ok=False, reason=PERIOD_UNAVAILABLE,
+            metric=spec.metric, label=spec.label,
+            headline=(f"{spec.label} for {where} is not published for "
+                      f"{parsed.year or 'recent years'}."))
+    levels = ", ".join(_LEVEL_WORDS.get(lv, lv) for lv in spec.geo_levels)
+    return LookupResult(
+        query=text, ok=False, reason=GEOGRAPHY_UNSUPPORTED,
+        metric=spec.metric, label=spec.label,
+        headline=f"{spec.label} is not available for {where}. Available for: {levels}.",
+        suggestions=_suggest(text))
+
+
+# Declines Claude cannot improve on: an outage, or a choice the user must make.
+_FINAL = (SOURCE_DOWN, AMBIGUOUS)
+
+
+async def lookup(query: str, accessed: Optional[date] = None, *, deep: bool = False,
+                 client_ip: Optional[str] = None) -> LookupResult:
+    """Resolve a query to one official figure and every citation form for it.
+
+    The rules first, free. When they find nothing and the user asked
+    explicitly (`deep`: Enter or the Find button, never while typing),
+    Claude looks through the same government datasets with tools. The
+    figure is still read from the agency; Claude only finds it."""
+    started = time.monotonic()
+    r = await _by_rules(query, accessed)
+    text = (query or "").strip()
+    if r.ok or not text or r.reason in _FINAL or parse_claim(text).year_is_future:
+        return r
+    if not finder.available() or finder.gate(text):
+        return r
+    if not deep:
+        r.deeper = True
+        return r
+    found = await finder.find(text, "lookup", client_ip=client_ip)
+    if found.datapoint is None:
+        r.model_calls = found.model_calls
+        r.headline += " Claude also searched the government datasets and found no figure for it."
+        r.elapsed_seconds = round(time.monotonic() - started, 2)
+        return r
+    out = _found(text, [found.datapoint], accessed)
+    out.model_calls = found.model_calls
+    agency = (out.citations or {}).get("agency") or found.datapoint.source
+    out.note = (f"Found by Claude in {agency} data."
+                + ("" if found.exact else " It is the closest official measure, not an exact match."))
+    out.elapsed_seconds = round(time.monotonic() - started, 2)
+    return out
+
+
+async def _by_rules(query: str, accessed: Optional[date] = None) -> LookupResult:
+    """The free path: parse, fetch, cite. No model call."""
     started = time.monotonic()
     text = (query or "").strip()
 
@@ -214,24 +382,18 @@ async def lookup(query: str, accessed: Optional[date] = None) -> LookupResult:
             headline=f"{spec.label} is only wired up from {spec.min_year}.",
         ))
 
-    if parsed.geography is not None and parsed.geography.level not in spec.geo_levels:
-        where = parsed.geography.name
-        return done(LookupResult(
-            query=text, ok=False, reason=GEOGRAPHY_UNSUPPORTED,
-            metric=spec.metric, label=spec.label,
-            headline=(
-                f"{spec.label} is not published for {where}. Available at: "
-                f"{', '.join(spec.geo_levels)}."
-            ),
-            suggestions=_suggest(text),
-        ))
-
     if parsed.year_is_future:
         return done(LookupResult(
             query=text, ok=False, reason=PERIOD_UNAVAILABLE,
             metric=spec.metric, label=spec.label,
             headline=f"{parsed.year} has not been published yet.",
         ))
+
+    geo = _place_in_query(text, parsed, spec)
+    if geo is not parsed.geography:
+        parsed = replace(parsed, geography=geo)
+    if geo is not None and geo.level != "nation" and geo.level not in spec.geo_levels:
+        return done(await _local_lookup(text, parsed, spec, accessed))
 
     try:
         found = await fetch_structured(
@@ -260,17 +422,7 @@ async def lookup(query: str, accessed: Optional[date] = None) -> LookupResult:
             ),
         ))
 
-    best = found[0]
-    citations = render(best, accessed=accessed)
-    return done(LookupResult(
-        query=text, ok=True,
-        metric=best.metric, label=best.label,
-        value=best.display_value(),
-        headline=f"{best.label}: {best.display_value()} — {best.observed.describe()}",
-        citations=citations,
-        evidence=_to_evidence(best),
-        also=[_to_evidence(d) for d in found[1:4]],
-    ))
+    return done(_found(text, found, accessed))
 
 
 def to_response_dict(r: LookupResult) -> Dict[str, Any]:
@@ -289,4 +441,6 @@ def to_response_dict(r: LookupResult) -> Dict[str, Any]:
         "degraded": r.degraded,
         "model_calls": r.model_calls,
         "elapsed_seconds": r.elapsed_seconds,
+        "note": r.note,
+        "deeper": r.deeper,
     }
