@@ -184,3 +184,10 @@ class TestFlooding:
                    AsyncMock(side_effect=MiradorException("Something failed", details={"key": "SECRET"}))):
             r = test_client.post("/verify", json={"claim": "GDP was $27 trillion in 2023"})
         assert r.status_code == 500 and "SECRET" not in r.text
+
+
+def test_privacy_page_is_served_with_the_page_policy(test_client):
+    r = test_client.get("/privacy")
+    assert r.status_code == 200 and "Privacy" in r.text
+    assert "script-src 'self'" in r.headers["content-security-policy"]
+    assert "<script" not in r.text and "style=" not in r.text

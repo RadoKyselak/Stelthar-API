@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy · Project Mirador</title>
+  <meta name="description" content="What Project Mirador and its web page do with the text you check.">
+  <link rel="icon" href="/static/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <main class="doc">
+    <p class="doc-back"><a href="/">&larr; Check a claim</a></p>
+    <h1>Privacy</h1>
+    <p class="doc-meta">Project Mirador (the Chrome extension) and this web page. Last updated October 29, 2026.</p>
+
+    <h2>The short version</h2>
+    <p>The only thing we receive is the text you choose to check or look up. There are no accounts, ads,
+      trackers or analytics, and nothing is sold. The extension cannot read the pages you visit.</p>
+
+    <h2>What is sent, and when</h2>
+    <ul>
+      <li>When you highlight text and choose <strong>Check with Project Mirador</strong>, type a claim in the
+        side panel, or use this page, that text is sent to our server (stelthar-api.vercel.app) to be checked.
+        Nothing else on the page is sent.</li>
+      <li>Our server asks the agencies' public data services (the Bureau of Labor Statistics, the Bureau of
+        Economic Analysis, the Census Bureau, the Treasury and the Federal Reserve Bank of St. Louis) for the
+        figures the claim is about.</li>
+      <li>The claim's text is also sent to Google's Fact Check Tools search, to find other outlets' published
+        fact-checks of similar claims.</li>
+      <li>When no official data series covers a claim, its text may be sent to an AI provider (Anthropic) to
+        search published sources. This is capped at a small number of checks per day.</li>
+    </ul>
+
+    <h2>What is kept</h2>
+    <ul>
+      <li><strong>On your device:</strong> the extension keeps your last few checks so they show under Recent.
+        They stay in your browser and are never sent anywhere. <strong>Clear</strong> in the side panel deletes them.</li>
+      <li><strong>On our server:</strong> answers are stored by the claim's wording for up to a week, so the same
+        claim is answered at once next time. If a check fails, the first 120 characters of the claim may appear
+        in our error logs.</li>
+      <li><strong>Usage limits:</strong> to stop abuse, we count checks per visitor using a one-way hash of the IP
+        address, never the address itself. The counts expire within two days.</li>
+    </ul>
+
+    <h2>What is not collected</h2>
+    <p>No names, email addresses, browsing history, page contents, cookies or location. Nothing is used for
+      advertising, sold, or shared beyond the services named above.</p>
+
+    <h2>Independent</h2>
+    <p>Project Mirador is an independent project. It is not a government service, and is not affiliated with
+      or endorsed by any of the agencies or fact-checkers whose data it shows.</p>
+
+    <h2>Questions</h2>
+    <p>Open an issue at <a href="https://github.com/RadoKyselak/Stelthar-API/issues">github.com/RadoKyselak/Stelthar-API</a>.</p>
+  </main>
+  <footer class="foot">Independent fact checker · Not a government website</footer>
+</body>
+</html>
