@@ -85,7 +85,7 @@ class TestLookup:
         assert r.ok and r.model_calls == 3
         assert r.evidence["geography"] == "Los Angeles city, California"
         assert r.evidence["series_id"] == VAR and r.value.startswith("36.2")
-        assert "Claude" in r.note and "Census" in r.note
+        assert r.note == "Found in U.S. Census Bureau data."   # no mention of AI
         # The figure is the agency's: Claude never wrote a number.
         assert all("36.2" not in str(b.input) for t in FOUND_IT for b in t)
         assert len(fake.calls) == 3
@@ -107,7 +107,8 @@ class TestLookup:
     async def test_none_found_is_said(self, monkeypatch):
         claude(monkeypatch, [tool("answer", figure="none", exact=False, place="Ohio")])
         r = await lookup("number of left-handed dentists in Ohio", deep=True)
-        assert not r.ok and "Claude also searched" in r.headline
+        assert not r.ok and "A search of all the government datasets" in r.headline
+        assert "Claude" not in r.headline and "AI" not in r.headline
 
     async def test_an_id_claude_made_up_is_nothing(self, monkeypatch):
         claude(monkeypatch, [tool("answer", figure="D7", exact=True, place="LA")])

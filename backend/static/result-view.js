@@ -343,7 +343,7 @@
       const foot = el("div", "mv-foot");
       if (src) foot.appendChild(src);
       if (d.method && d.method.kind === "dataset") {
-        foot.appendChild(el("p", "mv-how", "Series matched by AI; the figure comes straight from the agency's data."));
+        foot.appendChild(el("p", "mv-how", "Matched to the agency's series; the figure comes straight from its data."));
       }
       const actions = d.citation ? citeButton(d.citation, d.citation_html) : el("div", "mv-actions");
       if (typeof opts.onRecheck === "function") {
@@ -381,7 +381,7 @@
         box.appendChild(p);
       }
       if (r && r.deeper) box.appendChild(el("p", "mv-alert-b",
-        "Press Enter to have Claude search all the government datasets for it."));
+        "Press Enter to search all the government datasets for it."));
       root.appendChild(box);
       return root;
     }

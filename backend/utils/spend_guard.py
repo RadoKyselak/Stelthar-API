@@ -176,28 +176,28 @@ class Reservation:
 async def reserve(client_ip: Optional[str]) -> Reservation:
     """Ask for permission to make ONE AI call. Counts it if allowed."""
     if config.AI_MAX_CALLS_PER_DAY <= 0 or config.AI_MAX_SPEND_USD_PER_DAY <= 0:
-        return Reservation(False, "ai_disabled", "AI search is turned off.")
+        return Reservation(False, "ai_disabled", "Web search is turned off.")
     store = _get_store()
     day = _day()
     try:
         spent_usd = (await store.get(f"ai:{day}:spend_micro")) / 1e6
         if spent_usd + worst_case_call_cost() > config.AI_MAX_SPEND_USD_PER_DAY:
             return Reservation(False, "daily_spend_cap",
-                               "Today's AI search budget is used up. Exact-figure checks still work.")
+                               "Today's search budget is used up. Exact-figure checks still work.")
         calls = await store.incr(f"ai:{day}:calls")
         if calls > config.AI_MAX_CALLS_PER_DAY:
             return Reservation(False, "daily_call_cap",
-                               "Today's AI search limit is reached. Exact-figure checks still work.")
+                               "Today's search limit is reached. Exact-figure checks still work.")
         key = client_key(client_ip)
         if key:
             mine = await store.incr(f"ai:{day}:client:{key}")
             if mine > config.AI_MAX_CALLS_PER_CLIENT_PER_DAY:
                 return Reservation(False, "per_client_cap",
-                                   "You've reached today's AI search limit. Exact-figure checks still work.")
+                                   "You've reached today's search limit. Exact-figure checks still work.")
     except StoreUnavailable as e:
         logger.error("Spend guard store unavailable, refusing AI call: %s", e)
         return Reservation(False, "budget_store_unavailable",
-                           "AI search is temporarily unavailable.")
+                           "Web search is temporarily unavailable.")
     return Reservation(True)
 
 
@@ -221,7 +221,7 @@ async def reserve_pick(client_ip: Optional[str]) -> Reservation:
     try:
         spent_usd = (await store.get(f"ai:{day}:spend_micro")) / 1e6
         if spent_usd + worst_case_pick_cost() > config.AI_MAX_SPEND_USD_PER_DAY:
-            return Reservation(False, "daily_spend_cap", "Today's AI budget is used up.")
+            return Reservation(False, "daily_spend_cap", "Today's search budget is used up.")
         calls = await store.incr(f"ai:{day}:pick_calls")
         if calls > config.AI_PICK_MAX_CALLS_PER_DAY:
             return Reservation(False, "daily_call_cap", "Today's dataset-matching limit is reached.")
@@ -259,7 +259,7 @@ async def reserve_finder(client_ip: Optional[str]) -> Reservation:
     try:
         spent_usd = (await store.get(f"ai:{day}:spend_micro")) / 1e6
         if spent_usd + worst_case_finder_cost() > config.AI_MAX_SPEND_USD_PER_DAY:
-            return Reservation(False, "daily_spend_cap", "Today's AI budget is used up.")
+            return Reservation(False, "daily_spend_cap", "Today's search budget is used up.")
         calls = await store.incr(f"ai:{day}:finder_calls")
         if calls > config.AI_FINDER_MAX_CALLS_PER_DAY:
             return Reservation(False, "daily_call_cap", "Today's dataset-search limit is reached.")

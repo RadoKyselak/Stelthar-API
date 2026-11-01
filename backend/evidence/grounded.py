@@ -276,7 +276,7 @@ async def ground_claim(
                 logger.warning("Grounded search HTTP %s (%s): %s", status, used,
                                (getattr(r, "text", "") or "")[:300])
                 if status == 429:
-                    return GroundedAnswer(ok=False, error="AI search quota reached; try again later")
+                    return GroundedAnswer(ok=False, error="Search quota reached; try again later")
                 return GroundedAnswer(ok=False, error=f"HTTP {status}")
             payload = r.json()
     except httpx.HTTPError as e:
