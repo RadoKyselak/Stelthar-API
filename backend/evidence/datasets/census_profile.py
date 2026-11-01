@@ -8,6 +8,7 @@ every county and every city of 65,000+ people, each with its margin of error.
 The catalog (variable names and labels) is public metadata, cached for a week.
 Values come from the Census API with the project's key.
 """
+import difflib
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -409,6 +410,10 @@ async def locate(name: str, year: int, claim: str, level: Optional[str] = None
             logger.info("No %s list for %s %s %s", lvl, survey, year, st)
             continue
         found = _match(rows, lvl, target)
+        if only_state:
+            # "Portland, TX": the big Portlands are elsewhere; the Texas one is
+            # on the state's own list further down.
+            found = [m for m in found if only_state in m[3]]
         if not found:
             continue
         pick = _choose(found, only_state, named)
@@ -416,6 +421,88 @@ async def locate(name: str, year: int, claim: str, level: Optional[str] = None
             return None  # several places by that name, and nothing to choose by
         nm, _, code, _ = pick
         return Geography(name=nm, level=lvl, fips=code), survey
+    return None
+
+
+def _close(target: str, rows, level: str, cutoff: float) -> List[Tuple[str, int, str, set]]:
+    """Places whose name is a near miss for the target ("nashvill" -> Nashville)."""
+    by_name: Dict[str, list] = {}
+    for nm, pop, code in rows:
+        base, _, state = nm.partition(", ")
+        for n in _names(base, level):
+            by_name.setdefault(n, []).append((nm, pop, code, {state.lower()}))
+    hits = difflib.get_close_matches(target, list(by_name), n=1, cutoff=cutoff)
+    return by_name[hits[0]] if hits else []
+
+
+def _friendly(nm: str) -> str:
+    """"Nashville-Davidson metropolitan government (balance), Tennessee" ->
+    "Nashville-Davidson, Tennessee"; "Springfield city, Illinois" -> "Springfield, Illinois"."""
+    base, _, state = nm.partition(", ")
+    base = re.sub(r"\s*\(balance\)", "", base)
+    base = re.sub(r"\s+(metropolitan|unified|consolidated)\s+government$", "", base, flags=re.I)
+    base = _LAST_SUFFIX.sub("", base)
+    return f"{base}, {state}" if state else base
+
+
+async def locate_forgiving(name: str, year: int, claim: str, level: Optional[str] = None
+                           ) -> Optional[Tuple[Geography, str, str]]:
+    """locate(), then the two slips people make when they type a place to look up:
+    the wrong state ("Nashville, TX") and a typo ("Nashvill"). Returns
+    (place, survey, note); the note says what was corrected, so the answer
+    never looks like it is for the place that was typed.
+
+    Only for lookups. A claim about "Nashville, Texas" is never checked
+    against Tennessee."""
+    got = await locate(name, year, claim, level)
+    if got:
+        return got[0], got[1], ""
+    if level not in (None, "place", "county", "unknown"):
+        return None
+    from claims.geography import _STATE_FIPS, _state_from
+    raw = re.sub(r"^(the\s+)?(city|town|village) of\s+", "", (name or "").strip(), flags=re.I)
+    raw = re.sub(r"['’]s$", "", raw).strip(" .,")
+    only_state = ""
+    if ", " in raw:
+        head, _, tail = raw.rpartition(", ")
+        st = _state_from(tail)
+        if st:
+            raw, only_state = head, st
+    county = bool(re.search(r"\b(county|parish|borough)\b", raw, re.I))
+    lvl = "county" if county else "place"
+    target = _norm(re.sub(r"\b(county|parish)\b", "", raw, flags=re.I) if county else raw)
+    if len(target) < 4 or re.fullmatch(r"\d+", target):
+        return None
+    big = await _places(year, lvl, "acs1", "")
+    st_fips = _STATE_FIPS.get(only_state, "")
+    small = await _places(year, lvl, "acs5", st_fips) if st_fips else []
+
+    def pick(matches, survey):
+        if only_state and any(only_state in m[3] for m in matches):
+            matches = [m for m in matches if only_state in m[3]]
+        if not matches:
+            return None
+        p = _choose(matches, "", set())
+        if p is None:
+            return None
+        nm, _, code, _ = p
+        return Geography(name=nm, level=lvl, fips=code), survey
+
+    # The right name in another state: the one place by that name, or the one
+    # far bigger than the rest (Nashville, Tennessee).
+    if only_state:
+        hit = pick(_match(big, lvl, target), "acs1")
+        if hit:
+            return hit[0], hit[1], (f"Census lists no {raw} in {only_state.title()}, "
+                                    f"so this is {_friendly(hit[0].name)}.")
+    # A typo: the closest name, in the state named when there is one.
+    if len(target) >= 5:
+        for rows, survey in ((small, "acs5"), (big, "acs1")):
+            hit = pick(_close(target, rows, lvl, 0.86), survey)
+            if hit:
+                where = f" in {only_state.title()}" if only_state and only_state not in hit[0].name.lower() else ""
+                return hit[0], hit[1], (f"Census lists no \u201c{raw}\u201d{where}; this is "
+                                        f"{_friendly(hit[0].name)}, the closest match.")
     return None
 
 

@@ -148,13 +148,17 @@ PLACE_NOT_FOUND = "place_not_found"   # no Census place by that name
 NOT_PUBLISHED = "not_published"       # the place exists; that period does not
 
 
-async def local_datapoints(text: str, parsed: ParsedClaim, census: bool = True):
+async def local_datapoints(text: str, parsed: ParsedClaim, census: bool = True,
+                           forgiving: bool = False):
     """(datapoints, why) for a fixed measure at a place finer than its own
     series: GDP for a state, county or metro (BEA Regional); unemployment for
     a city, county or metro (BLS LAUS); inflation for a BLS price area; and,
     with `census`, the Census profile twin (population, median income, ...)
     for any city, county, metro or ZIP code. Read from the agency, no model
-    call. Raises SourceUnavailable on an outage."""
+    call. Raises SourceUnavailable on an outage.
+
+    `forgiving` (lookups only): a mistyped place or the wrong state still
+    finds the place, and `why` then carries the note saying so."""
     spec, geo = parsed.metric, parsed.geography
     now = datetime.now(timezone.utc).year
     if spec is None or geo is None or not geo.name:
@@ -201,17 +205,24 @@ async def local_datapoints(text: str, parsed: ParsedClaim, census: bool = True):
             c = await census_profile.twin(spec.metric, y)
             if c is None:
                 return [], NO_LOCAL_SERIES
+            note = ""
             if geo.level == "state":
                 g, survey = geo, "acs1"
             else:
-                got = await census_profile.locate(geo.name, y, text,
-                                                  geo.level if geo.level != "unknown" else None)
+                lv = geo.level if geo.level != "unknown" else None
+                if forgiving:
+                    got = await census_profile.locate_forgiving(geo.name, y, text, lv)
+                    if got is not None:
+                        g, survey, note = got
+                else:
+                    got = await census_profile.locate(geo.name, y, text, lv)
+                    if got is not None:
+                        g, survey = got
                 if got is None:
                     return [], PLACE_NOT_FOUND
-                g, survey = got
             dp = await census_profile.fetch(c, y, g, survey)
             if dp is not None:
-                return [dp], ""
+                return [dp], note
         return [], NOT_PUBLISHED
     return [], NO_LOCAL_SERIES
 

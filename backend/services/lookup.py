@@ -245,7 +245,8 @@ async def _local_lookup(text: str, parsed, spec: MetricSpec,
     read from the same free agency APIs the checker uses. No model call."""
     where = parsed.geography.name
     try:
-        dps, why = await dataset_tier.local_datapoints(text, replace(parsed, metric=spec))
+        dps, why = await dataset_tier.local_datapoints(text, replace(parsed, metric=spec),
+                                                       forgiving=True)
     except SourceUnavailable as e:
         logger.warning("Lookup source unavailable: %s", e)
         return LookupResult(
@@ -254,13 +255,16 @@ async def _local_lookup(text: str, parsed, spec: MetricSpec,
             headline=(f"{e.source} could not be reached ({e.reason}). This is an "
                       f"outage on our side, not a statement about the data."))
     if dps:
-        return _found(text, dps, accessed)
+        out = _found(text, dps, accessed)
+        out.note = why  # what was corrected: a typo or the wrong state
+        return out
     if why == dataset_tier.PLACE_NOT_FOUND:
+        hint = ("" if ", " in where else
+                " Adding the state can help, e.g. \u201cSpringfield, IL\u201d.")
         return LookupResult(
             query=text, ok=False, reason=PLACE_UNKNOWN,
             metric=spec.metric, label=spec.label,
-            headline=(f"No U.S. city, county or metro area named \u201c{where}\u201d was "
-                      f"found. Adding the state can help, e.g. \u201cSpringfield, IL\u201d."))
+            headline=f"Census lists no U.S. city, county or metro area named \u201c{where}\u201d.{hint}")
     if why == dataset_tier.NOT_PUBLISHED:
         return LookupResult(
             query=text, ok=False, reason=PERIOD_UNAVAILABLE,
@@ -300,7 +304,8 @@ async def lookup(query: str, accessed: Optional[date] = None, *, deep: bool = Fa
     found = await finder.find(text, "lookup", client_ip=client_ip)
     if found.datapoint is None:
         r.model_calls = found.model_calls
-        r.headline += " Claude also searched the government datasets and found no figure for it."
+        r.headline += (" Claude also searched the government datasets but could not "
+                       "match it to a published figure.")
         r.elapsed_seconds = round(time.monotonic() - started, 2)
         return r
     out = _found(text, [found.datapoint], accessed)
