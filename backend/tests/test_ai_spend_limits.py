@@ -128,7 +128,7 @@ class TestResponseHandling:
         g = await ai_search.search("Dogs lived 13 years on average in 2024")
         assert not g.ok and "format" in g.error
 
-    @pytest.mark.parametrize("stop,needle", [("refusal", "declined"), ("pause_turn", "did not finish")])
+    @pytest.mark.parametrize("stop,needle", [("refusal", "could not be checked"), ("pause_turn", "did not finish")])
     async def test_refusal_and_pause_are_not_answers(self, fake_claude, stop, needle):
         fake_claude.return_value = claude_response(stop=stop)
         g = await ai_search.search("The federal minimum wage is $7.25 an hour")

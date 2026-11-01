@@ -304,14 +304,14 @@ async def lookup(query: str, accessed: Optional[date] = None, *, deep: bool = Fa
     found = await finder.find(text, "lookup", client_ip=client_ip)
     if found.datapoint is None:
         r.model_calls = found.model_calls
-        r.headline += (" Claude also searched the government datasets but could not "
-                       "match it to a published figure.")
+        r.headline += (" A search of all the government datasets could not match it "
+                       "to a published figure either.")
         r.elapsed_seconds = round(time.monotonic() - started, 2)
         return r
     out = _found(text, [found.datapoint], accessed)
     out.model_calls = found.model_calls
     agency = (out.citations or {}).get("agency") or found.datapoint.source
-    out.note = (f"Found by Claude in {agency} data."
+    out.note = (f"Found in {agency} data."
                 + ("" if found.exact else " It is the closest official measure, not an exact match."))
     out.elapsed_seconds = round(time.monotonic() - started, 2)
     return out

@@ -271,7 +271,7 @@ def _method(v, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
         return {
             "kind": "official_data",
             "title": "Straight from the source",
-            "text": f"The figure was read directly from {who}'s published data. No AI was used.",
+            "text": f"The figure was read directly from {who}'s published data.",
             "model_calls": v.model_calls, "elapsed_seconds": secs,
         }
     if v.tier == "dataset":
@@ -280,8 +280,8 @@ def _method(v, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
         return {
             "kind": "dataset",
             "title": "Found in a government dataset",
-            "text": (f"A short AI step chose the matching series in {where}; the figure itself was "
-                     f"read directly from the data, not written by AI."),
+            "text": (f"The matching series was found in {where}; the figure itself was "
+                     f"read directly from the data."),
             "model_calls": v.model_calls, "elapsed_seconds": secs,
         }
     if v.tier == "grounded":
@@ -291,9 +291,9 @@ def _method(v, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
         return {
             "kind": "web_search",
             "title": "Found by web search",
-            "text": (f"No direct data feed covers this, so an AI model searched the web and read "
-                     f"{n} source{'s' if n != 1 else ''} ({official} official). It may only give "
-                     f"a verdict that a source backs."),
+            "text": (f"No direct data feed covers this, so the web was searched: {n} "
+                     f"source{'s' if n != 1 else ''} read ({official} official). A verdict is given "
+                     f"only when a source backs it."),
             "model_calls": v.model_calls, "elapsed_seconds": secs,
         }
     return {

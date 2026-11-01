@@ -55,7 +55,7 @@ class TestStructuredDisplay:
         assert s["agency"] == "U.S. Bureau of Labor Statistics"
         assert s["dataset"] == "Local Area Unemployment Statistics"
         assert s["identifier"] == f"series {TEXAS}" and s["url"].startswith("https://data.bls.gov/")
-        assert d["method"]["kind"] == "official_data" and "No AI was used" in d["method"]["text"]
+        assert d["method"]["kind"] == "official_data" and "read directly from BLS" in d["method"]["text"]
         assert d["confidence"]["tier"] in ("High", "Medium") and d["confidence"]["text"]
         assert TEXAS in d["share_text"] and "Mostly accurate" in d["share_text"]
         cite = d["citation"]

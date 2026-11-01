@@ -127,7 +127,7 @@ async def ground_claim(claim: str, context_hint: str = "") -> GroundedAnswer:
     """One capped Claude call. Never raises."""
     model = config.CLAUDE_SEARCH_MODEL
     if not config.ANTHROPIC_API_KEY:
-        return GroundedAnswer(ok=False, error="AI search is not configured",
+        return GroundedAnswer(ok=False, error="Web search is not configured",
                               model_calls=0, skipped=True)
 
     # The claim cannot close the <claim> tag and smuggle text outside it.
@@ -147,22 +147,22 @@ async def ground_claim(claim: str, context_hint: str = "") -> GroundedAnswer:
             output_config={"effort": "low"},
         )
     except anthropic.RateLimitError:
-        return GroundedAnswer(ok=False, error="AI search quota reached; try again later", model=model)
+        return GroundedAnswer(ok=False, error="Search quota reached; try again later", model=model)
     except anthropic.AuthenticationError:
         logger.error("ANTHROPIC_API_KEY was rejected")
-        return GroundedAnswer(ok=False, error="AI search is misconfigured", model=model)
+        return GroundedAnswer(ok=False, error="Web search is misconfigured", model=model)
     except anthropic.APIStatusError as e:
         msg = str(getattr(e, "message", "") or e)
         logger.warning("Claude search HTTP %s: %s", e.status_code, msg[:300])
         if "usage limit" in msg.lower() or "spend limit" in msg.lower():
             # The Anthropic Console spend limit — the backstop — has been hit.
             return GroundedAnswer(ok=False, model=model, limited=True, skipped=True, model_calls=0,
-                                  error="The AI search budget for this month is used up. "
+                                  error="The search budget for this month is used up. "
                                         "Exact-figure checks still work.")
-        return GroundedAnswer(ok=False, error=f"AI search error (HTTP {e.status_code})", model=model)
+        return GroundedAnswer(ok=False, error=f"Search error (HTTP {e.status_code})", model=model)
     except (anthropic.APIConnectionError, anthropic.APITimeoutError) as e:
         logger.warning("Claude search connection failed: %s", e)
-        return GroundedAnswer(ok=False, error="AI search could not be reached", model=model)
+        return GroundedAnswer(ok=False, error="The search service could not be reached", model=model)
 
     usage = resp.usage
     searches = getattr(getattr(usage, "server_tool_use", None), "web_search_requests", 0) or 0
@@ -174,20 +174,20 @@ async def ground_claim(claim: str, context_hint: str = "") -> GroundedAnswer:
                 resp.stop_reason)
 
     if resp.stop_reason == "refusal":
-        return GroundedAnswer(ok=False, error="the AI declined to check this claim",
+        return GroundedAnswer(ok=False, error="this claim could not be checked",
                               model=model, cost_usd=cost)
     if resp.stop_reason == "pause_turn":
         # Continuing would mean more spend; treat as no answer.
-        return GroundedAnswer(ok=False, error="AI search did not finish", model=model, cost_usd=cost)
+        return GroundedAnswer(ok=False, error="The search did not finish", model=model, cost_usd=cost)
 
     citations, segments, queries = _citations_and_segments(resp.content)
     answer = "".join(s.text for s in segments)
     if not answer.strip():
-        return GroundedAnswer(ok=False, error="AI search returned no answer", model=model, cost_usd=cost)
+        return GroundedAnswer(ok=False, error="The search returned no answer", model=model, cost_usd=cost)
 
     fields = _parse_fields(answer)
     if not fields.get("verdict"):
-        return GroundedAnswer(ok=False, error="AI search answer was not in the expected format",
+        return GroundedAnswer(ok=False, error="The search answer was not in the expected format",
                               model=model, cost_usd=cost)
 
     return GroundedAnswer(
