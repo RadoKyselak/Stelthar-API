@@ -49,6 +49,11 @@ button, input { font-family: inherit; }
 .out [data-verdict="supported"] .mv-alert-h { color: #1b6b3a; }
 .out [data-verdict="contradicted"] .mv-alert-h { color: #a11b1b; }
 .out [data-verdict="misleading"] .mv-alert-h { color: #9a3c0b; }
+/* The answer's marker follows the verdict; a lookup (no verdict) keeps the brand yellow. */
+.out .mv:has(.mv-alert[data-verdict="supported"]) { --hl: #cdeed6; }
+.out .mv:has(.mv-alert[data-verdict="mostly-accurate"]) { --hl: #fde3a7; }
+.out .mv:has(.mv-alert[data-verdict="misleading"]) { --hl: #fdd5bd; }
+.out .mv:has(.mv-alert[data-verdict="contradicted"]) { --hl: #fbd3d0; }
 .out .mv-alert-b { display: inline; margin: 0; padding: 1px 3px; font: 500 21px/1.55 var(--sans); color: var(--ink);
   background: var(--hl); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .out .mv-alert-b + .mv-alert-b { display: block; margin-top: 10px; background: none; padding: 0; font-size: 16px; color: var(--body); }

@@ -19,9 +19,15 @@
   color: var(--tone); font-size: 12.5px; font-weight: 500; }
 .mv .mv-alert-b { margin: 0; font-size: 15px; line-height: 1.55; color: var(--ink); }
 .mv .mv-alert-b + .mv-alert-b { margin-top: 6px; }
-/* The marker goes on answers only, not on errors or "can't verify". */
+/* The marker goes on answers only, not on errors or "can't verify". Its colour follows the
+   verdict, so a match never reads as a warning; a lookup (no verdict) keeps the brand yellow. */
+.mv { --hl: #ffe58a; }
+.mv:has(.mv-alert[data-verdict="supported"]) { --hl: #cdeed6; }
+.mv:has(.mv-alert[data-verdict="mostly-accurate"]) { --hl: #fde3a7; }
+.mv:has(.mv-alert[data-verdict="misleading"]) { --hl: #fdd5bd; }
+.mv:has(.mv-alert[data-verdict="contradicted"]) { --hl: #fbd3d0; }
 .mv .mv-alert:not([data-verdict="unavailable"]):not([data-verdict="no-verdict"]) .mv-alert-b {
-  display: inline; padding: 1px 3px; font-size: 15.5px; color: #000; background: #ffe58a;
+  display: inline; padding: 1px 3px; font-size: 15.5px; color: #000; background: var(--hl);
   -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .mv .mv-sec { margin-top: 22px; }
 .mv .mv-label { font-size: 13px; font-weight: 500; color: var(--ink); }
@@ -31,7 +37,7 @@
 .mv .mv-ex { margin-top: 16px; border: 0; border-radius: 10px; background: var(--subtle); padding: 2px; }
 .mv .mv-ex-h { background: none; border: 0; color: var(--ink); font-size: 12px; font-weight: 500; padding: 10px 12px 6px; }
 .mv .mv-ex-t td { border-top: 1px solid var(--line); padding: 8px 12px; }
-.mv .mv-ex-t tr.mv-cited td { background: #ffe58a; color: #000; }
+.mv .mv-ex-t tr.mv-cited td { background: var(--hl); color: #000; }
 .mv .mv-ex-n { border-top: 0; }
 .mv .mv-foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
 .mv .mv-src { font-size: 12.5px; color: var(--muted); }
