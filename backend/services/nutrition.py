@@ -178,16 +178,27 @@ _PLAIN_COOK = ("cooked", "baked", "roasted", "boiled", "broiled", "grilled", "st
 def _score(desc: str, food: str, text: str, dataset: str = "") -> float:
     """How well a USDA entry fits the claim's food, plain forms first."""
     d = re.sub(r"\s*\([^)]*\)", "", desc.lower())
-    d = re.sub(r",?\s*(?:with|without) (?:skin|peel|seeds?|bone|shell)\b", "", d)
+    claim = text.lower()
+    # How people eat it: an apple has its skin, an orange loses its peel.
+    if not re.search(r"\b(peeled|without skin|skinless)\b", claim):
+        s_peel = -1.5 if re.search(r"\bwithout skin\b|\bpeeled\b", d) else 0.0
+    else:
+        s_peel = 0.0
+    if not re.search(r"\bpeel\b", claim) and re.search(r"\bwith peel\b", d):
+        s_peel -= 2
+    d = re.sub(r",?\s*(?:with|without) (?:skin|peel|seeds?|bone|shell)\b|,?\s*peeled\b", "", d)
+    d = re.sub(r"\b(?:made|cooked|prepared) with water\b", "cooked", d)
     segs = [x.strip() for x in d.split(",") if x.strip()]
     if not segs:
         return -99
-    claim_words = {_singular(w) for w in food.split()}
+    claim_words = {_singular(w) for w in food.split()} - {x.lower() for x in _COOKING.findall(food)}
+    if not claim_words:
+        return -99
     head_words = {_singular(w) for w in segs[0].split()}
     all_words = {_singular(w) for x in segs for w in x.split()}
     if not claim_words <= all_words:
         return -99
-    s = 0.0
+    s = s_peel
     if head_words <= claim_words or (" ".join(sorted(head_words)) in _CATEGORIES):
         s += 6  # "Rice, white, cooked" for "cooked white rice"; "Fish, salmon" for salmon
     else:
@@ -195,7 +206,6 @@ def _score(desc: str, food: str, text: str, dataset: str = "") -> float:
     if len(segs) > 1:  # "Rice, white and wild" is not white rice
         extra = {_singular(w) for w in segs[1].split()} - claim_words - {"raw", "cooked", "whole", "fresh", "plain"}
         s -= 0.5 * len(extra)
-    claim = text.lower()
     s -= sum(3 for b in _BAD if re.search(rf"\b{b}\b", d) and not re.search(rf"\b{b}\b", claim))
     if re.search(r"\bstyle\b|\brecipe\b|\bhomemade\b|\bwith\b", d) and not re.search(r"\bstyle\b|\bwith\b", claim):
         s -= 2
@@ -210,8 +220,8 @@ def _score(desc: str, food: str, text: str, dataset: str = "") -> float:
     if re.search(r"all commercial varieties|all varieties|\bwhole\b|\bplain\b|no added fat|nfs", d):
         s += 1
     s -= 0.3 * max(0, len(segs) - 2)
-    if dataset in ("SR Legacy", "Foundation") and "raw" in cook:
-        s += 1  # the reference entries, with small / medium / large
+    if "raw" in cook:
+        s += {"SR Legacy": 1.0, "Foundation": 0.5}.get(dataset, 0.0)  # the reference entries
     return s
 
 
@@ -256,7 +266,8 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
             logger.info("Nutrition: no %r portion for %r in %s", r.portion_unit, r.food, [x[0] for x in ps][:8])
             return None
     elif r.size:
-        p = find(lambda t: re.search(rf"(^|[^a-z]){r.size}\b", t) and not (r.size in ("small", "large") and f"extra {r.size}" in t))
+        # "large", "1 large", "large (8\" to 8-7/8\" long)"; not "cup (4.86 large eggs)"
+        p = find(lambda t: re.match(rf"^(?:[\d.]+\s+)?{r.size}\b", t))
         if p is None and re.search(rf"\b{r.size}\b", d.get("description", ""), re.I):
             item = _singular(r.food.split()[-1])
             p = find(lambda t: re.search(rf"^(?:[\d.]+\s+)?{re.escape(item)}s?\b", t))
@@ -264,8 +275,8 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
         egg = "egg" in r.food
         item = _singular(r.food.split()[-1])
         serving = bool(re.search(r"\bserving\b", r.text, re.I))
-        preds = [(lambda t: "large" in t and "extra" not in t) if egg else
-                 (lambda t: "medium" in t and "slice" not in t and "cup" not in t),
+        preds = [(lambda t: re.match(r"^(?:[\d.]+\s+)?large\b", t)) if egg else
+                 (lambda t: re.match(r"^(?:[\d.]+\s+)?medium\b", t)),
                  # "1 avocado, NS as to Florida or California", "1 fruit", "1 whole"
                  lambda t: re.search(rf"^(?:1(?:\.0)?\s+)?(?:{re.escape(item)}s?\b|fruit\b|whole\b|item\b|each\b)", t)]
         if serving:
@@ -298,6 +309,9 @@ def _phrase(portion: str, r: Read) -> str:
     shown = re.sub(r",?\s*NS as to .*$", "", shown, flags=re.I).strip(" ,")
     item = _singular(r.food.split()[-1])
     cw = _WORDS.get(r.count, f"{r.count:g}")
+    if re.match(r"^(fruit|whole|item|each)\b", shown, re.I):
+        rest = re.sub(r"^(fruit|whole|item|each)\b\s*", "", shown, flags=re.I).strip(" ,")
+        return f"{cw} {item}" + (f" ({rest})" if rest else "")
     if _UNIT_LIKE.match(shown):
         first, _, more = shown.split(",")[0].strip().partition(" ")
         if r.count > 1 and not first.endswith("s"):

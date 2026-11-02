@@ -30,7 +30,8 @@ FOODS = {
              "foodNutrients": [_n(1008, "Energy", "kcal", 346.0)], "foodPortions": []},
     171287: {"fdcId": 171287, "description": "Egg, whole, raw, fresh", "dataType": "SR Legacy",
              "foodNutrients": [_n(1008, "Energy", "kcal", 143.0), _n(1003, "Protein", "g", 12.56)],
-             "foodPortions": [_p("large", 50.0), _p("medium", 44.0), _p("extra large", 56.0)]},
+             "foodPortions": [_p("cup (4.86 large eggs)", 243.0), _p("large", 50.0), _p("medium", 44.0),
+                              _p("extra large", 56.0)]},
     170567: {"fdcId": 170567, "description": "Nuts, almonds", "dataType": "SR Legacy",
              "foodNutrients": [_n(1003, "Protein", "g", 21.15)], "foodPortions": [_p("cup, whole", 143.0)]},
 }
@@ -52,9 +53,16 @@ FOODS[175168] = {"fdcId": 175168, "description": "Fish, salmon, Atlantic, farmed
 FOODS[169967] = {"fdcId": 169967, "description": "Broccoli, raw", "dataType": "SR Legacy",
                  "foodNutrients": [_n(1162, "Vitamin C, total ascorbic acid", "mg", 89.2)],
                  "foodPortions": [_p("cup chopped", 91.0)]}
+FOODS[169097] = {"fdcId": 169097, "description": "Oranges, raw, with peel", "dataType": "SR Legacy",
+                 "foodNutrients": [_n(1162, "Vitamin C", "mg", 71.0)], "foodPortions": [_p("fruit without seeds", 159.0)]}
+FOODS[169917] = {"fdcId": 169917, "description": "Oranges, raw, all commercial varieties", "dataType": "SR Legacy",
+                 "foodNutrients": [_n(1162, "Vitamin C", "mg", 53.2)], "foodPortions": [_p("fruit (2-5/8\" dia)", 131.0)]}
+FOODS[2709000] = {"fdcId": 2709000, "description": "Oatmeal, regular or quick, made with water, no added fat",
+                  "dataType": "Survey (FNDDS)", "foodNutrients": [_n(1008, "Energy", "kcal", 71.0)],
+                  "foodPortions": [_p(None, 234.0, "1 cup")]}
 SEARCH = {
     "banana": [2709224, 173945, 173944], "bananas": [2709224, 173945, 173944],
-    "egg": [2707205, 171287], "salmon": [2706000, 175168], "broccoli": [169967], "almonds": [170567], "avocado": [171705],
+    "egg": [2707205, 171287], "salmon": [2706000, 175168], "broccoli": [169967], "orange": [169097, 169917], "cooked oatmeal": [2709000], "almonds": [170567], "avocado": [171705],
 }
 
 
@@ -85,6 +93,9 @@ def fdc(monkeypatch, tmp_path):
     ("A serving of avocado has 7 grams of fat.", SUPPORTED),       # USDA's serving, 50 g: 7.3
     ("3 ounces of salmon has 22 grams of protein.", MOSTLY_ACCURATE),  # plain salmon, 85 g: 18.8
     ("A cup of broccoli has 80 mg of vitamin C.", SUPPORTED),      # 91 g: 81
+    ("A large egg has 72 calories.", SUPPORTED),                   # "large", not "cup (4.86 large eggs)"
+    ("An orange has 70 mg of vitamin C.", SUPPORTED),              # without the peel: 131 g, 70
+    ("A cup of cooked oatmeal has 166 calories.", SUPPORTED),      # "made with water": 166
 ])
 async def test_nutrition_claims(fdc, claim, expected):
     r = await verify(claim, allow_grounding=False)
