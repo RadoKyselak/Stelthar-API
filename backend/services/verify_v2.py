@@ -427,8 +427,8 @@ def _graded_result(claim: str, parsed: ParsedClaim, g: GroundedAnswer, verdict: 
             confidence = HIGH if agree else MEDIUM
             who = g.source_org or (_host_of(g.source_url))
             if sq.own_site(g.source_url, claim):
-                caveats.append(f"This rests on {who}'s own site; no government record of it "
-                               f"was found.")
+                caveats.append(f"This rests on {_host_of(g.source_url)}, the subject's own site; "
+                               f"no government record of it was found.")
             else:
                 caveats.append(f"Checked against {who}, not the agency that publishes the figure.")
         if disagree:
