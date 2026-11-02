@@ -86,6 +86,7 @@ class Read:
     size: str = ""
     portion_unit: str = ""
     grams: Optional[float] = None   # "100 grams of almonds"
+    weight: str = ""                # as written: "3 oz"
     stated_portion: bool = False
     text: str = ""
 
@@ -103,7 +104,9 @@ def read(text: str) -> Optional[Read]:
         return None
     m = None
     for cand in _AMOUNT.finditer(text):
-        nut_text = (cand.group("nut") or "")
+        after = re.sub(r"^\s+(?:of\s+)?", "", text[cand.end("u"):])
+        nm = next((re.match(rx, after, re.I) for rx, _, _ in _NUTRIENTS if re.match(rx, after, re.I)), None)
+        nut_text = nm.group(0) if nm else ""
         unit = cand.group("u").lower()
         if re.match(r"kcal|calor|cal", unit):
             m, label, ids, nut_span = cand, "calories", ("1008", "2047", "2048"), ""
@@ -119,15 +122,17 @@ def read(text: str) -> Optional[Read]:
     cmp_word = (m.group("cmp") or "").lower()
     comparator = ("greater than" if cmp_word in ("more than", "over", "at least") else
                   "less than" if cmp_word in ("under", "less than", "fewer than") else "equals")
-    rest = (text[:m.start()] + " " + text[m.end():]).strip()
+    rest = (text[:m.start()] + " " + text[m.end("u"):]).strip()
     if label != "calories" and nut_span:
-        rest = rest.replace(nut_span, " ")
+        rest = re.sub(r"\bof\s+" + re.escape(nut_span) + r"|" + re.escape(nut_span), " ", rest, count=1)
     rest = re.sub(r"\bcalories\b|\bkcals?\b", " ", rest, flags=re.I)
 
-    grams = None
+    grams, weight = None, ""
     g = re.search(r"\b(?:per\s+)?(\d+(?:\.\d+)?)\s*(g|grams?|ounces?|oz)\b(?:\s+of)?", rest, re.I)
     if g:
-        grams = float(g.group(1)) * (28.3495 if g.group(2).lower().startswith(("o", "oz")) else 1.0)
+        oz = g.group(2).lower().startswith("o")
+        grams = float(g.group(1)) * (28.3495 if oz else 1.0)
+        weight = f"{float(g.group(1)):g} {'oz' if oz else 'g'}"
         rest = rest[:g.start()] + " " + rest[g.end():]
     count, size, punit, stated = 1.0, "", "", grams is not None
     c = re.search(r"\b(half an?|half|an?|one|1|each|per|every|two|2|three|3|½)\b\s*"
@@ -157,21 +162,29 @@ def read(text: str) -> Optional[Read]:
     return Read(food=food, nutrient=label, ids=ids, amount=float(m.group("n")), unit=unit,
                 comparator=comparator, approximate=cmp_word in ("about", "around", "roughly", "approximately",
                                                                   "nearly", "almost", "~"),
-                count=count, size=size, portion_unit=punit, grams=grams, stated_portion=stated, text=text)
+                count=count, size=size, portion_unit=punit, grams=grams, weight=weight,
+                stated_portion=stated, text=text)
 
 
-def _score(desc: str, food: str, text: str) -> float:
+_CATEGORIES = {"fish", "nut", "cheese", "seed", "beverage", "cereal", "spice", "vegetable", "fruit",
+               "beef", "pork", "chicken", "turkey", "lamb", "milk", "yogurt", "bread", "pasta"}
+
+
+def _score(desc: str, food: str, text: str, dataset: str = "") -> float:
     d = desc.lower()
     segs = [s.strip() for s in d.split(",")]
     words = [_singular(w) for w in food.split()]
     head = " ".join(_singular(w) for w in segs[0].split())
     s = 0.0
-    if head == " ".join(words):
+    second = " ".join(_singular(w) for w in segs[1].split()) if len(segs) > 1 else ""
+    if head == " ".join(words) or (head in _CATEGORIES and second == " ".join(words)):
         s += 6
     elif all(w in " ".join(_singular(x) for x in d.replace(",", " ").split()) for w in words):
-        s += 3
+        s += 2
     else:
         return -99
+    if re.search(r"\bstyle\b|\brecipe\b|\bhomemade\b|\bwith\b", d) and not re.search(r"\bstyle\b|\bwith\b", text, re.I):
+        s -= 2
     claim = text.lower()
     s -= sum(3 for b in _BAD if re.search(rf"\b{b}\b", d) and not re.search(rf"\b{b}\b", claim))
     cooked_first = any(w in _COOKED_FIRST for w in words)
@@ -186,23 +199,29 @@ def _score(desc: str, food: str, text: str) -> float:
     if re.search(r"all commercial varieties|all varieties|\bwhole\b|\bplain\b|no added fat|nfs", d):
         s += 1
     s -= 0.4 * (len(segs) - 1)
+    if dataset == "SR Legacy" and "raw" in d:
+        s += 1  # the reference entries, with small / medium / large
     return s
 
 
-async def _pick(r: Read) -> Optional[dict]:
+async def _pick(r: Read) -> Optional[Tuple[dict, Tuple[float, str, bool]]]:
+    """The best USDA entry that has both the nutrient and the claim's portion."""
     foods = await fooddata.search(r.food)
     if not foods and r.food.endswith("s"):
         foods = await fooddata.search(_singular(r.food))
-    scored = sorted(((_score(f["description"], r.food, r.text), i, f) for i, f in enumerate(foods)),
-                    key=lambda x: (-x[0], x[1]))
-    for score, _, f in scored[:2]:
+    scored = sorted(((_score(f["description"], r.food, r.text, f.get("dataType", "")), i, f)
+                     for i, f in enumerate(foods)), key=lambda x: (-x[0], x[1]))
+    for score, _, f in scored[:4]:
         if score < 4:
             break
         d = await fooddata.food(f["fdcId"])
-        if d and any(i in d["nutrients"] for i in r.ids):
-            return d
-        logger.info("Nutrition: %s (%s) has no %s", f["description"], f["fdcId"], r.nutrient)
-    logger.info("Nutrition: no USDA food for %r among %s", r.food,
+        if not d or not any(i in d["nutrients"] for i in r.ids):
+            logger.info("Nutrition: %s (%s) has no %s", f["description"], f["fdcId"], r.nutrient)
+            continue
+        portion = _portion(d, r)
+        if portion is not None:
+            return d, portion
+    logger.info("Nutrition: no USDA food and portion for %r among %s", r.food,
                 [(round(x[0], 1), x[2]["description"]) for x in scored[:4]])
     return None
 
@@ -210,7 +229,8 @@ async def _pick(r: Read) -> Optional[dict]:
 def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
     """(grams, how it reads, assumed)."""
     if r.grams is not None:
-        return r.grams, f"{r.grams:g} g", False
+        shown = r.weight if r.weight.endswith(" g") else f"{r.weight} ({r.grams:.0f} g)"
+        return r.grams, f"{shown} of {r.food}", False
     ps = d.get("portions") or []
     def find(pred):
         return next((p for p in ps if pred(p[0].lower())), None)
@@ -218,7 +238,7 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
     if r.portion_unit:
         p = find(lambda t: re.search(rf"\b{re.escape(r.portion_unit)}s?\b", t) and (not r.size or r.size in t))
         if p is None and r.portion_unit in ("ounce", "oz"):
-            return 28.3495 * r.count, f"{r.count:g} oz", False
+            return 28.3495 * r.count, f"{r.count:g} oz ({28.3495 * r.count:.0f} g) of {r.food}", False
         if p is None:
             logger.info("Nutrition: no %r portion for %r in %s", r.portion_unit, r.food, [x[0] for x in ps][:8])
             return None
@@ -246,8 +266,30 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
         return None
     text, grams, amount = p
     per_one = grams / (amount or 1)
-    shown = re.sub(r"^1(\.0)?\s+", "", text)
-    return per_one * r.count, f"{'' if r.count == 1 else f'{r.count:g} x '}{shown} ({per_one * r.count:.0f} g)", not r.stated_portion
+    total = per_one * r.count
+    return total, f"{_phrase(text, r)} ({total:.0f} g)", not r.stated_portion
+
+
+_UNIT_LIKE = re.compile(r"^(cups?|tablespoons?|tbsps?|teaspoons?|tsps?|slices?|pieces?|oz|ounces?|servings?|"
+                        r"nlea servings?|stalks?|spears?|sticks?|scoops?)\b", re.I)
+_WORDS = {1: "one", 2: "two", 3: "three", 0.5: "half a", 4: "four"}
+
+
+def _phrase(portion: str, r: Read) -> str:
+    """"medium (7\" to 7-7/8\" long)" -> "one medium banana";
+    "tablespoon" x2 -> "two tablespoons of peanut butter"."""
+    shown = re.sub(r"\s*\([^)]*\)", "", re.sub(r"^1(?:\.0)?\s+", "", portion)).strip(" ,")
+    shown = re.sub(r",?\s*NS as to .*$", "", shown, flags=re.I).strip(" ,")
+    item = _singular(r.food.split()[-1])
+    cw = _WORDS.get(r.count, f"{r.count:g}")
+    if _UNIT_LIKE.match(shown):
+        first, _, more = shown.split(",")[0].strip().partition(" ")
+        if r.count > 1 and not first.endswith("s"):
+            first += "s"
+        return f"{cw} {first}{(' ' + more) if more else ''} of {r.food}"
+    if item in shown.lower():
+        return f"{cw} {shown}"
+    return f"{cw} {shown} {item}"
 
 
 def _fmt(v: float, unit: str) -> str:
@@ -267,15 +309,12 @@ async def check(text: str, parsed) -> Optional[Verdict]:
 
 async def run(r: Read) -> Optional[Verdict]:
     try:
-        d = await _pick(r)
-        if d is None:
+        got = await _pick(r)
+        if got is None:
             return None
+        d, (grams, how, assumed) = got
         nid = next(i for i in r.ids if i in d["nutrients"])
         per100, unit, nname = d["nutrients"][nid]
-        portion = _portion(d, r)
-        if portion is None:
-            return None
-        grams, how, assumed = portion
         official = per100 * grams / 100.0
         if r.unit == "kcal":
             if unit != "kcal":
@@ -318,11 +357,11 @@ async def run(r: Read) -> Optional[Verdict]:
                     ex_row("Portion", how), ex_row(f"{r.nutrient.capitalize()} in that portion", official_s, cited=True)])
     caveats = []
     if assumed:
-        caveats.append(f"The claim names no portion size; USDA's {how.split(' (')[0]} is used.")
+        caveats.append(f"The claim names no size; USDA's weight for {how} is used.")
     caveats.append("Amounts vary with size, variety and preparation, so a claim within 10% counts as a match.")
     claimed_s = _fmt(r.amount, "kcal" if r.unit == "kcal" else r.unit)
     what = official_s if r.nutrient == "calories" else f"{official_s} of {r.nutrient}"
-    head = (f"USDA FoodData Central: {how} of \u201c{food_name}\u201d has {what}"
+    head = (f"USDA FoodData Central (\u201c{food_name}\u201d): {how} has {what}"
             + (f"; the claim says {claimed_s}." if outcome != SUPPORTED else "."))
     return verdict(outcome, head, [dp], caveats=caveats, claimed=claimed_s,
                    confidence=HIGH if r.stated_portion and not assumed else MEDIUM)

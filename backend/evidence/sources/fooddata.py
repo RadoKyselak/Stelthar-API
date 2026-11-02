@@ -33,21 +33,22 @@ def _key() -> str:
 async def _get(path: str, params: Dict[str, str]) -> Any:
     # The key goes in a header, never the URL, so it cannot reach a log line.
     # FoodData Central's search sometimes answers 400 and then succeeds on the
-    # same request a moment later, so a 400 or 5xx is retried twice.
+    # same request a few seconds later, so a 400 or 5xx is retried, backing off.
     import asyncio
     r = None
-    for attempt in range(3):
+    waits = (0.5, 1.5, 3.0)
+    for attempt in range(len(waits) + 1):
         try:
             async with httpx.AsyncClient(timeout=15.0) as c:
                 r = await c.get(f"{_BASE}{path}", params=params, headers={"X-Api-Key": _key()})
         except httpx.HTTPError as e:
-            if attempt == 2:
+            if attempt == len(waits):
                 raise SourceUnavailable("USDA", f"request failed: {e}") from e
-            await asyncio.sleep(0.6 * (attempt + 1))
+            await asyncio.sleep(waits[attempt])
             continue
         if r.status_code == 400 or r.status_code >= 500:
-            if attempt < 2:
-                await asyncio.sleep(0.6 * (attempt + 1))
+            if attempt < len(waits):
+                await asyncio.sleep(waits[attempt])
                 continue
         break
     if r.status_code == 404:

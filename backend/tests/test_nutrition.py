@@ -38,9 +38,23 @@ FOODS[171705] = {"fdcId": 171705, "description": "Avocados, raw, all commercial 
                  "foodNutrients": [_n(1004, "Total lipid (fat)", "g", 14.66)],
                  "foodPortions": [_p("NLEA serving", 50.0), _p("cup, cubes", 150.0),
                                   _p("avocado, NS as to Florida or California", 201.0)]}
+# As-eaten (FNDDS) entries listed first by USDA's search, as live: no sizes.
+FOODS[2707205] = {"fdcId": 2707205, "description": "Egg, whole, raw", "dataType": "Survey (FNDDS)",
+                  "foodNutrients": [_n(1003, "Protein", "g", 12.4)],
+                  "foodPortions": [_p(None, 50.0, "1 egg"), _p(None, 243.0, "1 cup")]}
+FOODS[2709224] = {"fdcId": 2709224, "description": "Banana, raw", "dataType": "Survey (FNDDS)",
+                  "foodNutrients": [_n(1008, "Energy", "kcal", 97.0)],
+                  "foodPortions": [_p(None, 126.0, "1 banana")]}
+FOODS[2706000] = {"fdcId": 2706000, "description": "Stewed salmon, Puerto Rican style", "dataType": "Survey (FNDDS)",
+                  "foodNutrients": [_n(1003, "Protein", "g", 11.8)], "foodPortions": []}
+FOODS[175168] = {"fdcId": 175168, "description": "Fish, salmon, Atlantic, farmed, cooked, dry heat",
+                 "dataType": "SR Legacy", "foodNutrients": [_n(1003, "Protein", "g", 22.1)], "foodPortions": []}
+FOODS[169967] = {"fdcId": 169967, "description": "Broccoli, raw", "dataType": "SR Legacy",
+                 "foodNutrients": [_n(1162, "Vitamin C, total ascorbic acid", "mg", 89.2)],
+                 "foodPortions": [_p("cup chopped", 91.0)]}
 SEARCH = {
-    "banana": [173945, 173944], "bananas": [173945, 173944],
-    "egg": [171287], "almonds": [170567], "avocado": [171705],
+    "banana": [2709224, 173945, 173944], "bananas": [2709224, 173945, 173944],
+    "egg": [2707205, 171287], "salmon": [2706000, 175168], "broccoli": [169967], "almonds": [170567], "avocado": [171705],
 }
 
 
@@ -69,11 +83,23 @@ def fdc(monkeypatch, tmp_path):
     ("Almonds have more than 30 grams of protein per 100 grams.", CONTRADICTED),
     ("An avocado has 30 grams of fat.", SUPPORTED),                # the whole fruit, 201 g: 29.5
     ("A serving of avocado has 7 grams of fat.", SUPPORTED),       # USDA's serving, 50 g: 7.3
+    ("3 ounces of salmon has 22 grams of protein.", MOSTLY_ACCURATE),  # plain salmon, 85 g: 18.8
+    ("A cup of broccoli has 80 mg of vitamin C.", SUPPORTED),      # 91 g: 81
 ])
 async def test_nutrition_claims(fdc, claim, expected):
     r = await verify(claim, allow_grounding=False)
     assert r.verdict == expected, r.headline
     assert r.model_calls == 0 and r.evidence[0]["source"] == "USDA"
+
+
+async def test_a_stated_size_skips_entries_without_sizes(fdc):
+    r = await verify("One large egg has 6 grams of protein.", allow_grounding=False)
+    assert "Egg, whole, raw, fresh" in r.headline and "(50 g)" in r.headline, r.headline
+
+
+async def test_salmon_is_salmon(fdc):
+    r = await verify("3 ounces of salmon has 22 grams of protein.", allow_grounding=False)
+    assert "Puerto Rican" not in r.headline and "Fish, salmon" in r.headline, r.headline
 
 
 async def test_picks_the_food_not_the_powder(fdc):
@@ -92,7 +118,7 @@ def test_key_never_reaches_a_log_line():
 
 async def test_says_which_portion_was_assumed(fdc):
     r = await verify("A banana has 105 calories.", allow_grounding=False)
-    assert any("names no portion" in c and "medium" in c for c in r.caveats), r.caveats
+    assert any("names no size" in c and "medium banana (118 g)" in c for c in r.caveats), r.caveats
     assert r.confidence == "Medium"
 
 
