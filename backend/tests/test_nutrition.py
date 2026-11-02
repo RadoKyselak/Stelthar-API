@@ -186,3 +186,15 @@ async def test_miss_goes_to_search_with_usda_named(fdc):
     with patch("services.verify_v2.ai_search.search", search):
         await verify("The Thrifty Food Plan for a family of four costs $1,024 a month.", client_ip="1.2.3.4")
     assert "Cost of Food reports" in search.call_args.args[1]
+
+
+async def test_no_preparation_named_is_not_contradicted_on_one_reading(fdc):
+    # Both chicken entries are cooked ones and the claim names no preparation:
+    # the free check does not contradict it; web search gets it instead.
+    r = await verify("A chicken breast has 90 grams of protein.", allow_grounding=False)
+    assert r.verdict == NO_VERDICT and r.tier != "structured"
+
+
+async def test_wrong_at_every_size_is_still_contradicted(fdc):
+    r = await verify("A banana has 200 calories.", allow_grounding=False)
+    assert r.verdict == CONTRADICTED

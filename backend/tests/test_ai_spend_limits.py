@@ -43,7 +43,9 @@ def clean(tmp_path, monkeypatch):
 
 
 ANSWER = ("VERDICT: SUPPORTED\nOFFICIAL_VALUE: $7.25 per hour\nPERIOD: 2026\n"
-          "SOURCE_ORG: U.S. Department of Labor\nEXPLANATION: The federal minimum wage is $7.25.")
+          "SOURCE_ORG: U.S. Department of Labor\n"
+          "SOURCE_URL: https://www.dol.gov/agencies/whd/minimum-wage\n"
+          "EXPLANATION: The federal minimum wage is $7.25.")
 
 
 def claude_response(text=ANSWER, stop="end_turn", searches=1, inp=8000, out=300):
@@ -82,7 +84,9 @@ class TestRequestShape:
         assert kw["model"] == "claude-haiku-5-5"
         assert kw["max_tokens"] == 1500
         assert kw["output_config"] == {"effort": "low"}
-        assert kw["tools"] == [{"type": "web_search_20250305", "name": "web_search", "max_uses": 2}]
+        from evidence import source_quality
+        assert kw["tools"] == [{"type": "web_search_20250305", "name": "web_search", "max_uses": 2,
+                                "blocked_domains": list(source_quality.BLOCKED_DOMAINS)}]
         assert "temperature" not in kw  # Haiku 5.5 rejects it
         assert "untrusted DATA" in kw["system"]
 
@@ -342,7 +346,8 @@ class TestConfidenceWithoutSpanCitations:
         fake_claude.return_value = resp
         body = test_client.post("/verify", json={"claim": "Washington's minimum wage is $16.28 an hour"}).json()
         assert body["verdict"] == "Supported"
-        assert body["confidence_tier"] == "Medium"
+        # The agency's own page, with the figure and its period: High.
+        assert body["confidence_tier"] == "High"
         assert "0%" not in body["summary"]
         assert body["sources"][0]["url"].startswith("https://www.dol.gov")
 

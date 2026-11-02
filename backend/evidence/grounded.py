@@ -98,6 +98,14 @@ class GroundedAnswer:
     # answering in the fixed field format). grounded_fraction is then
     # meaningless and must not be read as "0% backed".
     span_attribution: bool = True
+    # The one page the answer says its figure came from (SOURCE_URL), when it
+    # was among the pages the search returned, and how far it can be trusted
+    # (evidence.source_quality: official | reliable | other; "" when none).
+    source_url: str = ""
+    source_title: str = ""
+    source_tier: str = ""
+    # Published fact-checks of similar claims the model was given as leads.
+    leads: List[Dict[str, str]] = field(default_factory=list)
 
     @property
     def grounded_fraction(self) -> float:
@@ -141,8 +149,18 @@ def _build_prompt(claim: str, context_hint: str = "") -> str:
 figure or evidence behind the claim below, then answer in the exact format given.
 
 Rules:
-- Prefer official primary sources (a statistical agency, an official report) over
-  news coverage of them. Name the agency in SOURCE_ORG.
+- Rely on the publisher of the figure: the agency, statistics office or official
+  report itself. Put that agency's name in your search query (e.g. "BLS", "CDC",
+  "USDA FoodData Central"). Only if no official page has it, rely on a
+  professional fact-checker (PolitiFact, FactCheck.org, AP, Reuters), a research
+  institute, a peer-reviewed journal or a major newspaper. Never rely on apps,
+  calorie counters, blogs, content farms, aggregators or forums, even if they
+  quote an agency. Name the publisher in SOURCE_ORG and give its page in SOURCE_URL.
+- A claim without a number (an event, a law, a ruling, a scientific finding) is
+  checked against the official record (the agency, court or legislature) or the
+  position of the relevant scientific body (CDC, NIH, NASA, the National
+  Academies), and professional fact-checks of it.
+- A claim phrased as a yes/no question is checked as the statement it asks about.
 - Report what the source actually says, including the period it covers. If the
   claim names a year and the best source covers a different period, say so in
   PERIOD and treat that as a mismatch rather than a match.
@@ -170,6 +188,7 @@ VERDICT: SUPPORTED | MOSTLY_ACCURATE | CONTRADICTED | MISLEADING | NO_EVIDENCE |
 OFFICIAL_VALUE: only the authoritative figure and its unit, e.g. "4.9% annual rate" (at most 10 words), or NONE
 PERIOD: the period the figure covers, or NONE
 SOURCE_ORG: the organisation that published it, or NONE
+SOURCE_URL: the exact URL, copied from your search results, of the single page the figure or finding comes from, or NONE
 EXPLANATION: two sentences comparing the claim to what the source says"""
 
 
@@ -178,6 +197,7 @@ _FIELD_RE = {
     "official_value": re.compile(r"^\s*OFFICIAL_VALUE:\s*(.+?)\s*$", re.MULTILINE),
     "period": re.compile(r"^\s*PERIOD:\s*(.+?)\s*$", re.MULTILINE),
     "source_org": re.compile(r"^\s*SOURCE_ORG:\s*(.+?)\s*$", re.MULTILINE),
+    "source_url": re.compile(r"^\s*SOURCE_URL:\s*<?(\S+?)>?\s*$", re.MULTILINE),
     "explanation": re.compile(r"^\s*EXPLANATION:\s*(.+?)\s*$", re.MULTILINE | re.DOTALL),
 }
 
@@ -201,8 +221,8 @@ def _parse_fields(text: str) -> Dict[str, str]:
             break
     else:
         out["verdict"] = "NO_EVIDENCE" if verdict else ""
-    for k in ("official_value", "period", "source_org"):
-        if (out.get(k) or "").upper() in ("NONE", "N/A", "-"):
+    for k in ("official_value", "period", "source_org", "source_url"):
+        if (out.get(k) or "").upper().strip(".") in ("NONE", "N/A", "-"):
             out[k] = ""
     # Output caps. Only these parsed fields ever reach a caller, and each is
     # short — so the endpoint cannot be used to get free long-form text out

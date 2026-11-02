@@ -4,12 +4,15 @@ Fact-checkers (PolitiFact, FactCheck.org, Snopes, AP, Reuters, USA Today and
 others) tag their articles with ClaimReview markup; Google indexes it and
 serves it here. Free, with a key; no model call.
 
-These are shown beside the check, never folded into it: the search matches on
-wording, so a result can be about another year, person or number, and every
-publisher rates on its own scale. Each one is shown as that outlet's rating,
-with its date and a link.
+They are shown beside the check, with each outlet's own rating, date and link.
+When a claim goes to web search they are also handed to the model as leads,
+and a published rating that agrees with the answer counts toward its
+confidence (one that disagrees is named and caps it). They never decide a
+verdict alone: the search matches on wording, so a result can be about another
+year, person or number.
 """
 import asyncio
+import contextvars
 import re
 from typing import Any, Dict, List, Optional
 
@@ -165,3 +168,62 @@ async def finish(task: Optional["asyncio.Task"]) -> List[Dict[str, str]]:
     except Exception:  # noqa: BLE001  (timeout or error: the check goes out without them)
         task.cancel()
         return []
+
+
+# The search for the claim being checked, started by the endpoint so the web
+# search step can read its results without a parameter threaded through.
+CURRENT: "contextvars.ContextVar[Optional[asyncio.Task]]" = contextvars.ContextVar(
+    "fact_checks_current", default=None)
+
+
+async def peek(task: Optional["asyncio.Task"], timeout: float = 3.0) -> List[Dict[str, str]]:
+    """The results if they arrive within `timeout`, without cancelling the
+    search (the endpoint still waits for it to show them)."""
+    if task is None:
+        return []
+    try:
+        done, _ = await asyncio.wait({task}, timeout=timeout)
+        return list(task.result() or []) if task in done else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+_FALSE = re.compile(r"\b(false|pants on fire|incorrect|wrong|fake|fabricated|not true|untrue|"
+                    r"baseless|no evidence|debunked|four pinocchios|hoax|scam|bogus|inaccurate)\b", re.I)
+_MIXED = re.compile(r"\b(misleading|missing context|half[- ]true|mixture|mixed|partly|partially|"
+                    r"needs context|not the whole story|exaggerat|distort|out of context|"
+                    r"cherry|spin|two pinocchios|three pinocchios|lacks context|unproven)\w*", re.I)
+_MOSTLY = re.compile(r"\bmostly true\b|\blargely (true|accurate|correct)\b", re.I)
+_TRUE = re.compile(r"\b(true|correct|accurate|right|confirmed|geppetto checkmark)\b", re.I)
+
+
+def stance(rating: str) -> Optional[str]:
+    """A publisher's rating on the checker's scale, or None when it doesn't map:
+    SUPPORTED, MOSTLY_ACCURATE, MISLEADING or CONTRADICTED."""
+    r = (rating or "").strip()
+    if not r:
+        return None
+    if re.search(r"\bmostly false\b", r, re.I):
+        return "CONTRADICTED"
+    if _MOSTLY.search(r):
+        return "MOSTLY_ACCURATE"
+    if _MIXED.search(r):
+        return "MISLEADING"
+    if _FALSE.search(r):
+        return "CONTRADICTED"
+    if _TRUE.search(r):
+        return "SUPPORTED"
+    return None
+
+
+def as_leads(found: List[Dict[str, str]]) -> str:
+    """Published fact-checks as a hint for the web search step."""
+    lines = []
+    for f in found[:MAX_SHOWN]:
+        when = f" ({f['date']})" if f.get("date") else ""
+        lines.append(f"{f['publisher']}{when} rated a similar claim \u201c{f['rating']}\u201d: "
+                     f"\u201c{f.get('claim') or f.get('title')}\u201d {f['url']}")
+    if not lines:
+        return ""
+    return ("Published fact-checks of similar claims (they may concern another year, person or "
+            "figure, so check that they match before relying on one): " + " | ".join(lines))

@@ -27,6 +27,19 @@ from utils import spend_guard
 _CACHE_TTL = 24 * 3600
 _MAX_WORDS = 60
 _DIGIT_RE = re.compile(r"\d")
+_WORD_RE = re.compile(r"[A-Za-z]{2,}")
+# Judgement words in a claim with no number: an opinion, declined before any
+# spend. A claim with a figure is checked whatever adjectives surround it.
+_OPINION_RE = re.compile(
+    r"\b(?:best|worst|greatest|out of control|should|shouldn't|ought to|deserves?|"
+    r"overrated|underrated|terrible|awful|horrible|amazing|wonderful|beautiful|ugly|"
+    r"stupid|dumb|evil|disgrace(?:ful)?|disaster|i think|i believe|i feel|in my (?:opinion|view)|"
+    r"favou?rite|tastes?|delicious|boring|exciting|corrupt|incompetent|genius|"
+    r"the (?:only|real) (?:reason|problem))\b", re.I)
+# "Is the unemployment rate 4%?" asks about a statement, and is checked as one.
+_YES_NO_RE = re.compile(r"^\s*(?:is|are|was|were|did|does|do|has|have|had|can|could|will|"
+                        r"would|should|isn't|aren't|wasn't|weren't|didn't|doesn't|don't|"
+                        r"hasn't|haven't)\b(?!\s+(?:you|claude)\b)", re.I)
 # A claim is a statement about the world. Text that instructs the model
 # ("ignore…", "write…", "pretend…") is not a claim, whatever numbers it
 # contains, and is declined before anything is spent.
@@ -49,13 +62,18 @@ def gate(claim: str, names_a_metric: bool) -> Optional[str]:
                 f"{config.AI_MAX_CLAIM_CHARS}). Highlight a single sentence with one figure.")
     if len(text.split()) > _MAX_WORDS:
         return "The claim is too long to check. Highlight a single sentence with one figure."
-    if _INSTRUCTION_RE.search(text) or text.endswith("?"):
+    if _INSTRUCTION_RE.search(text) or (text.endswith("?") and not _YES_NO_RE.match(text)):
         return ("That reads as a question or an instruction, not a claim. Highlight a "
-                "statement of fact with a figure in it, e.g. \u201cThe unemployment rate "
-                "was 3.6% in 2023.\u201d")
+                "statement of fact, e.g. \u201cThe unemployment rate was 3.6% in 2023.\u201d")
+    # A claim with no number ("Vaccines cause autism", "The CHIPS Act was signed
+    # in August") is still checkable against the record. It needs a few words to
+    # be a statement at all; an opinion comes back as not checkable without a search.
     if not _DIGIT_RE.search(text) and not names_a_metric:
-        return ("The claim states no figure or official statistic that can be checked "
-                "against published data.")
+        if len(_WORD_RE.findall(text)) < 3:
+            return "That is too short to be a claim that can be checked."
+        if _OPINION_RE.search(text):
+            return ("That reads as an opinion, with no figure or fact that can be checked "
+                    "against published data.")
     return None
 
 
@@ -84,7 +102,8 @@ def ttl_for(claim: str) -> int:
 
 
 def _cache_key(claim: str, hint: str) -> str:
-    return hashlib.sha256(f"{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
+    # "v2": answers now name the page relied on; older cached ones do not.
+    return hashlib.sha256(f"v2|{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
 
 
 def _from_dict(d: dict) -> GroundedAnswer:
@@ -117,7 +136,8 @@ async def _cache_put(key: str, g: GroundedAnswer, ttl: int = _CACHE_TTL) -> None
 
 
 async def search(claim: str, hint: str = "", *, client_ip: Optional[str] = None,
-                 names_a_metric: bool = False) -> GroundedAnswer:
+                 names_a_metric: bool = False,
+                 leads: Optional[list] = None) -> GroundedAnswer:
     provider = config.AI_SEARCH_PROVIDER
     if provider not in ("claude", "gemini"):
         return GroundedAnswer(ok=False, error="Web search is turned off.", model_calls=0, skipped=True)
@@ -139,10 +159,11 @@ async def search(claim: str, hint: str = "", *, client_ip: Optional[str] = None,
 
     if provider == "claude":
         from evidence import claude_search
-        g = await claude_search.ground_claim(claim, context_hint=hint)
+        g = await claude_search.ground_claim(claim, context_hint=hint, known_pages=leads or [])
     else:
         g = await gemini_ground_claim(claim, context_hint=hint)
 
+    g.leads = list(leads or [])
     if g.ok:
         await _cache_put(key, g, ttl)
     return g

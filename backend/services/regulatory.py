@@ -103,7 +103,7 @@ _NUTRITION_HINT = (
 
 def topic(text: str) -> str:
     """What a claim is about, for routing a miss to search: "fda", "ftc",
-    "food_cost", "nutrition" or ""."""
+    "food_cost", "nutrition", "crime", "health" or ""."""
     t = text or ""
     if _FDA_TOPIC.search(t):
         return "fda"
@@ -111,24 +111,37 @@ def topic(text: str) -> str:
         return "ftc"
     if _FOOD_COST_TOPIC.search(t):
         return "food_cost"
-    from services import nutrition
+    from services import crime, health, nutrition
     if nutrition.read(t) is not None:
         return "nutrition"
+    if crime.read(t) is not None:
+        return "crime"
+    if health.read(t) is not None:
+        return "health"
     return ""
 
 
 def search_hint(text: str) -> str:
     """Where the web search should look, when the free check could not settle it."""
+    from services import crime, health
     return {"fda": _FDA_HINT, "ftc": _FTC_HINT, "food_cost": _FOOD_COST_HINT,
-            "nutrition": _NUTRITION_HINT}.get(topic(text), "")
+            "nutrition": _NUTRITION_HINT, "crime": crime.SEARCH_HINT,
+            "health": health.SEARCH_HINT}.get(topic(text), "")
 
 
 async def check(text: str, parsed) -> Optional[Verdict]:
-    """An FDA or FTC claim checked against the agency's record, or None."""
-    from services import fda, ftc, nutrition
+    """A claim checked against the publisher's own record (FDA, FTC, USDA,
+    FBI, CDC, World Bank), or None."""
+    from services import crime, fda, ftc, health, nutrition, worldbank
     v = await fda.check(text, parsed)
     if v is None:
         v = await ftc.check(text, parsed)
     if v is None:
         v = await nutrition.check(text, parsed)
+    if v is None:
+        v = await crime.check(text, parsed)
+    if v is None:
+        v = await health.check(text, parsed)
+    if v is None:
+        v = await worldbank.check(text, parsed)
     return v
