@@ -51,6 +51,9 @@ _AGENCY_NAMES = {
     "USASPENDING": "USAspending.gov",
     "CONGRESS": "U.S. Congress, Congress.gov",
     "FRED": "Federal Reserve Bank of St. Louis",
+    "HUD": "U.S. Department of Housing and Urban Development",
+    "FDA": "U.S. Food and Drug Administration",
+    "FTC": "Federal Trade Commission",
 }
 
 # How an agency is referred to mid-sentence, where the full legal name would
@@ -63,6 +66,9 @@ _AGENCY_SHORT = {
     "USASPENDING": "USAspending",
     "CONGRESS": "Congress.gov",
     "FRED": "FRED",
+    "HUD": "HUD",
+    "FDA": "FDA",
+    "FTC": "FTC",
 }
 
 _MONTHS = (
@@ -161,6 +167,8 @@ def dataset_name(source: str, series_id: Optional[str], basis: str = "") -> str:
         if sid.startswith("MTS"):
             return "Monthly Treasury Statement"
         return "Fiscal Data"
+    if source in ("FDA", "FTC", "HUD"):
+        return (basis or "").split(",")[0]
     return ""
 
 
