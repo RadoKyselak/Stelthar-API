@@ -604,10 +604,17 @@ async def verify(claim: str, allow_grounding: bool = True,
             computed = await ami.check(parse_text, parsed)
             if computed is not None and computed.verdict == NO_VERDICT:
                 computed = None
+    how = "computed from the full official series; no model call"
+    if computed is None:
+        # What a regulator did: FDA approvals, labels, recalls, shortages;
+        # FTC fraud data and rules. The agency's own record, read for free.
+        from services import regulatory
+        computed = await regulatory.check(parse_text, parsed)
+        how = "checked against the agency's own record; no model call"
     if computed is not None:
         # The computed check covers the whole claim, records included.
         result = _verdict_to_result(text, replace(parsed, aside=office_note), computed, started)
-        result.notes.append("computed from the full official series; no model call")
+        result.notes.append(how)
         return result
 
     if blocked is None and _is_two_point(parsed):
@@ -742,10 +749,15 @@ async def verify(claim: str, allow_grounding: bool = True,
     if got is not None:
         return got
     # Then Claude, with the same datasets as tools: about $0.002, against a
-    # web search's ~$0.03, and the figure is still the agency's own.
-    ds = await dataset_tier.verify_found(text, parsed, client_ip, started)
-    if ds is not None:
-        return ds
+    # web search's ~$0.03, and the figure is still the agency's own. Those
+    # tools hold statistics, not FDA or FTC records, so an FDA or FTC claim
+    # goes straight to search.
+    from services import regulatory
+    reg_hint = regulatory.search_hint(text)
+    if not reg_hint:
+        ds = await dataset_tier.verify_found(text, parsed, client_ip, started)
+        if ds is not None:
+            return ds
 
     hint = ""
     if parsed.structured_blocker and parsed.metric is not None:
@@ -779,7 +791,13 @@ async def verify(claim: str, allow_grounding: bool = True,
             f"the claim gives a definition, such as a range for \u201cmiddle income\u201d, say "
             f"whose definition it matches, if any; there is no single official one."
         )
-    g = await _safe_ground(text, hint, client_ip, parsed.metric is not None)
+    if reg_hint:
+        # The free check read the agency's record and could not settle it (a
+        # product it could not find, a year the data does not carry, a recall
+        # another agency ran). Claude searches, told where the record lives.
+        # These claims often state no number, so the figure gate does not apply.
+        hint = f"{hint} {reg_hint}".strip()
+    g = await _safe_ground(text, hint, client_ip, parsed.metric is not None or bool(reg_hint))
     if not g.ok and g.skipped:
         # Deliberately not sent: a limit, or a claim the gate keeps away from
         # the paid tier. Not an outage, and nothing was spent.

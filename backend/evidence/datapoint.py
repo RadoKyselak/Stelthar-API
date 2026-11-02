@@ -262,6 +262,9 @@ class Datapoint:
         agency with less precision than it published, which matters most
         beside a claim that differs in exactly that digit.
         """
+        shown = (self.extra or {}).get("display")
+        if shown:
+            return str(shown)  # a fact, not a figure: "Approved June 4, 2021"
         raw = str(self.raw_value or "").strip().replace(",", "")
         mag, fam = self.quantity.magnitude, self.quantity.family
         try:

@@ -17,6 +17,10 @@ BLS_API_KEY = os.getenv("BLS_API_KEY")
 # https://www.huduser.gov/hudapi/public/register
 HUD_API_TOKEN = os.getenv("HUD_API_TOKEN")
 HUD_API_BASE = os.getenv("HUD_API_BASE", "https://www.huduser.gov/hudapi/public")
+# openFDA works without a key (1,000 requests a day per address); a free key
+# from https://open.fda.gov/apis/authentication/ raises that to 120,000.
+OPENFDA_API_KEY = os.getenv("OPENFDA_API_KEY")
+OPENFDA_BASE = os.getenv("OPENFDA_BASE", "https://api.fda.gov")
 
 # search.gov (search.usa.gov) — free federal-site search, the research harness
 # for anything the structured sources below can't answer. Sign up at

@@ -157,6 +157,12 @@ def computed_checks_offline(monkeypatch):
     monkeypatch.setattr(derived, "_rows", no_rows)
     monkeypatch.setattr(derived, "_bls_monthly", no_rows)
     monkeypatch.setattr(derived, "_debt_held_by_public", lambda *a, **k: _none())
+    # openFDA: nothing found unless a test supplies records.
+    from evidence.sources import openfda
+
+    async def no_fda(*a, **k):
+        return {"results": [], "total": 0}
+    monkeypatch.setattr(openfda, "_get", no_fda)
 
 
 async def _none():
