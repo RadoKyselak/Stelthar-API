@@ -290,7 +290,9 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
         item = _singular(r.food.split()[-1])
         serving = bool(re.search(r"\bserving\b", r.text, re.I))
         preds = [(lambda t: re.match(r"^(?:[\d.]+\s+)?large\b", t)) if egg else
-                 (lambda t: re.match(r"^(?:[\d.]+\s+)?medium\b", t)),
+                 # "1 medium (7\" to 7-7/8\" long)", "1 medium breast"; not "1 medium slice"
+                 (lambda t: re.match(r"^(?:[\d.]+\s+)?medium\b", t)
+                  and not re.search(r"\b(slices?|cups?|pieces?|oz|strips?|tbsp|tablespoons?|cubes?)\b", t)),
                  # "1 avocado, NS as to Florida or California", "1 fruit", "1 whole"
                  lambda t: re.search(rf"^(?:1(?:\.0)?\s+)?(?:{re.escape(item)}s?\b|fruit\b|whole\b|item\b|each\b)", t)]
         if serving:

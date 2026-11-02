@@ -64,9 +64,12 @@ FOODS[2705000] = {"fdcId": 2705000, "description": "Bread, whole wheat", "dataTy
                   "foodNutrients": [_n(1008, "Energy", "kcal", 254.0)],
                   "foodPortions": [_p(None, 43.0, "1 large or thick slice"), _p(None, 32.0, "1 slice"),
                                    _p(None, 10.0, "1 thin slice, crust not eaten")]}
+FOODS[2706500] = {"fdcId": 2706500, "description": "Chicken breast, baked, broiled, or roasted, skin not eaten, from raw",
+                  "dataType": "Survey (FNDDS)", "foodNutrients": [_n(1003, "Protein", "g", 30.5)],
+                  "foodPortions": [_p(None, 60.0, "1 medium slice breast"), _p(None, 172.0, "1 medium breast")]}
 SEARCH = {
     "banana": [2709224, 173945, 173944], "bananas": [2709224, 173945, 173944],
-    "egg": [2707205, 171287], "salmon": [2706000, 175168], "broccoli": [169967], "whole wheat bread": [2705000], "orange": [169097, 169917], "cooked oatmeal": [2709000], "almonds": [170567], "avocado": [171705],
+    "egg": [2707205, 171287], "salmon": [2706000, 175168], "broccoli": [169967], "chicken breast": [2706500], "whole wheat bread": [2705000], "orange": [169097, 169917], "cooked oatmeal": [2709000], "almonds": [170567], "avocado": [171705],
 }
 
 
@@ -98,6 +101,7 @@ def fdc(monkeypatch, tmp_path):
     ("3 ounces of salmon has 22 grams of protein.", MOSTLY_ACCURATE),  # plain salmon, 85 g: 18.8
     ("A cup of broccoli has 80 mg of vitamin C.", SUPPORTED),      # 91 g: 81
     ("A large egg has 72 calories.", SUPPORTED),
+    ("A chicken breast has 54 grams of protein.", SUPPORTED),       # a whole medium breast, 172 g: 52
     ("A slice of whole wheat bread has 80 calories.", SUPPORTED),  # a plain slice, 32 g: 81                   # "large", not "cup (4.86 large eggs)"
     ("An orange has 70 mg of vitamin C.", SUPPORTED),              # without the peel: 131 g, 70
     ("A cup of cooked oatmeal has 166 calories.", SUPPORTED),      # "made with water": 166
