@@ -103,7 +103,7 @@ def ttl_for(claim: str) -> int:
 
 def _cache_key(claim: str, hint: str) -> str:
     # Bumped when the prompt changes: "v4": a second search for a reliable page.
-    return hashlib.sha256(f"v4|{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
+    return hashlib.sha256(f"v5|{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
 
 
 def _from_dict(d: dict) -> GroundedAnswer:

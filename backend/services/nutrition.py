@@ -322,6 +322,15 @@ _UNIT_LIKE = re.compile(r"^(cups?|tablespoons?|tbsps?|teaspoons?|tsps?|slices?|p
 _WORDS = {1: "one", 2: "two", 3: "three", 0.5: "half a", 4: "four"}
 
 
+def _named(r: Read) -> str:
+    """The food as the claim wrote it ("McDonald's Big Mac", not "mac"), for a
+    name of more than one word; else its last word."""
+    if len(r.food.split()) > 1:
+        m = re.search(re.escape(r.food), r.text, re.I)
+        return m.group(0) if m else r.food
+    return _singular(r.food.split()[-1])
+
+
 def _phrase(portion: str, r: Read) -> str:
     """"medium (7\" to 7-7/8\" long)" -> "one medium banana";
     "tablespoon" x2 -> "two tablespoons of peanut butter"."""
@@ -332,16 +341,14 @@ def _phrase(portion: str, r: Read) -> str:
     cw = _WORDS.get(r.count, f"{r.count:g}")
     if re.match(r"^(fruit|whole|item|each)\b", shown, re.I):
         rest = re.sub(r"^(fruit|whole|item|each)\b\s*", "", shown, flags=re.I).strip(" ,")
-        return f"{cw} {item}" + (f" ({rest})" if rest else "")
+        return f"{cw} {_named(r) if r.count == 1 else item}" + (f" ({rest})" if rest else "")
     if _UNIT_LIKE.match(shown):
         first, _, more = shown.split(",")[0].strip().partition(" ")
         if r.count > 1 and not first.endswith("s"):
             first += "s"
         return f"{cw} {first}{(' ' + more) if more else ''} of {r.food}"
-    if shown.lower() == item and len(r.food.split()) > 1:
-        # "mac" for a Big Mac: the product's name, as the claim wrote it.
-        m = re.search(re.escape(r.food), r.text, re.I)
-        return f"{cw} {m.group(0) if m else r.food}"
+    if shown.lower() == item and len(r.food.split()) > 1 and r.count == 1:
+        return f"{cw} {_named(r)}"
     if item in shown.lower():
         return f"{cw} {shown}"
     return f"{cw} {shown} {item}"

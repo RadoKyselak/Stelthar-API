@@ -107,9 +107,10 @@ def _alnum(s: str) -> str:
 
 
 def own_site(url_or_host: str, claim: str) -> bool:
-    """True when the site's name is a company the claim names: coca-cola.com
-    for "Coca-Cola", mcdonalds.com for "McDonald's". A site does not qualify by
-    naming itself as the source; the claim has to name it."""
+    """True when the site is the claim's own subject: coca-cola.com for
+    "Coca-Cola", mcdonalds.com for "McDonald's", toureiffel.paris for "the
+    Eiffel Tower". A site does not qualify by naming itself as the source; the
+    claim has to name it."""
     host = _host(url_or_host)
     labels = [l for l in host.split(".") if l]
     if len(labels) < 2:
@@ -133,7 +134,15 @@ def own_site(url_or_host: str, claim: str) -> bool:
             if name in _EVERYDAY and i == 0:
                 continue
             return True
-    return False
+    # The subject's own site, its name in any order with at most one short
+    # extra word: toureiffel.paris for "The Eiffel Tower". Not parisfoodblog.com.
+    rest, used = name, 0
+    for w in sorted({_alnum(w) for w in words if w[:1].isupper() and len(_alnum(w)) >= 4},
+                    key=len, reverse=True):
+        if w in rest and w not in _EVERYDAY:
+            rest = rest.replace(w, "", 1)
+            used += len(w)
+    return used >= 5 and len(rest) <= 4
 
 
 # Brands that are also ordinary words: "Apple" opening a sentence is a fruit

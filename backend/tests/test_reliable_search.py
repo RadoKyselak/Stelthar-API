@@ -252,6 +252,9 @@ async def test_source_tiers(host, tier):
     ("apple.com", "An apple has 95 calories.", False),                  # a fruit, not a company
     ("apple.com", "Apple has 95 calories.", False),                     # an everyday word opening a sentence
     ("www.healthline.com", "A Big Mac has 590 calories.", False),       # a site cannot name itself in
+    ("www.toureiffel.paris", "The Eiffel Tower is in Berlin.", True),   # the subject's own site
+    ("parisfoodblog.com", "The best croissant in Paris costs 2 euros.", False),
+    ("www.nasa.gov", "NASA landed on the Moon in 1969.", True),         # its own site (official anyway)
 ])
 async def test_own_site(host, claim, own):
     assert source_quality.own_site(host, claim) is own
@@ -262,7 +265,7 @@ async def test_the_makers_page_backs_a_product_claim_at_medium(monkeypatch):
     fake(monkeypatch, response(answer(org="The Coca-Cola Company", url=page[0]), APPS + [page]))
     v = await run("A 12-ounce can of Coca-Cola has 140 calories.")
     assert v.verdict == verify_v2.SUPPORTED and v.confidence == verify_v2.MEDIUM
-    assert any("own figure for its product" in c for c in v.caveats)
+    assert any("own site" in c for c in v.caveats)
     assert v.citations[0]["url"] == page[0]
 
 
