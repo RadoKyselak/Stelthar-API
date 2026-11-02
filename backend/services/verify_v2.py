@@ -21,9 +21,10 @@ answer different kinds of question.
 is one whose cost grows.
 """
 import asyncio
+import re
 import time
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from claims.metrics import MetricSpec
 from claims.parser import ParsedClaim, parse_claim
@@ -257,8 +258,15 @@ async def _safe_ground(text: str, hint: str, client_ip: Optional[str] = None,
                        names_a_metric: bool = False) -> GroundedAnswer:
     """The paid AI tier, behind its gate and spend limits. Never raises."""
     try:
+        # Published fact-checks of the claim, already being fetched by the
+        # endpoint: leads for the search, and a second opinion on its answer.
+        from evidence import fact_checks
+        leads = await fact_checks.peek(fact_checks.CURRENT.get())
+        lead_text = fact_checks.as_leads(leads)
+        if lead_text:
+            hint = f"{hint} {lead_text}".strip()
         return await ai_search.search(text, hint, client_ip=client_ip,
-                                      names_a_metric=names_a_metric)
+                                      names_a_metric=names_a_metric, leads=leads)
     except Exception as e:  # noqa: BLE001 — verify() promises never to raise
         logger.exception("Grounded search raised for %r", text[:120])
         return GroundedAnswer(ok=False, error=f"internal error: {type(e).__name__}")
@@ -297,6 +305,9 @@ def _grounded_to_result(
         reason = NOT_EMPIRICAL
     elif g.verdict == "NO_EVIDENCE":
         reason = NO_SERIES
+
+    if not g.span_attribution:
+        return _graded_result(claim, parsed, g, verdict, reason, started)
 
     # Confidence from what the grounding actually returned, not from how
     # decisive the model sounded.
@@ -351,6 +362,108 @@ def _grounded_to_result(
         reported={"value": g.official_value or "", "period": g.period or "",
                   "source_org": g.source_org or "", "explanation": g.explanation or ""},
     )
+
+
+# Which way a verdict points, for comparing with a published fact-check's
+# rating (evidence.fact_checks.stance gives the model's labels).
+_SIDE = {"SUPPORTED": "true", "MOSTLY_ACCURATE": "true", "CONTRADICTED": "false",
+         "MISLEADING": "mixed"}
+
+
+def _graded_result(claim: str, parsed: ParsedClaim, g: GroundedAnswer, verdict: str,
+                   reason: Optional[str], started: float) -> VerificationV2:
+    """A web-search answer judged by the one page it says it relied on.
+
+    The verdict stands only if that page was really returned by the search and
+    is official (the agency that publishes the figure) or reliable (a
+    professional fact-checker, research institute, journal or newspaper of
+    record). Confidence then follows the page, not the model's tone:
+      High    the publisher of the figure, giving the figure and its period;
+              or a reliable page that a published fact-check agrees with
+      Medium  a reliable page alone; an official page without the claim's
+              figure or period; or a published fact-check that disagrees
+    """
+    from evidence import fact_checks, source_quality as sq
+    elapsed = round(time.monotonic() - started, 2)
+    decisive = verdict in (SUPPORTED, MOSTLY_ACCURATE, CONTRADICTED, MISLEADING)
+    tier = g.source_tier
+    pages = [f.get("url", "") for f in g.leads]
+    shown = [c for c in g.citations if sq.tier(c.uri, pages, claim) in (sq.OFFICIAL, sq.RELIABLE)]
+
+    def cite(c) -> Dict[str, Any]:
+        t = sq.tier(c.uri, pages, claim)
+        return {"title": c.title, "url": c.uri, "domain": c.domain,
+                "is_official_source": t == sq.OFFICIAL,
+                "reliability": t, "quote": getattr(c, "quote", "") or ""}
+
+    if decisive and tier not in (sq.OFFICIAL, sq.RELIABLE):
+        return VerificationV2(
+            claim=claim, verdict=NO_VERDICT, confidence=LOW,
+            headline=("No official or reliable source could be found for this claim, so no "
+                      "verdict is given."),
+            reason=NO_SOURCE, tier=TIER_GROUNDED, model_calls=g.model_calls,
+            elapsed_seconds=elapsed, parsed=_parsed_summary(parsed),
+            citations=[cite(c) for c in shown],
+            notes=[f"search queries: {', '.join(g.search_queries)}"] if g.search_queries else [],
+        )
+
+    caveats: List[str] = []
+    confidence = LOW
+    if decisive:
+        side = _SIDE[g.verdict]
+        rated = [(f, _SIDE.get(fact_checks.stance(f.get("rating", "")) or "")) for f in g.leads]
+        agree = [f for f, s in rated if s == side]
+        disagree = [f for f, s in rated if s and s != side]
+        states_figure = parsed.claimed_value is not None
+        if tier == sq.OFFICIAL:
+            confidence = HIGH
+            if states_figure and not g.official_value:
+                confidence = MEDIUM
+                caveats.append("The official page did not give a figure to compare with the claim's.")
+            elif parsed.year and not g.period:
+                confidence = MEDIUM
+                caveats.append("The official page does not say which period its figure covers.")
+        else:
+            confidence = HIGH if agree else MEDIUM
+            who = g.source_org or (_host_of(g.source_url))
+            if sq.own_site(g.source_url, claim):
+                caveats.append(f"This rests on {_host_of(g.source_url)}, the subject's own site; "
+                               f"no government record of it was found.")
+            else:
+                caveats.append(f"Checked against {who}, not the agency that publishes the figure.")
+        if disagree:
+            f = disagree[0]
+            confidence = MEDIUM if confidence == HIGH else confidence
+            caveats.append(f"{f['publisher']} rated a similar claim “{f['rating']}”.")
+        elif agree and tier == sq.OFFICIAL:
+            f = agree[0]
+            caveats.append(f"{f['publisher']} reached the same conclusion (“{f['rating']}”).")
+
+    headline = g.explanation or g.answer_text.strip()[:400]
+    if g.official_value:
+        period = f" ({g.period})" if g.period else ""
+        org = f" — {g.source_org}" if g.source_org else ""
+        headline = f"Reported figure: {g.official_value}{period}{org}. {headline}"
+
+    source = next((c for c in shown if g.source_url and c.uri == g.source_url), None)
+    ordered = ([source] if source else []) + [c for c in shown if c is not source]
+    return VerificationV2(
+        claim=claim, verdict=verdict, confidence=confidence, headline=headline, reason=reason,
+        official_value=g.official_value or None, caveats=caveats,
+        citations=[cite(c) for c in ordered],
+        tier=TIER_GROUNDED, model_calls=g.model_calls, elapsed_seconds=elapsed,
+        parsed=_parsed_summary(parsed),
+        search_suggestions_html=g.search_suggestions_html or None,
+        notes=[f"search queries: {', '.join(g.search_queries)}"] if g.search_queries else [],
+        reported={"value": g.official_value or "", "period": g.period or "",
+                  "source_org": g.source_org or "", "explanation": g.explanation or ""},
+    )
+
+
+def _host_of(url: str) -> str:
+    from urllib.parse import urlparse
+    h = (urlparse(url or "").netloc or "").lower()
+    return h.removeprefix("www.") or "a secondary source"
 
 
 def _parsed_summary(parsed: ParsedClaim) -> Dict[str, Any]:
@@ -564,9 +677,59 @@ def datetime_now_year() -> int:
     return datetime.now(timezone.utc).year
 
 
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?;])\s+(?=[A-Z0-9\"\u201c$])|\n+")
+_FIGURE = re.compile(r"\d")
+_YEAR_ONLY = re.compile(r"^(?:19|20)\d\d$")
+
+
+def one_sentence(text: str) -> Tuple[str, bool]:
+    """A highlighted paragraph, cut to the sentence most worth checking: the one
+    with a figure in it, an official statistic named, and the most specifics.
+    Returns (sentence, whether it was cut)."""
+    limit = config.AI_MAX_CLAIM_CHARS
+    if len(text) <= limit and len(text.split()) <= 60:
+        return text, False
+    parts = [p.strip() for p in _SENTENCE_SPLIT.split(text) if p and p.strip()]
+    best, best_score = None, -1.0
+    for i, p in enumerate(parts):
+        if len(p) > limit or len(p.split()) < 4:
+            continue
+        nums = re.findall(r"\d[\d,.]*", p)
+        score = 0.0
+        if any(not _YEAR_ONLY.match(n.rstrip(".,")) for n in nums):
+            score += 3
+        if nums:
+            score += 1
+        try:
+            if parse_claim(p).metric is not None:
+                score += 2
+        except Exception:  # noqa: BLE001
+            pass
+        from services import regulatory
+        if regulatory.topic(p):
+            score += 1
+        score -= i * 0.01  # earlier sentences win ties
+        if score > best_score:
+            best, best_score = p, score
+    if best is None:
+        # No sentence fits: the start of the text, cut at a word.
+        best = text[:limit].rsplit(" ", 1)[0]
+    return best, True
+
+
 async def verify(claim: str, allow_grounding: bool = True,
                  client_ip: Optional[str] = None) -> VerificationV2:
-    """Verify a claim. Never raises; every failure becomes a stated reason."""
+    """Verify a claim. Never raises; every failure becomes a stated reason.
+    A paragraph is checked one sentence at a time: the most checkable one."""
+    text, cut = one_sentence((claim or "").strip())
+    v = await _verify_one(text, allow_grounding, client_ip)
+    if cut:
+        v.caveats = [f"Only one sentence of the highlighted text was checked: \u201c{text}\u201d"] + list(v.caveats)
+    return v
+
+
+async def _verify_one(claim: str, allow_grounding: bool = True,
+                      client_ip: Optional[str] = None) -> VerificationV2:
     started = time.monotonic()
     text = (claim or "").strip()
     if not text:
@@ -803,7 +966,8 @@ async def verify(claim: str, allow_grounding: bool = True,
         # the paid tier. Not an outage, and nothing was spent.
         return VerificationV2(
             claim=text, verdict=NO_VERDICT, confidence=LOW,
-            headline=g.error if g.limited else f"{unresolved_headline} {g.error}",
+            headline=(g.error if g.limited or g.error.startswith("That reads as")
+                      else f"{unresolved_headline} {g.error}"),
             reason=unresolved_reason,
             tier=TIER_NONE, model_calls=0,
             elapsed_seconds=round(time.monotonic() - started, 2),

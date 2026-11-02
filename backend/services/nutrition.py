@@ -18,7 +18,7 @@ and are left alone.
 """
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from claims.verdict import CONTRADICTED, HIGH, MEDIUM, MOSTLY_ACCURATE, SUPPORTED, Verdict
 from config import logger
@@ -311,7 +311,10 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
     text, grams, amount = p
     per_one = grams / (amount or 1)
     total = per_one * r.count
-    return total, f"{_phrase(text, r)} ({total:.0f} g)", not r.stated_portion
+    # A food sold in one size (a Big Mac) has no size to assume.
+    one_size = not any(_SIZE.search(x[0] or "") for x in ps)
+    assumed = not r.stated_portion and not (one_size and not r.portion_unit and not r.size)
+    return total, f"{_phrase(text, r)} ({total:.0f} g)", assumed
 
 
 _UNIT_LIKE = re.compile(r"^(cups?|tablespoons?|tbsps?|teaspoons?|tsps?|slices?|pieces?|oz|ounces?|servings?|"
@@ -319,21 +322,33 @@ _UNIT_LIKE = re.compile(r"^(cups?|tablespoons?|tbsps?|teaspoons?|tsps?|slices?|p
 _WORDS = {1: "one", 2: "two", 3: "three", 0.5: "half a", 4: "four"}
 
 
+def _named(r: Read) -> str:
+    """The food as the claim wrote it ("McDonald's Big Mac", not "mac"), for a
+    name of more than one word; else its last word."""
+    if len(r.food.split()) > 1:
+        m = re.search(re.escape(r.food), r.text, re.I)
+        return m.group(0) if m else r.food
+    return _singular(r.food.split()[-1])
+
+
 def _phrase(portion: str, r: Read) -> str:
     """"medium (7\" to 7-7/8\" long)" -> "one medium banana";
     "tablespoon" x2 -> "two tablespoons of peanut butter"."""
     shown = re.sub(r"\s*\([^)]*\)", "", re.sub(r"^\d+(?:\.\d+)?\s+", "", portion)).strip(" ,")
+    shown = re.sub(r"\s*\(.*$", "", shown).strip(" ,")  # an unclosed "(7.6 oz"
     shown = re.sub(r",?\s*NS as to .*$", "", shown, flags=re.I).strip(" ,")
     item = _singular(r.food.split()[-1])
     cw = _WORDS.get(r.count, f"{r.count:g}")
     if re.match(r"^(fruit|whole|item|each)\b", shown, re.I):
         rest = re.sub(r"^(fruit|whole|item|each)\b\s*", "", shown, flags=re.I).strip(" ,")
-        return f"{cw} {item}" + (f" ({rest})" if rest else "")
+        return f"{cw} {_named(r) if r.count == 1 else item}" + (f" ({rest})" if rest else "")
     if _UNIT_LIKE.match(shown):
         first, _, more = shown.split(",")[0].strip().partition(" ")
         if r.count > 1 and not first.endswith("s"):
             first += "s"
         return f"{cw} {first}{(' ' + more) if more else ''} of {r.food}"
+    if shown.lower() == item and len(r.food.split()) > 1 and r.count == 1:
+        return f"{cw} {_named(r)}"
     if item in shown.lower():
         return f"{cw} {shown}"
     return f"{cw} {shown} {item}"
@@ -345,6 +360,29 @@ def _fmt(v: float, unit: str) -> str:
     if v >= 10:
         return f"{v:.0f} {unit}"
     return f"{v:.1f} {unit}".replace(".0 ", " ")
+
+
+_SIZE = re.compile(r"\b(?:extra small|small|medium|large|extra large|jumbo)\b", re.I)
+
+
+def _unsettled(r: Read, d: Dict[str, Any], assumed: bool, grams: float,
+               official: float, claimed: float) -> bool:
+    """True when a contradiction rests on something the claim left open:
+      - no preparation named, while the entry is a cooked one (boiled, fried...)
+      - no size named, and some size USDA lists for the food comes within 25%
+        ("a banana has 200 calories" is wrong at every size; it stays wrong)"""
+    said = {x.lower() for x in _COOKING.findall(r.text)}
+    cooked = {x.lower() for x in _COOKING.findall(d.get("description", ""))} - {"raw", "uncooked", "dry"}
+    if cooked and not said:
+        return True
+    if not (assumed or not r.stated_portion) or not grams or not official:
+        return False
+    sizes = [g for text, g, *_ in d.get("portions") or [] if _SIZE.search(text or "") and g]
+    for g in sizes or [grams]:
+        at = official * g / grams
+        if at and abs(claimed - at) / at <= 0.25:
+            return True
+    return False
 
 
 async def check(text: str, parsed) -> Optional[Verdict]:
@@ -402,6 +440,14 @@ async def run(r: Read) -> Optional[Verdict]:
         else:
             outcome = CONTRADICTED
     food_name = d["description"]
+    if outcome == CONTRADICTED and _unsettled(r, d, assumed, grams, official, claimed):
+        # "A medium potato has 160 calories": USDA's as-eaten potato is boiled
+        # (214), its baked one 161. A claim that leaves the size or the
+        # preparation open is not contradicted by one reading of it; the web
+        # search step checks it, told where USDA's figures are.
+        logger.info("Nutrition: %r is off from %r, but the portion or preparation was assumed",
+                    r.text[:80], food_name)
+        return None
     official_s = _fmt(official, shown_unit)
     label = f"{r.nutrient.capitalize()} in {how}"
     dp = fact("USDA", label, official_s,

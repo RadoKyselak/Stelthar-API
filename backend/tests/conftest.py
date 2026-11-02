@@ -169,6 +169,16 @@ def computed_checks_offline(monkeypatch):
     async def no_food(*a, **k):
         return None
     monkeypatch.setattr(fooddata, "_get", no_food)
+    # World Bank: no countries unless a test supplies them.
+    from evidence.sources import worldbank
+    monkeypatch.setattr(worldbank, "_get", no_food)
+    # FBI Crime Data Explorer and CDC: nothing unless a test supplies it.
+    from evidence.sources import cdc, fbi_crime
+    monkeypatch.setattr(fbi_crime, "_get", no_food)
+
+    async def no_cdc(*a, **k):
+        return []
+    monkeypatch.setattr(cdc, "_get", no_cdc)
 
 
 async def _none():

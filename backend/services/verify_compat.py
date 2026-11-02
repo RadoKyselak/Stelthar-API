@@ -134,6 +134,7 @@ async def verify(claim: str, client_ip: Optional[str] = None) -> Dict[str, Any]:
     degraded response at least says the outage is ours."""
     from evidence import fact_checks
     related = fact_checks.start(claim)
+    token = fact_checks.CURRENT.set(related)
     try:
         v = await verify_v2(claim, client_ip=client_ip)
     except Exception:  # noqa: BLE001
@@ -145,5 +146,7 @@ async def verify(claim: str, client_ip: Optional[str] = None) -> Dict[str, Any]:
                       "This is not a judgment about the claim."),
             reason="source_unavailable", notes=["degraded: internal error"],
         )
+    finally:
+        fact_checks.CURRENT.reset(token)
     v.fact_checks = await fact_checks.finish(related)
     return to_legacy_shape(v)
