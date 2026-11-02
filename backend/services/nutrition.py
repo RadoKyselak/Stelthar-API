@@ -70,7 +70,8 @@ _BAD = ("dried", "dehydrated", "powder", "juice", "oil", "candies", "candy", "ba
         "snacks", "chips", "bread", "bagel", "cracker", "substitute", "flavored", "dessert", "cake",
         "pie", "muffin", "nectar", "imitation", "sauce", "soup", "salad", "sandwich", "smoothie",
         "benedict", "creamed", "deviled", "omelet", "casserole", "fritter", "pudding", "yogurt",
-        "cheese", "glutinous", "as ingredient", "infant formula", "sweetened")
+        "cheese", "glutinous", "as ingredient", "infant formula", "sweetened", "coated", "breaded",
+        "battered", "fried", "coating eaten", "skin eaten")
 _COOKING = re.compile(r"\b(cooked|baked|roasted|boiled|broiled|grilled|fried|steamed|scrambled|poached|stewed|"
                       r"sauteed|microwaved|canned|raw|uncooked|dry)\b", re.I)
 
@@ -269,8 +270,8 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
                 and (not r.size or r.size in x[0].lower())]
         def plain(x):  # a normal slice or a cup of the whole food before thin slices or puree
             t = x[0].lower()
-            odd = bool(re.search(r"\b(thin|crust|mini|snack|small|very|mashed|pureed|puree|sliced|halves|"
-                                 r"packed|frozen|thawed|juice)\b", t))
+            odd = bool(re.search(r"\b(thin|thick|crust|mini|snack|small|large|very|mashed|pureed|puree|sliced|"
+                                 r"halves|packed|frozen|thawed|juice)\b", t)) and not (r.size and r.size in t)
             return (odd, abs((x[2] or 1) - 1) > 1e-9)
         p = sorted(fits, key=plain)[0] if fits else None
         if p is None and r.portion_unit in ("ounce", "oz"):

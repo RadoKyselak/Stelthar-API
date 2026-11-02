@@ -60,9 +60,13 @@ FOODS[169917] = {"fdcId": 169917, "description": "Oranges, raw, all commercial v
 FOODS[2709000] = {"fdcId": 2709000, "description": "Oatmeal, regular or quick, made with water, no added fat",
                   "dataType": "Survey (FNDDS)", "foodNutrients": [_n(1008, "Energy", "kcal", 71.0)],
                   "foodPortions": [_p(None, 234.0, "1 cup")]}
+FOODS[2705000] = {"fdcId": 2705000, "description": "Bread, whole wheat", "dataType": "Survey (FNDDS)",
+                  "foodNutrients": [_n(1008, "Energy", "kcal", 254.0)],
+                  "foodPortions": [_p(None, 43.0, "1 large or thick slice"), _p(None, 32.0, "1 slice"),
+                                   _p(None, 10.0, "1 thin slice, crust not eaten")]}
 SEARCH = {
     "banana": [2709224, 173945, 173944], "bananas": [2709224, 173945, 173944],
-    "egg": [2707205, 171287], "salmon": [2706000, 175168], "broccoli": [169967], "orange": [169097, 169917], "cooked oatmeal": [2709000], "almonds": [170567], "avocado": [171705],
+    "egg": [2707205, 171287], "salmon": [2706000, 175168], "broccoli": [169967], "whole wheat bread": [2705000], "orange": [169097, 169917], "cooked oatmeal": [2709000], "almonds": [170567], "avocado": [171705],
 }
 
 
@@ -93,7 +97,8 @@ def fdc(monkeypatch, tmp_path):
     ("A serving of avocado has 7 grams of fat.", SUPPORTED),       # USDA's serving, 50 g: 7.3
     ("3 ounces of salmon has 22 grams of protein.", MOSTLY_ACCURATE),  # plain salmon, 85 g: 18.8
     ("A cup of broccoli has 80 mg of vitamin C.", SUPPORTED),      # 91 g: 81
-    ("A large egg has 72 calories.", SUPPORTED),                   # "large", not "cup (4.86 large eggs)"
+    ("A large egg has 72 calories.", SUPPORTED),
+    ("A slice of whole wheat bread has 80 calories.", SUPPORTED),  # a plain slice, 32 g: 81                   # "large", not "cup (4.86 large eggs)"
     ("An orange has 70 mg of vitamin C.", SUPPORTED),              # without the peel: 131 g, 70
     ("A cup of cooked oatmeal has 166 calories.", SUPPORTED),      # "made with water": 166
 ])
