@@ -102,8 +102,8 @@ def ttl_for(claim: str) -> int:
 
 
 def _cache_key(claim: str, hint: str) -> str:
-    # Bumped when the prompt changes: "v3" names the page relied on and counts a maker's own site.
-    return hashlib.sha256(f"v3|{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
+    # Bumped when the prompt changes: "v4": a second search for a reliable page.
+    return hashlib.sha256(f"v4|{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
 
 
 def _from_dict(d: dict) -> GroundedAnswer:

@@ -311,7 +311,10 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
     text, grams, amount = p
     per_one = grams / (amount or 1)
     total = per_one * r.count
-    return total, f"{_phrase(text, r)} ({total:.0f} g)", not r.stated_portion
+    # A food sold in one size (a Big Mac) has no size to assume.
+    one_size = not any(_SIZE.search(x[0] or "") for x in ps)
+    assumed = not r.stated_portion and not (one_size and not r.portion_unit and not r.size)
+    return total, f"{_phrase(text, r)} ({total:.0f} g)", assumed
 
 
 _UNIT_LIKE = re.compile(r"^(cups?|tablespoons?|tbsps?|teaspoons?|tsps?|slices?|pieces?|oz|ounces?|servings?|"
@@ -323,6 +326,7 @@ def _phrase(portion: str, r: Read) -> str:
     """"medium (7\" to 7-7/8\" long)" -> "one medium banana";
     "tablespoon" x2 -> "two tablespoons of peanut butter"."""
     shown = re.sub(r"\s*\([^)]*\)", "", re.sub(r"^\d+(?:\.\d+)?\s+", "", portion)).strip(" ,")
+    shown = re.sub(r"\s*\(.*$", "", shown).strip(" ,")  # an unclosed "(7.6 oz"
     shown = re.sub(r",?\s*NS as to .*$", "", shown, flags=re.I).strip(" ,")
     item = _singular(r.food.split()[-1])
     cw = _WORDS.get(r.count, f"{r.count:g}")
@@ -334,6 +338,10 @@ def _phrase(portion: str, r: Read) -> str:
         if r.count > 1 and not first.endswith("s"):
             first += "s"
         return f"{cw} {first}{(' ' + more) if more else ''} of {r.food}"
+    if shown.lower() == item and len(r.food.split()) > 1:
+        # "mac" for a Big Mac: the product's name, as the claim wrote it.
+        m = re.search(re.escape(r.food), r.text, re.I)
+        return f"{cw} {m.group(0) if m else r.food}"
     if item in shown.lower():
         return f"{cw} {shown}"
     return f"{cw} {shown} {item}"
