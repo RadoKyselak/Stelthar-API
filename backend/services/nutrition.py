@@ -294,7 +294,8 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
                  (lambda t: re.match(r"^(?:[\d.]+\s+)?medium\b", t)
                   and not re.search(r"\b(slices?|cups?|pieces?|oz|strips?|tbsp|tablespoons?|cubes?)\b", t)),
                  # "1 avocado, NS as to Florida or California", "1 fruit", "1 whole"
-                 lambda t: re.search(rf"^(?:1(?:\.0)?\s+)?(?:{re.escape(item)}s?\b|fruit\b|whole\b|item\b|each\b)", t)]
+                 # "0.5 breast, bone and skin removed" is half of one: the weight is scaled to one
+                 lambda t: re.search(rf"^(?:[\d.]+\s+)?(?:{re.escape(item)}s?\b|fruit\b|whole\b|item\b|each\b)", t)]
         if serving:
             preds.insert(0, lambda t: "nlea serving" in t or "serving" in t)
         for pred in preds:
