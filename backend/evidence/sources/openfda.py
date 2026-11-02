@@ -33,11 +33,11 @@ def _quote(name: str) -> str:
 
 async def _get(endpoint: str, search: str, limit: int = 25) -> Dict[str, Any]:
     params = {"search": search, "limit": str(limit)}
-    if config.OPENFDA_API_KEY:
-        params["api_key"] = config.OPENFDA_API_KEY
+    # openFDA takes the key as HTTP basic auth, which keeps it out of the URL and logs.
+    auth = (config.OPENFDA_API_KEY, "") if config.OPENFDA_API_KEY else None
     try:
         async with httpx.AsyncClient(timeout=15.0) as c:
-            r = await c.get(f"{config.OPENFDA_BASE}/{endpoint}.json", params=params)
+            r = await c.get(f"{config.OPENFDA_BASE}/{endpoint}.json", params=params, auth=auth)
     except httpx.HTTPError as e:
         raise SourceUnavailable("FDA", f"request failed: {e}") from e
     if r.status_code == 404:

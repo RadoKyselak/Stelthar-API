@@ -163,6 +163,12 @@ def computed_checks_offline(monkeypatch):
     async def no_fda(*a, **k):
         return {"results": [], "total": 0}
     monkeypatch.setattr(openfda, "_get", no_fda)
+    # FoodData Central: nothing found unless a test supplies foods.
+    from evidence.sources import fooddata
+
+    async def no_food(*a, **k):
+        return None
+    monkeypatch.setattr(fooddata, "_get", no_food)
 
 
 async def _none():

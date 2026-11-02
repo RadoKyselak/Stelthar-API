@@ -86,24 +86,49 @@ _FTC_HINT = (
     "the rule's status as of today.")
 
 
+_FOOD_COST_TOPIC = re.compile(r"\b(thrifty food plan|food plans?|cost of food|SNAP|food stamps|"
+                              r"EBT|WIC|school (?:lunch|meals?))\b", re.I)
+_FOOD_COST_HINT = (
+    "The claim is about USDA food assistance or food costs. Check USDA's Food and Nutrition "
+    "Service (fns.usda.gov): the monthly Cost of Food reports for the four USDA Food Plans "
+    "(Thrifty, Low-Cost, Moderate-Cost, Liberal), by family type and month, and SNAP maximum "
+    "allotments by household size and fiscal year (the June Thrifty Food Plan cost sets the "
+    "next year's maximum SNAP benefit for four). Name the month or fiscal year.")
+_NUTRITION_HINT = (
+    "The claim is about what is in a food. Check USDA FoodData Central (fdc.nal.usda.gov), "
+    "using the food as eaten (raw or cooked as the claim implies) and the portion the claim "
+    "names; say which food entry and portion weight you used. Amounts vary with size and "
+    "variety, so within about 10% is a match.")
+
+
 def topic(text: str) -> str:
-    """"fda", "ftc" or "": what a claim is about, for routing a miss to search."""
-    if _FDA_TOPIC.search(text or ""):
+    """What a claim is about, for routing a miss to search: "fda", "ftc",
+    "food_cost", "nutrition" or ""."""
+    t = text or ""
+    if _FDA_TOPIC.search(t):
         return "fda"
-    if _FTC_TOPIC.search(text or ""):
+    if _FTC_TOPIC.search(t):
         return "ftc"
+    if _FOOD_COST_TOPIC.search(t):
+        return "food_cost"
+    from services import nutrition
+    if nutrition.read(t) is not None:
+        return "nutrition"
     return ""
 
 
 def search_hint(text: str) -> str:
     """Where the web search should look, when the free check could not settle it."""
-    return {"fda": _FDA_HINT, "ftc": _FTC_HINT}.get(topic(text), "")
+    return {"fda": _FDA_HINT, "ftc": _FTC_HINT, "food_cost": _FOOD_COST_HINT,
+            "nutrition": _NUTRITION_HINT}.get(topic(text), "")
 
 
 async def check(text: str, parsed) -> Optional[Verdict]:
     """An FDA or FTC claim checked against the agency's record, or None."""
-    from services import fda, ftc
+    from services import fda, ftc, nutrition
     v = await fda.check(text, parsed)
     if v is None:
         v = await ftc.check(text, parsed)
+    if v is None:
+        v = await nutrition.check(text, parsed)
     return v
