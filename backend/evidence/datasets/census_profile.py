@@ -240,9 +240,32 @@ _ALIASES = {
 }
 
 
+async def published_year(year: int, survey: str) -> int:
+    """The latest vintage of a survey, at or before `year`, that Census has
+    released. The 5-year survey comes out each December, three months after
+    the 1-year: in October 2026 the 1-year has 2025 and the 5-year only
+    2020-2024. Asking for a vintage that is not out returns nothing, which once
+    read as "Census lists no such town" for every place under 65,000."""
+    if survey == "acs1":
+        return year
+
+    async def probe():
+        for y in (year, year - 1, year - 2):
+            data = await _get_json(f"{_BASE}/{y}/acs/{survey}/profile/variables.json", {})
+            if isinstance(data, dict) and data.get("variables"):
+                return y
+            if data is not None and not isinstance(data, dict):
+                return year  # not a catalog reply: keep the year asked for
+        return 0
+    got = await cached("census_published", f"{survey}:{year}", 24 * 3600, probe)
+    return got or year
+
+
 async def _places(year: int, level: str, survey: str = "acs1", state: str = "") -> List[List[Any]]:
     """[[NAME, population, code], ...] for every place of one kind a survey
     covers. The code is state+place or state+county FIPS, or the CBSA code."""
+    year = await published_year(year, survey)
+
     async def load():
         params = {"get": "NAME,B01003_001E", "for": f"{_LEVEL_FOR[level]}:*"}
         if level in ("place", "county"):
@@ -547,6 +570,7 @@ def _family(units: str, label: str):
 async def fetch(c: Candidate, year: int, geo: Optional[Geography],
                 survey: str = "acs1") -> Optional[Datapoint]:
     var = c.id
+    year = await published_year(year, survey)
     params = {"get": f"NAME,{var},{_moe_var(var)}", **_geo_params(geo)}
     if CENSUS_API_KEY:
         params["key"] = CENSUS_API_KEY

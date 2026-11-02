@@ -59,6 +59,7 @@ def finder_off(monkeypatch):
     fake client), so no test can reach Anthropic even with a test key set."""
     import config
     monkeypatch.setattr(config, "AI_FINDER", False)
+    monkeypatch.setattr(config, "AI_INTERPRETER", False)
 
 
 @pytest.fixture
@@ -143,3 +144,20 @@ def sample_bls_response():
             ]
         }
     }
+
+
+@pytest.fixture(autouse=True)
+def computed_checks_offline(monkeypatch):
+    """The computed checks read FRED, ALFRED and Treasury live. No series
+    unless a test supplies one, so no test depends on today's data."""
+    from services import derived
+
+    async def no_rows(*a, **k):
+        return []
+    monkeypatch.setattr(derived, "_rows", no_rows)
+    monkeypatch.setattr(derived, "_bls_monthly", no_rows)
+    monkeypatch.setattr(derived, "_debt_held_by_public", lambda *a, **k: _none())
+
+
+async def _none():
+    return None

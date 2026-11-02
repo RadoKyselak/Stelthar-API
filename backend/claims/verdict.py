@@ -45,6 +45,10 @@ NEAR_MISS_MAX_RELATIVE = 0.05
 TINY_RELATIVE_GAP = 0.002
 # Rounding never makes a figure more than this far off "Supported".
 ROUNDING_MAX_RELATIVE = 0.10
+# Nor "Mostly accurate": "about 400,000" for 238,422 is wrong, however round
+# the claim's number. A hedge widens the band tenfold, so without this cap a
+# one-digit round number covered almost anything.
+LOOSE_MAX_RELATIVE = 0.25
 
 # Reasons a verdict could not be reached. Each is actionable.
 NO_SERIES = "no_official_series_for_this_claim"
@@ -298,6 +302,8 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
                  and abs(rel) > ROUNDING_MAX_RELATIVE)
     if loose:
         agrees = False
+        if abs(rel) > LOOSE_MAX_RELATIVE:
+            loose = False  # too far off to be close: Contradicted below
 
     phrase = _phrase_for(parsed.comparator)
     if phrase:

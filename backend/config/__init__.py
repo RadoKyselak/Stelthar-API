@@ -13,6 +13,10 @@ CENSUS_API_KEY = os.getenv("CENSUS_API_KEY")
 CONGRESS_API_KEY = os.getenv("CONGRESS_API_KEY")
 DATA_GOV_API_KEY = os.getenv("DATA_GOV_API_KEY")
 BLS_API_KEY = os.getenv("BLS_API_KEY")
+# HUD USER API (income limits, Area Median Income). Free token:
+# https://www.huduser.gov/hudapi/public/register
+HUD_API_TOKEN = os.getenv("HUD_API_TOKEN")
+HUD_API_BASE = os.getenv("HUD_API_BASE", "https://www.huduser.gov/hudapi/public")
 
 # search.gov (search.usa.gov) — free federal-site search, the research harness
 # for anything the structured sources below can't answer. Sign up at
@@ -91,6 +95,9 @@ AI_PICK_MAX_CALLS_PER_CLIENT_PER_DAY = _env_int("AI_PICK_MAX_CALLS_PER_CLIENT_PE
 # search). A few short rounds, about $0.002. Its own call caps; its spend
 # counts against the same daily dollar cap. "off" turns it off.
 AI_FINDER = (os.getenv("AI_FINDER") or "on").strip().lower() not in ("0", "off", "false", "no")
+# The interpreter (services/interpret.py): one small call that reads a claim
+# the rules could not into a structured query. Same caps as the finder.
+AI_INTERPRETER = (os.getenv("AI_INTERPRETER") or "on").strip().lower() not in ("0", "off", "false", "no")
 AI_FINDER_MAX_TURNS = _env_int("AI_FINDER_MAX_TURNS", 5, 2, 6)
 AI_FINDER_MAX_CALLS_PER_DAY = _env_int("AI_FINDER_MAX_CALLS_PER_DAY", 500, 0, 10000)
 AI_FINDER_MAX_CALLS_PER_CLIENT_PER_DAY = _env_int("AI_FINDER_MAX_CALLS_PER_CLIENT_PER_DAY", 40, 0, 1000)
