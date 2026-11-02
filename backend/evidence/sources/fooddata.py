@@ -23,14 +23,13 @@ from evidence.sources import SourceUnavailable
 
 _MONTH = 30 * 24 * 3600
 _BASE = "https://api.nal.usda.gov/fdc/v1"
-DATASETS = "Survey (FNDDS),SR Legacy,Foundation"
 
 
 def _key() -> str:
     return config.DATA_GOV_API_KEY or "DEMO_KEY"
 
 
-async def _get(path: str, params: Dict[str, str]) -> Any:
+async def _get(path: str, params: Dict[str, str], body: Optional[Dict[str, Any]] = None) -> Any:
     # The key goes in a header, never the URL, so it cannot reach a log line.
     # FoodData Central's search sometimes answers 400 and then succeeds on the
     # same request a few seconds later, so a 400 or 5xx is retried, backing off.
@@ -40,7 +39,10 @@ async def _get(path: str, params: Dict[str, str]) -> Any:
     for attempt in range(len(waits) + 1):
         try:
             async with httpx.AsyncClient(timeout=15.0) as c:
-                r = await c.get(f"{_BASE}{path}", params=params, headers={"X-Api-Key": _key()})
+                if body is not None:
+                    r = await c.post(f"{_BASE}{path}", json=body, headers={"X-Api-Key": _key()})
+                else:
+                    r = await c.get(f"{_BASE}{path}", params=params, headers={"X-Api-Key": _key()})
         except httpx.HTTPError as e:
             if attempt == len(waits):
                 raise SourceUnavailable("USDA", f"request failed: {e}") from e
@@ -63,21 +65,33 @@ async def _get(path: str, params: Dict[str, str]) -> Any:
         return None
 
 
-async def search(query: str) -> List[Dict[str, Any]]:
-    """[{fdcId, description, dataType}] for a food name."""
+async def _search_one(query: str, datasets: List[str]) -> List[Dict[str, Any]]:
     async def load():
-        d = await _get("/foods/search", {"query": query, "dataType": DATASETS, "pageSize": "25"})
+        d = await _get("/foods/search", {}, {"query": query, "dataType": datasets, "pageSize": 25})
         foods = (d or {}).get("foods") or []
         return {"foods": [{"fdcId": f.get("fdcId"), "description": f.get("description") or "",
                            "dataType": f.get("dataType") or ""} for f in foods if f.get("fdcId")]}
-    try:
-        got = await cached("fdc_search", query.lower(), _MONTH, load)
-    except SourceUnavailable:
-        raise
-    except Exception:  # noqa: BLE001
-        logger.exception("FoodData Central search failed for %r", query)
-        return []
+    got = await cached("fdc_search", f"{','.join(datasets)}|{query.lower()}", _MONTH, load)
     return (got or {}).get("foods") or []
+
+
+async def search(query: str) -> List[Dict[str, Any]]:
+    """[{fdcId, description, dataType}] for a food name: foods as eaten
+    (FNDDS), then the reference entries (SR Legacy, Foundation). Searched
+    apart, because a search across all three fills up with dishes ("Egg,
+    Benedict") and the plain food can miss the list."""
+    out: List[Dict[str, Any]] = []
+    failed: Optional[SourceUnavailable] = None
+    for datasets in (["Survey (FNDDS)"], ["SR Legacy", "Foundation"]):
+        try:
+            out += await _search_one(query, datasets)
+        except SourceUnavailable as e:
+            failed = e  # one half can still answer
+        except Exception:  # noqa: BLE001 — an odd payload is "not found"
+            logger.exception("FoodData Central search failed for %r", query)
+    if not out and failed is not None:
+        raise failed
+    return out
 
 
 async def food(fdc_id: int) -> Optional[Dict[str, Any]]:

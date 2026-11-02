@@ -65,10 +65,12 @@ _FILLER = re.compile(r"\b(has|have|had|contains?|contained|packs?|provides?|give
                      r"less than|at least|typical|average|single|fresh|raw|plain|usda|says|according to|"
                      r"the|serving size)\b", re.I)
 _COOKED_FIRST = ("rice", "pasta", "spaghetti", "chicken", "beef", "pork", "salmon", "fish", "tuna", "beans",
-                 "lentils", "quinoa", "oatmeal", "turkey", "shrimp", "steak", "potato", "egg", "eggs", "bacon")
+                 "lentils", "quinoa", "oatmeal", "turkey", "shrimp", "steak", "potato", "bacon")
 _BAD = ("dried", "dehydrated", "powder", "juice", "oil", "candies", "candy", "babyfood", "baby food",
         "snacks", "chips", "bread", "bagel", "cracker", "substitute", "flavored", "dessert", "cake",
-        "pie", "muffin", "nectar", "imitation", "sauce", "soup", "salad", "sandwich", "smoothie", "with")
+        "pie", "muffin", "nectar", "imitation", "sauce", "soup", "salad", "sandwich", "smoothie",
+        "benedict", "creamed", "deviled", "omelet", "casserole", "fritter", "pudding", "yogurt",
+        "cheese", "glutinous", "as ingredient", "infant formula", "sweetened")
 _COOKING = re.compile(r"\b(cooked|baked|roasted|boiled|broiled|grilled|fried|steamed|scrambled|poached|stewed|"
                       r"sauteed|microwaved|canned|raw|uncooked|dry)\b", re.I)
 
@@ -170,36 +172,45 @@ _CATEGORIES = {"fish", "nut", "cheese", "seed", "beverage", "cereal", "spice", "
                "beef", "pork", "chicken", "turkey", "lamb", "milk", "yogurt", "bread", "pasta"}
 
 
+_PLAIN_COOK = ("cooked", "baked", "roasted", "boiled", "broiled", "grilled", "steamed", "dry heat", "poached")
+
+
 def _score(desc: str, food: str, text: str, dataset: str = "") -> float:
-    d = desc.lower()
-    segs = [s.strip() for s in d.split(",")]
-    words = [_singular(w) for w in food.split()]
-    head = " ".join(_singular(w) for w in segs[0].split())
-    s = 0.0
-    second = " ".join(_singular(w) for w in segs[1].split()) if len(segs) > 1 else ""
-    if head == " ".join(words) or (head in _CATEGORIES and second == " ".join(words)):
-        s += 6
-    elif all(w in " ".join(_singular(x) for x in d.replace(",", " ").split()) for w in words):
-        s += 2
-    else:
+    """How well a USDA entry fits the claim's food, plain forms first."""
+    d = re.sub(r"\s*\([^)]*\)", "", desc.lower())
+    d = re.sub(r",?\s*(?:with|without) (?:skin|peel|seeds?|bone|shell)\b", "", d)
+    segs = [x.strip() for x in d.split(",") if x.strip()]
+    if not segs:
         return -99
-    if re.search(r"\bstyle\b|\brecipe\b|\bhomemade\b|\bwith\b", d) and not re.search(r"\bstyle\b|\bwith\b", text, re.I):
-        s -= 2
+    claim_words = {_singular(w) for w in food.split()}
+    head_words = {_singular(w) for w in segs[0].split()}
+    all_words = {_singular(w) for x in segs for w in x.split()}
+    if not claim_words <= all_words:
+        return -99
+    s = 0.0
+    if head_words <= claim_words or (" ".join(sorted(head_words)) in _CATEGORIES):
+        s += 6  # "Rice, white, cooked" for "cooked white rice"; "Fish, salmon" for salmon
+    else:
+        s += 2  # "Yogurt, whole milk": the claim's words, but about something else
+    if len(segs) > 1:  # "Rice, white and wild" is not white rice
+        extra = {_singular(w) for w in segs[1].split()} - claim_words - {"raw", "cooked", "whole", "fresh", "plain"}
+        s -= 0.5 * len(extra)
     claim = text.lower()
     s -= sum(3 for b in _BAD if re.search(rf"\b{b}\b", d) and not re.search(rf"\b{b}\b", claim))
-    cooked_first = any(w in _COOKED_FIRST for w in words)
-    cook = _COOKING.findall(d)
-    said = set(x.lower() for x in _COOKING.findall(claim))
+    if re.search(r"\bstyle\b|\brecipe\b|\bhomemade\b|\bwith\b", d) and not re.search(r"\bstyle\b|\bwith\b", claim):
+        s -= 2
+    cook = {x.lower() for x in _COOKING.findall(d)} | ({"dry heat"} if "dry heat" in d else set())
+    said = {x.lower() for x in _COOKING.findall(claim)}
     if said:
-        s += 2 if said & set(x.lower() for x in cook) else -2
-    elif cooked_first:
-        s += 1.5 if any(x.lower() not in ("raw", "uncooked", "dry", "canned") for x in cook) else -1
+        s += 2 if said & cook else -2
+    elif any(w in _COOKED_FIRST for w in claim_words):
+        s += 1.5 if cook & set(_PLAIN_COOK) else (0 if cook - {"raw", "uncooked", "dry"} else -1)
     else:
-        s += 1.5 if "raw" in [x.lower() for x in cook] or not cook else -1
+        s += 1.5 if "raw" in cook or not cook else -1
     if re.search(r"all commercial varieties|all varieties|\bwhole\b|\bplain\b|no added fat|nfs", d):
         s += 1
-    s -= 0.4 * (len(segs) - 1)
-    if dataset == "SR Legacy" and "raw" in d:
+    s -= 0.3 * max(0, len(segs) - 2)
+    if dataset in ("SR Legacy", "Foundation") and "raw" in cook:
         s += 1  # the reference entries, with small / medium / large
     return s
 
@@ -211,7 +222,7 @@ async def _pick(r: Read) -> Optional[Tuple[dict, Tuple[float, str, bool]]]:
         foods = await fooddata.search(_singular(r.food))
     scored = sorted(((_score(f["description"], r.food, r.text, f.get("dataType", "")), i, f)
                      for i, f in enumerate(foods)), key=lambda x: (-x[0], x[1]))
-    for score, _, f in scored[:4]:
+    for score, _, f in scored[:6]:
         if score < 4:
             break
         d = await fooddata.food(f["fdcId"])
@@ -236,7 +247,9 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
         return next((p for p in ps if pred(p[0].lower())), None)
     p = None
     if r.portion_unit:
-        p = find(lambda t: re.search(rf"\b{re.escape(r.portion_unit)}s?\b", t) and (not r.size or r.size in t))
+        fits = [x for x in ps if re.search(rf"\b{re.escape(r.portion_unit)}s?\b", x[0].lower())
+                and (not r.size or r.size in x[0].lower())]
+        p = next((x for x in fits if abs((x[2] or 1) - 1) < 1e-9), fits[0] if fits else None)
         if p is None and r.portion_unit in ("ounce", "oz"):
             return 28.3495 * r.count, f"{r.count:g} oz ({28.3495 * r.count:.0f} g) of {r.food}", False
         if p is None:
@@ -244,6 +257,9 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
             return None
     elif r.size:
         p = find(lambda t: re.search(rf"(^|[^a-z]){r.size}\b", t) and not (r.size in ("small", "large") and f"extra {r.size}" in t))
+        if p is None and re.search(rf"\b{r.size}\b", d.get("description", ""), re.I):
+            item = _singular(r.food.split()[-1])
+            p = find(lambda t: re.search(rf"^(?:[\d.]+\s+)?{re.escape(item)}s?\b", t))
     else:
         egg = "egg" in r.food
         item = _singular(r.food.split()[-1])
@@ -278,7 +294,7 @@ _WORDS = {1: "one", 2: "two", 3: "three", 0.5: "half a", 4: "four"}
 def _phrase(portion: str, r: Read) -> str:
     """"medium (7\" to 7-7/8\" long)" -> "one medium banana";
     "tablespoon" x2 -> "two tablespoons of peanut butter"."""
-    shown = re.sub(r"\s*\([^)]*\)", "", re.sub(r"^1(?:\.0)?\s+", "", portion)).strip(" ,")
+    shown = re.sub(r"\s*\([^)]*\)", "", re.sub(r"^\d+(?:\.\d+)?\s+", "", portion)).strip(" ,")
     shown = re.sub(r",?\s*NS as to .*$", "", shown, flags=re.I).strip(" ,")
     item = _singular(r.food.split()[-1])
     cw = _WORDS.get(r.count, f"{r.count:g}")
@@ -361,7 +377,8 @@ async def run(r: Read) -> Optional[Verdict]:
     caveats.append("Amounts vary with size, variety and preparation, so a claim within 10% counts as a match.")
     claimed_s = _fmt(r.amount, "kcal" if r.unit == "kcal" else r.unit)
     what = official_s if r.nutrient == "calories" else f"{official_s} of {r.nutrient}"
-    head = (f"USDA FoodData Central (\u201c{food_name}\u201d): {how} has {what}"
+    verb = "have" if r.count > 1 else "has"
+    head = (f"USDA FoodData Central (\u201c{food_name}\u201d): {how} {verb} {what}"
             + (f"; the claim says {claimed_s}." if outcome != SUPPORTED else "."))
     return verdict(outcome, head, [dp], caveats=caveats, claimed=claimed_s,
                    confidence=HIGH if r.stated_portion and not assumed else MEDIUM)

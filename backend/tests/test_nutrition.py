@@ -62,9 +62,9 @@ SEARCH = {
 def fdc(monkeypatch, tmp_path):
     monkeypatch.setattr(cache_mod, "_CACHE_DIR", tmp_path)
 
-    async def get(path, params):
+    async def get(path, params, body=None):
         if path == "/foods/search":
-            ids = SEARCH.get(params["query"].lower(), [])
+            ids = [i for i in SEARCH.get(body["query"].lower(), []) if FOODS[i]["dataType"] in body["dataType"]]
             return {"foods": [{"fdcId": i, "description": FOODS[i]["description"],
                                "dataType": FOODS[i]["dataType"]} for i in ids]}
         return FOODS.get(int(path.rsplit("/", 1)[1]))
