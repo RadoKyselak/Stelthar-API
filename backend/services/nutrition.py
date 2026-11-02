@@ -18,7 +18,7 @@ and are left alone.
 """
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from claims.verdict import CONTRADICTED, HIGH, MEDIUM, MOSTLY_ACCURATE, SUPPORTED, Verdict
 from config import logger
@@ -225,26 +225,34 @@ def _score(desc: str, food: str, text: str, dataset: str = "") -> float:
     return s
 
 
-async def _pick(r: Read) -> Optional[Tuple[dict, Tuple[float, str, bool]]]:
-    """The best USDA entry that has both the nutrient and the claim's portion."""
+async def _pick(r: Read) -> List[Tuple[dict, Tuple[float, str, bool]]]:
+    """The best fitting USDA entry with the nutrient and the claim's portion,
+    from each of USDA's two sets: foods as eaten (FNDDS) and the reference
+    entries (SR Legacy, Foundation). They can differ a lot (cooked spinach:
+    2.2 mg of iron a cup as eaten, 6.4 mg in the reference), and both are USDA's."""
     foods = await fooddata.search(r.food)
     if not foods and r.food.endswith("s"):
         foods = await fooddata.search(_singular(r.food))
     scored = sorted(((_score(f["description"], r.food, r.text, f.get("dataType", "")), i, f)
                      for i, f in enumerate(foods)), key=lambda x: (-x[0], x[1]))
-    for score, _, f in scored[:6]:
-        if score < 4:
+    found: Dict[str, Tuple[dict, Tuple[float, str, bool]]] = {}
+    for score, _, f in scored[:8]:
+        if score < 4 or len(found) == 2:
             break
+        family = "eaten" if f.get("dataType") == "Survey (FNDDS)" else "reference"
+        if family in found:
+            continue
         d = await fooddata.food(f["fdcId"])
         if not d or not any(i in d["nutrients"] for i in r.ids):
             logger.info("Nutrition: %s (%s) has no %s", f["description"], f["fdcId"], r.nutrient)
             continue
         portion = _portion(d, r)
         if portion is not None:
-            return d, portion
-    logger.info("Nutrition: no USDA food and portion for %r among %s", r.food,
-                [(round(x[0], 1), x[2]["description"]) for x in scored[:4]])
-    return None
+            found[family] = (d, portion)
+    if not found:
+        logger.info("Nutrition: no USDA food and portion for %r among %s", r.food,
+                    [(round(x[0], 1), x[2]["description"]) for x in scored[:4]])
+    return list(found.values())
 
 
 def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
@@ -259,7 +267,12 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
     if r.portion_unit:
         fits = [x for x in ps if re.search(rf"\b{re.escape(r.portion_unit)}s?\b", x[0].lower())
                 and (not r.size or r.size in x[0].lower())]
-        p = next((x for x in fits if abs((x[2] or 1) - 1) < 1e-9), fits[0] if fits else None)
+        def plain(x):  # a normal slice or a cup of the whole food before thin slices or puree
+            t = x[0].lower()
+            odd = bool(re.search(r"\b(thin|crust|mini|snack|small|very|mashed|pureed|puree|sliced|halves|"
+                                 r"packed|frozen|thawed|juice)\b", t))
+            return (odd, abs((x[2] or 1) - 1) > 1e-9)
+        p = sorted(fits, key=plain)[0] if fits else None
         if p is None and r.portion_unit in ("ounce", "oz"):
             return 28.3495 * r.count, f"{r.count:g} oz ({28.3495 * r.count:.0f} g) of {r.food}", False
         if p is None:
@@ -339,23 +352,31 @@ async def check(text: str, parsed) -> Optional[Verdict]:
 
 async def run(r: Read) -> Optional[Verdict]:
     try:
-        got = await _pick(r)
-        if got is None:
+        picks = await _pick(r)
+        if not picks:
             return None
-        d, (grams, how, assumed) = got
-        nid = next(i for i in r.ids if i in d["nutrients"])
-        per100, unit, nname = d["nutrients"][nid]
-        official = per100 * grams / 100.0
-        if r.unit == "kcal":
-            if unit != "kcal":
-                return None
-            claimed, shown_unit = r.amount, "kcal"
-        else:
-            to = {"g": 1.0, "mg": 1e-3, "µg": 1e-6, "ug": 1e-6}.get(unit)
-            if to is None:
-                return None
-            claimed = r.amount * _UNITS[r.unit] / to
-            shown_unit = {"µg": "mcg", "ug": "mcg"}.get(unit, unit)
+        options = []
+        for d, (grams, how, assumed) in picks:
+            nid = next(i for i in r.ids if i in d["nutrients"])
+            per100, unit, nname = d["nutrients"][nid]
+            if r.unit == "kcal":
+                if unit != "kcal":
+                    continue
+                claimed, shown_unit = r.amount, "kcal"
+            else:
+                to = {"g": 1.0, "mg": 1e-3, "µg": 1e-6, "ug": 1e-6}.get(unit)
+                if to is None:
+                    continue
+                claimed = r.amount * _UNITS[r.unit] / to
+                shown_unit = {"µg": "mcg", "ug": "mcg"}.get(unit, unit)
+            official = per100 * grams / 100.0
+            options.append((abs(claimed - official) / official if official else 1.0,
+                            d, grams, how, assumed, per100, nname, claimed, official, shown_unit))
+        if not options:
+            return None
+        options.sort(key=lambda o: o[0])
+        _, d, grams, how, assumed, per100, nname, claimed, official, shown_unit = options[0]
+        other = options[1] if len(options) > 1 else None
     except SourceUnavailable as e:
         logger.warning("Nutrition check skipped for %r: %s", r.text[:80], e)
         return None
@@ -388,6 +409,9 @@ async def run(r: Read) -> Optional[Verdict]:
     caveats = []
     if assumed:
         caveats.append(f"The claim names no size; USDA's weight for {how} is used.")
+    if other is not None and abs(other[8] - official) / max(official, 1e-9) > 0.10:
+        caveats.append(f"USDA's other entry, \u201c{other[1]['description']}\u201d, gives "
+                       f"{_fmt(other[8], other[9])} for {other[3]}; the closer of the two is shown.")
     caveats.append("Amounts vary with size, variety and preparation, so a claim within 10% counts as a match.")
     claimed_s = _fmt(r.amount, "kcal" if r.unit == "kcal" else r.unit)
     what = official_s if r.nutrient == "calories" else f"{official_s} of {r.nutrient}"

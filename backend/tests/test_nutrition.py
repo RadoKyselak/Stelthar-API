@@ -82,7 +82,7 @@ def fdc(monkeypatch, tmp_path):
 @pytest.mark.parametrize("claim,expected", [
     ("A banana has 105 calories.", SUPPORTED),                     # medium, 118 g: 105
     ("A banana has 200 calories.", CONTRADICTED),
-    ("A banana has 125 calories.", MOSTLY_ACCURATE),               # 19% over
+    ("A banana has 150 calories.", MOSTLY_ACCURATE),               # 23% over the closer entry (122)
     ("There are 420 mg of potassium in a banana.", SUPPORTED),     # 422
     ("A large banana has 121 calories.", SUPPORTED),               # 136 g: 121
     ("One large egg has 6 grams of protein.", SUPPORTED),          # 50 g: 6.3
@@ -111,6 +111,12 @@ async def test_a_stated_size_skips_entries_without_sizes(fdc):
 async def test_salmon_is_salmon(fdc):
     r = await verify("3 ounces of salmon has 22 grams of protein.", allow_grounding=False)
     assert "Puerto Rican" not in r.headline and "Fish, salmon" in r.headline, r.headline
+
+
+async def test_two_usda_entries_the_closer_is_used_and_the_other_named(fdc):
+    r = await verify("A banana has 125 calories.", allow_grounding=False)
+    assert r.verdict == SUPPORTED and "Banana, raw" in r.headline        # as eaten: 126 g, 122
+    assert any("Bananas, raw" in c and "105 calories" in c for c in r.caveats), r.caveats
 
 
 async def test_picks_the_food_not_the_powder(fdc):
