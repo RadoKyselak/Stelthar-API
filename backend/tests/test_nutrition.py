@@ -34,9 +34,13 @@ FOODS = {
     170567: {"fdcId": 170567, "description": "Nuts, almonds", "dataType": "SR Legacy",
              "foodNutrients": [_n(1003, "Protein", "g", 21.15)], "foodPortions": [_p("cup, whole", 143.0)]},
 }
+FOODS[171705] = {"fdcId": 171705, "description": "Avocados, raw, all commercial varieties", "dataType": "SR Legacy",
+                 "foodNutrients": [_n(1004, "Total lipid (fat)", "g", 14.66)],
+                 "foodPortions": [_p("NLEA serving", 50.0), _p("cup, cubes", 150.0),
+                                  _p("avocado, NS as to Florida or California", 201.0)]}
 SEARCH = {
     "banana": [173945, 173944], "bananas": [173945, 173944],
-    "egg": [171287], "almonds": [170567],
+    "egg": [171287], "almonds": [170567], "avocado": [171705],
 }
 
 
@@ -63,6 +67,8 @@ def fdc(monkeypatch, tmp_path):
     ("An egg has 70 calories.", SUPPORTED),                        # large by default: 72
     ("100 grams of almonds have 21 grams of protein.", SUPPORTED),
     ("Almonds have more than 30 grams of protein per 100 grams.", CONTRADICTED),
+    ("An avocado has 30 grams of fat.", SUPPORTED),                # the whole fruit, 201 g: 29.5
+    ("A serving of avocado has 7 grams of fat.", SUPPORTED),       # USDA's serving, 50 g: 7.3
 ])
 async def test_nutrition_claims(fdc, claim, expected):
     r = await verify(claim, allow_grounding=False)
@@ -73,6 +79,15 @@ async def test_nutrition_claims(fdc, claim, expected):
 async def test_picks_the_food_not_the_powder(fdc):
     r = await verify("A banana has 105 calories.", allow_grounding=False)
     assert "bananas, raw" in r.headline.lower()
+
+
+def test_key_never_reaches_a_log_line():
+    import logging
+    import config
+    rec = logging.LogRecord("httpx", logging.INFO, "", 0, 'HTTP Request: GET %s "%s"',
+                            ("https://api.nal.usda.gov/fdc/v1/foods/search?query=egg&api_key=SECRET123", "200 OK"), None)
+    config._RedactKeys().filter(rec)
+    assert "SECRET123" not in rec.getMessage() and "REDACTED" in rec.getMessage()
 
 
 async def test_says_which_portion_was_assumed(fdc):

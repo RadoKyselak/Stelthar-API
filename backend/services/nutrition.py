@@ -201,6 +201,9 @@ async def _pick(r: Read) -> Optional[dict]:
         d = await fooddata.food(f["fdcId"])
         if d and any(i in d["nutrients"] for i in r.ids):
             return d
+        logger.info("Nutrition: %s (%s) has no %s", f["description"], f["fdcId"], r.nutrient)
+    logger.info("Nutrition: no USDA food for %r among %s", r.food,
+                [(round(x[0], 1), x[2]["description"]) for x in scored[:4]])
     return None
 
 
@@ -217,20 +220,29 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
         if p is None and r.portion_unit in ("ounce", "oz"):
             return 28.3495 * r.count, f"{r.count:g} oz", False
         if p is None:
+            logger.info("Nutrition: no %r portion for %r in %s", r.portion_unit, r.food, [x[0] for x in ps][:8])
             return None
     elif r.size:
         p = find(lambda t: re.search(rf"(^|[^a-z]){r.size}\b", t) and not (r.size in ("small", "large") and f"extra {r.size}" in t))
     else:
         egg = "egg" in r.food
-        for pred in ((lambda t: "large" in t and "extra" not in t) if egg else (lambda t: "medium" in t and "slice" not in t),
-                     lambda t: re.search(r"\b1 (fruit|whole|item|each|nlea serving)|\bfruit\b|\bwhole\b", t),
-                     lambda t: "nlea serving" in t):
+        item = _singular(r.food.split()[-1])
+        serving = bool(re.search(r"\bserving\b", r.text, re.I))
+        preds = [(lambda t: "large" in t and "extra" not in t) if egg else
+                 (lambda t: "medium" in t and "slice" not in t and "cup" not in t),
+                 # "1 avocado, NS as to Florida or California", "1 fruit", "1 whole"
+                 lambda t: re.search(rf"^(?:1(?:\.0)?\s+)?(?:{re.escape(item)}s?\b|fruit\b|whole\b|item\b|each\b)", t)]
+        if serving:
+            preds.insert(0, lambda t: "nlea serving" in t or "serving" in t)
+        for pred in preds:
             p = find(pred)
             if p:
                 break
         if p is None:
+            logger.info("Nutrition: no portion for %r in %s", r.food, [x[0] for x in ps][:8])
             return None
     if p is None:
+        logger.info("Nutrition: no %r portion for %r in %s", r.size, r.food, [x[0] for x in ps][:8])
         return None
     text, grams, amount = p
     per_one = grams / (amount or 1)
@@ -309,6 +321,8 @@ async def run(r: Read) -> Optional[Verdict]:
         caveats.append(f"The claim names no portion size; USDA's {how.split(' (')[0]} is used.")
     caveats.append("Amounts vary with size, variety and preparation, so a claim within 10% counts as a match.")
     claimed_s = _fmt(r.amount, "kcal" if r.unit == "kcal" else r.unit)
-    head = f"USDA: {how} of {food_name.lower()} has {official_s}" + (f"; the claim says {claimed_s}." if outcome != SUPPORTED else ".")
+    what = official_s if r.nutrient == "calories" else f"{official_s} of {r.nutrient}"
+    head = (f"USDA FoodData Central: {how} of \u201c{food_name}\u201d has {what}"
+            + (f"; the claim says {claimed_s}." if outcome != SUPPORTED else "."))
     return verdict(outcome, head, [dp], caveats=caveats, claimed=claimed_s,
                    confidence=HIGH if r.stated_portion and not assumed else MEDIUM)

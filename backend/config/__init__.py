@@ -7,6 +7,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+class _RedactKeys(logging.Filter):
+    """httpx logs every request URL, and several sources authenticate by
+    query parameter (Census key, BEA UserID, api.data.gov api_key). Blank
+    those values before a log line is written anywhere."""
+    import re as _re
+    _SECRET = _re.compile(r"([?&](?:userid|key|api_key|apikey|api-key|registrationkey|token|access_token|"
+                          r"subscription-key|subscription_key|auth|password|secret|signature|sig)=)[^&\s\"']+",
+                          _re.IGNORECASE)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:  # noqa: BLE001 — never lose a log line over this
+            return True
+        clean = self._SECRET.sub(r"\1REDACTED", msg)
+        if clean != msg:
+            record.msg, record.args = clean, ()
+        return True
+
+
+for _name in ("httpx", "httpcore", "urllib3"):
+    logging.getLogger(_name).addFilter(_RedactKeys())
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 BEA_API_KEY = os.getenv("BEA_API_KEY")
 CENSUS_API_KEY = os.getenv("CENSUS_API_KEY")
