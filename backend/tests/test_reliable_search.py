@@ -241,3 +241,31 @@ async def test_the_checked_sentence_is_named(monkeypatch):
 ])
 async def test_source_tiers(host, tier):
     assert source_quality.tier(host) == tier
+
+
+# ------------------------------------------------------------------ a company's own figure
+
+@pytest.mark.parametrize("host,claim,own", [
+    ("www.coca-cola.com", "A 12-ounce can of Coca-Cola has 140 calories.", True),
+    ("www.mcdonalds.com", "McDonald's Big Mac has 590 calories.", True),
+    ("www.mcdonalds.com", "A Big Mac has 590 calories.", False),       # the claim names no company
+    ("apple.com", "An apple has 95 calories.", False),                  # a fruit, not a company
+    ("apple.com", "Apple has 95 calories.", False),                     # an everyday word opening a sentence
+    ("www.healthline.com", "A Big Mac has 590 calories.", False),       # a site cannot name itself in
+])
+async def test_own_site(host, claim, own):
+    assert source_quality.own_site(host, claim) is own
+
+
+async def test_the_makers_page_backs_a_product_claim_at_medium(monkeypatch):
+    page = ("https://www.coca-cola.com/us/en/brands/coca-cola/products/original", "Coca-Cola Original")
+    fake(monkeypatch, response(answer(org="The Coca-Cola Company", url=page[0]), APPS + [page]))
+    v = await run("A 12-ounce can of Coca-Cola has 140 calories.")
+    assert v.verdict == verify_v2.SUPPORTED and v.confidence == verify_v2.MEDIUM
+    assert any("own figure for its product" in c for c in v.caveats)
+    assert v.citations[0]["url"] == page[0]
+
+
+async def test_an_opinion_is_said_once():
+    v = await run("Pineapple is the best pizza topping.")
+    assert v.headline.startswith("That reads as an opinion")

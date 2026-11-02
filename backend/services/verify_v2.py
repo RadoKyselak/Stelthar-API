@@ -388,10 +388,10 @@ def _graded_result(claim: str, parsed: ParsedClaim, g: GroundedAnswer, verdict: 
     decisive = verdict in (SUPPORTED, MOSTLY_ACCURATE, CONTRADICTED, MISLEADING)
     tier = g.source_tier
     pages = [f.get("url", "") for f in g.leads]
-    shown = [c for c in g.citations if sq.tier(c.uri, pages) in (sq.OFFICIAL, sq.RELIABLE)]
+    shown = [c for c in g.citations if sq.tier(c.uri, pages, claim) in (sq.OFFICIAL, sq.RELIABLE)]
 
     def cite(c) -> Dict[str, Any]:
-        t = sq.tier(c.uri, pages)
+        t = sq.tier(c.uri, pages, claim)
         return {"title": c.title, "url": c.uri, "domain": c.domain,
                 "is_official_source": t == sq.OFFICIAL,
                 "reliability": t, "quote": getattr(c, "quote", "") or ""}
@@ -426,7 +426,11 @@ def _graded_result(claim: str, parsed: ParsedClaim, g: GroundedAnswer, verdict: 
         else:
             confidence = HIGH if agree else MEDIUM
             who = g.source_org or (_host_of(g.source_url))
-            caveats.append(f"Checked against {who}, not the agency that publishes the figure.")
+            if sq.own_site(g.source_url, claim):
+                caveats.append(f"This is {who}'s own figure for its product; no government "
+                               f"record of it was found.")
+            else:
+                caveats.append(f"Checked against {who}, not the agency that publishes the figure.")
         if disagree:
             f = disagree[0]
             confidence = MEDIUM if confidence == HIGH else confidence
@@ -962,7 +966,8 @@ async def _verify_one(claim: str, allow_grounding: bool = True,
         # the paid tier. Not an outage, and nothing was spent.
         return VerificationV2(
             claim=text, verdict=NO_VERDICT, confidence=LOW,
-            headline=g.error if g.limited else f"{unresolved_headline} {g.error}",
+            headline=(g.error if g.limited or g.error.startswith("That reads as")
+                      else f"{unresolved_headline} {g.error}"),
             reason=unresolved_reason,
             tier=TIER_NONE, model_calls=0,
             elapsed_seconds=round(time.monotonic() - started, 2),

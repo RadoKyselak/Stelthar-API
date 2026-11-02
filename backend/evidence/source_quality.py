@@ -10,6 +10,7 @@ Only an official or reliable page may back a verdict. Domains are matched as
 the registrable domain, so "pewresearch.org" covers "www.pewresearch.org" but
 not "pewresearch.org.example.com".
 """
+import re
 from urllib.parse import urlparse
 
 OFFICIAL = "official"
@@ -81,10 +82,14 @@ def is_official(url_or_host: str) -> bool:
             and labels[-2] in ("gov", "gouv", "gob", "govt", "gc", "go", "admin", "gv"))
 
 
-def tier(url_or_host: str, fact_check_pages=()) -> str:
-    """official | reliable | other. A page in `fact_check_pages` (published
-    fact-checks from Google's Fact Check Tools index, which lists only
-    recognised fact-checking publishers) counts as reliable."""
+def tier(url_or_host: str, fact_check_pages=(), claim: str = "") -> str:
+    """official | reliable | other.
+
+    Also reliable: a page in `fact_check_pages` (published fact-checks from
+    Google's Fact Check Tools index, which lists only recognised fact-checking
+    publishers), and a company's own site when the claim names that company
+    ("A can of Coca-Cola has 140 calories" on coca-cola.com): the maker
+    publishes its product's figures first-hand."""
     host = _host(url_or_host)
     if is_official(host):
         return OFFICIAL
@@ -92,7 +97,51 @@ def tier(url_or_host: str, fact_check_pages=()) -> str:
         return RELIABLE
     if any(same_page(url_or_host, p) for p in fact_check_pages):
         return RELIABLE
+    if claim and own_site(host, claim):
+        return RELIABLE
     return OTHER
+
+
+def _alnum(s: str) -> str:
+    return "".join(ch for ch in (s or "").lower() if ch.isalnum())
+
+
+def own_site(url_or_host: str, claim: str) -> bool:
+    """True when the site's name is a company the claim names: coca-cola.com
+    for "Coca-Cola", mcdonalds.com for "McDonald's". A site does not qualify by
+    naming itself as the source; the claim has to name it."""
+    host = _host(url_or_host)
+    labels = [l for l in host.split(".") if l]
+    if len(labels) < 2:
+        return False
+    # The registrable name: "coca-cola" in www.coca-cola.com, "mcdonalds" in order.mcdonalds.co.uk.
+    name = labels[-3] if len(labels) >= 3 and len(labels[-1]) == 2 and labels[-2] in ("co", "com") else labels[-2]
+    name = _alnum(name)
+    if len(name) < 4:
+        return False
+    # The claim's own words, joined one, two or three at a time, so "Coca-Cola"
+    # and "McDonald's" match. The match must be capitalised (a name, not "an
+    # apple"), and a brand that is an everyday word counts only mid-sentence.
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'\u2019&-]*", claim or "")
+    for i in range(len(words)):
+        for n in (1, 2, 3):
+            chunk = words[i:i + n]
+            if len(chunk) < n or _alnum("".join(chunk)).removesuffix("s") not in (name, name.removesuffix("s")):
+                continue
+            if not chunk[0][:1].isupper():
+                continue
+            if name in _EVERYDAY and i == 0:
+                continue
+            return True
+    return False
+
+
+# Brands that are also ordinary words: "Apple" opening a sentence is a fruit
+# as often as a company.
+_EVERYDAY = frozenset("""
+apple target subway shell gap delta visa dove tide amazon oracle jaguar puma
+mars orange blackberry corona monster tesla mercury
+""".split())
 
 
 def same_page(a: str, b: str) -> bool:
