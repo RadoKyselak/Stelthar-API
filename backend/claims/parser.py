@@ -155,6 +155,8 @@ _SUPERLATIVE_RE = re.compile(
     r"\b(?:the\s+|a\s+|an\s+)?(?:(?:lowest|highest|biggest|largest|smallest|fastest|slowest|"
     r"steepest|sharpest)\s+(?:level\s+|rate\s+|reading\s+)?(?:in|since)\s+(?:over\s+|more than\s+|"
     r"nearly\s+|almost\s+|about\s+|roughly\s+)?\d{1,3}\s+years|"
+    r"(?:lowest|highest|biggest|largest|smallest|fastest|slowest|steepest|sharpest)"
+    r"\s+(?:level\s+|rate\s+|reading\s+)?since\s+(?:19|20)\d\d|"
     r"\d{1,3}[- ]year\s+(?:low|high|record|peak))\b",
     re.IGNORECASE,
 )
@@ -373,6 +375,11 @@ def _current_year() -> int:
     return datetime.now(timezone.utc).year
 
 
+_RECORD_SINCE_RE = re.compile(
+    r"\b(?:highest|lowest|biggest|largest|smallest|worst|best|fastest|slowest|most|least)\b"
+    r"[^.;]{0,40}\bsince\s+$", re.I)
+
+
 def _extract_years(text: str) -> List[int]:
     """Every plausible calendar year, excluding bill numbers and section refs."""
     years: List[int] = []
@@ -380,6 +387,8 @@ def _extract_years(text: str) -> List[int]:
         preceding = text[max(0, m.start() - 24):m.start()]
         if _NON_YEAR_CONTEXT_RE.search(preceding.strip()):
             continue
+        if _RECORD_SINCE_RE.search(text[max(0, m.start() - 60):m.start()]):
+            continue  # "the lowest since 1969" bounds a record; it is not the claim's year
         y = int(m.group(1))
         if y not in years:
             years.append(y)
@@ -495,6 +504,44 @@ def _choose_metric(text: str, claimed: Optional[Quantity]) -> Optional[MetricSpe
     return None
 
 
+# Measures Census publishes for every city. "Nashville has about 720,000
+# people" names no state and no "in", so nothing marked Nashville as a place
+# and it was checked against the U.S. population. Only for these measures: a
+# subject in "Biden has added 15 million jobs" is a person, not a place.
+_PLACE_MEASURES = frozenset(("population", "median_household_income", "median_home_value",
+                             "median_gross_rent", "poverty_rate", "uninsured_rate",
+                             "bachelors_or_higher"))
+_NOT_SUBJECT_PLACE = frozenset("""
+it this that there here he she they we i you our my his her their its census
+median average household households income poverty population rent rents
+home homes housing americans people residents everyone nobody one
+""".split())
+_SUBJECT_PLACE_RE = re.compile(
+    r"^\s*(?:(?i:the\s+(?:city|town|village)\s+of)\s+)?"
+    r"([A-Z][a-z.'’]+(?:[\s-][A-Z][a-z.'’]+){0,2})"
+    r"(?:['’]s\b|\s+(?:(?i:now|still|currently|already|today)\s+)?"
+    r"(?i:has|had|have|is\s+home\s+to|was\s+home\s+to|counts?|counted|houses|grew\s+to|"
+    r"reached|tops|topped|surpassed|passed|crossed|is|was)\b)")
+
+
+def _subject_place(raw: str):
+    """The city a claim opens with, when it names no other place."""
+    from claims.geography import Geography, _NATIONAL_PHRASES, _NOT_A_PLACE, \
+        _proper_noun_is_unresolved, _word_bounded
+    m = _SUBJECT_PLACE_RE.match(raw)
+    if not m:
+        return None
+    name = m.group(1).strip(" .")
+    low = name.lower()
+    if low in _NOT_A_PLACE or any(_word_bounded(low, p) for p in _NATIONAL_PHRASES):
+        return None
+    if not _proper_noun_is_unresolved(name) or match_metrics(name):
+        return None  # "Poverty was 11.1%" opens with the measure, not a city
+    if low.split()[0] in _NOT_SUBJECT_PLACE:
+        return None
+    return Geography(name=name, level="place")
+
+
 def parse_claim(text: str) -> ParsedClaim:
     """Parse a claim into a lookup request. Never raises."""
     raw = (text or "").strip()
@@ -576,6 +623,9 @@ def parse_claim(text: str) -> ParsedClaim:
             magnitude=-claimed.magnitude, family=claimed.family,
             approximate=claimed.approximate, raw=claimed.raw, precision=claimed.precision,
         )
+
+    if geography is None and spec is not None and spec.metric in _PLACE_MEASURES:
+        geography = _subject_place(raw)
 
     all_values = _all_quantities(value_text)
     has_unresolved = bool(_RELATIVE_PERIOD_RE.search(raw)) and year is None

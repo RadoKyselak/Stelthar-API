@@ -164,7 +164,17 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
                                      parsed.present or year is None)
 
     if spec.source == "BEA":
+        if spec.metric == "real_gdp_growth" and year is None and parsed.present and (
+                parsed.geography is None or parsed.geography.level == "nation"):
+            from services import derived
+            got = await derived.latest_gdp_growth()
+            if got:
+                return got
         if parsed.quarter is not None and year is not None:
+            if spec.metric == "real_gdp_growth" and not config.BEA_API_KEY and (
+                    parsed.geography is None or parsed.geography.level == "nation"):
+                from services import derived
+                return await derived.gdp_quarter(year, parsed.quarter)
             return await bea_source.fetch_quarter(spec, year, parsed.quarter)
         return await bea_source.fetch(spec, year)
 
@@ -183,6 +193,8 @@ def has_structured_adapter(spec: Optional[MetricSpec]) -> bool:
     if spec.source == "CENSUS":
         return bool(spec.census_variable and config.CENSUS_API_KEY)
     if spec.source == "BEA":
+        if spec.metric == "real_gdp_growth":
+            return True  # FRED republishes it keyless when there is no BEA key
         return bool(spec.bea_table and spec.bea_line and config.BEA_API_KEY)
     return False
 
@@ -492,6 +504,61 @@ async def _verify_two_points(text: str, parsed: ParsedClaim, started: float) -> 
     )
 
 
+async def _interpreted(text: str, parse_text: str, parsed: ParsedClaim, client_ip: Optional[str],
+                       started: float, note: str = "") -> Optional[VerificationV2]:
+    """The claim read by the interpreter and answered by the engine, or None."""
+    from services import interpret
+    q = await interpret.interpret(parse_text, client_ip)
+    if q is None:
+        return None
+    v = await interpret.run(q, parse_text, parsed)
+    if v is None or v.verdict == NO_VERDICT:
+        return None
+    v = interpret.cap(v)
+    shown = parsed
+    if v.evidence and v.evidence[0].geography.level != "nation":
+        shown = replace(parsed, geography=v.evidence[0].geography)
+    result = _verdict_to_result(text, replace(shown, aside=""), v, started)
+    result.tier = "dataset"
+    result.model_calls = q.model_calls
+    result.notes.append(f"interpreted ({'cached' if q.cached else f'${q.cost_usd:.5f}'}): {q.describe()}"
+                        + (f"; {note}" if note else "") + "; figure from the agency")
+    return result
+
+
+async def _cps_income(parsed: ParsedClaim) -> Optional[Verdict]:
+    """Median household income against Census's CPS figure, the one its
+    report headlines, when the ACS figure is a near miss."""
+    if parsed.metric is None or parsed.metric.metric != "median_household_income":
+        return None
+    if parsed.geography is not None and parsed.geography.level != "nation":
+        return None
+    from services import derived
+    year = parsed.year or datetime_now_year() - 1
+    try:
+        dp = await derived.cps_median_income(year)
+    except Exception:  # noqa: BLE001
+        logger.exception("CPS income lookup failed")
+        return None
+    return assess(parsed, [dp]) if dp is not None else None
+
+
+async def _with_record(text: str, parsed: ParsedClaim, v: Verdict):
+    """A figure that also claims a record ("3.4%, the lowest since 1969"): the
+    record is checked too, against every month in its window."""
+    from services import derived
+    if parsed.claimed_value is None or v.verdict not in (SUPPORTED, MOSTLY_ACCURATE):
+        return v, parsed
+    rec = await derived.record_aside(text)
+    if rec is None:
+        return v, parsed
+    parsed = replace(parsed, aside="")
+    if rec.verdict == SUPPORTED:
+        return replace(v, caveats=v.caveats + [f"The record checks out too: {rec.headline}"]), parsed
+    return replace(v, verdict=MISLEADING, headline=f"{v.headline} But: {rec.headline}",
+                   caveats=v.caveats + rec.caveats), parsed
+
+
 def datetime_now_year() -> int:
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).year
@@ -508,8 +575,40 @@ async def verify(claim: str, allow_grounding: bool = True,
             headline="No claim was provided.", reason="claim_states_no_checkable_value",
         )
 
-    parsed = parse_claim(text)
+    from services import derived
+    parse_text, office_note = derived.took_office(text)
+    parsed = parse_claim(parse_text)
+    if office_note:
+        parsed = replace(parsed, aside=office_note)
     blocked = _structured_is_applicable(parsed)
+
+    # A year that has not happened has no figure; nothing to search for.
+    if parsed.year_is_future and parsed.metric is not None:
+        return VerificationV2(
+            claim=text, verdict=NO_VERDICT, confidence=LOW,
+            headline=(f"No official figure for {parsed.year} exists yet: that period has not "
+                      f"happened or has not been published."),
+            reason=PERIOD_UNAVAILABLE, tier=TIER_NONE,
+            elapsed_seconds=round(time.monotonic() - started, 2),
+            parsed=_parsed_summary(parsed),
+        )
+
+    # Claims answered by working through the agency's full series (a
+    # direction, a change since a date, a record, a revision): free, exact.
+    computed = await derived.check(parse_text, parsed)
+    if computed is None:
+        from claims.parser import income_band as _band
+        if _band(parse_text):
+            # Area Median Income and HUD income limits: HUD's own table.
+            from services import ami
+            computed = await ami.check(parse_text, parsed)
+            if computed is not None and computed.verdict == NO_VERDICT:
+                computed = None
+    if computed is not None:
+        # The computed check covers the whole claim, records included.
+        result = _verdict_to_result(text, replace(parsed, aside=office_note), computed, started)
+        result.notes.append("computed from the full official series; no model call")
+        return result
 
     if blocked is None and _is_two_point(parsed):
         two = await _verify_two_points(text, parsed, started)
@@ -553,6 +652,25 @@ async def verify(claim: str, allow_grounding: bool = True,
 
         if evidence:
             base = assess(parsed, evidence)
+            if base.verdict in (MOSTLY_ACCURATE, CONTRADICTED):
+                # The claim may quote the first release, revised since.
+                first = await derived.first_print_match(parsed, base)
+                if first is not None:
+                    base = first
+            if _alternate_measure_applies(parsed, base):
+                alt = await _cps_income(parsed)
+                if alt is not None and alt.verdict in (SUPPORTED, MOSTLY_ACCURATE):
+                    base = alt
+            base, parsed = await _with_record(parse_text, parsed, base)
+            if allow_grounding:
+                from services import interpret
+                if interpret.misread_suspected(parsed, base):
+                    # 720,000 people against the U.S. population: more likely
+                    # the claim was misread than wrong. Read it again.
+                    fixed = await _interpreted(text, parse_text, parsed, client_ip, started,
+                                               note="rules' reading looked wrong (figures 20x apart)")
+                    if fixed is not None:
+                        return fixed
             verdict = _soften_for_alternate_measure(parsed, base)
             # A near miss that another official measure might explain is sent
             # to the search, but the search can only upgrade it (to Supported,
@@ -618,6 +736,11 @@ async def verify(claim: str, allow_grounding: bool = True,
     ds = await dataset_tier.verify(text, parsed, client_ip, started)
     if ds is not None:
         return ds
+    # The interpreter: the claim read into a query (measure, place, period,
+    # operation) by one small call, answered by the engine from agency data.
+    got = await _interpreted(text, parse_text, parsed, client_ip, started)
+    if got is not None:
+        return got
     # Then Claude, with the same datasets as tools: about $0.002, against a
     # web search's ~$0.03, and the figure is still the agency's own.
     ds = await dataset_tier.verify_found(text, parsed, client_ip, started)

@@ -334,7 +334,22 @@ async def _by_rules(query: str, accessed: Optional[date] = None) -> LookupResult
         ))
 
     parsed = parse_claim(text)
+    if parsed.year is None and parsed.month is None and parsed.quarter is None:
+        # "unemployment rate" asks for the figure now: the latest month, not
+        # last year's average.
+        parsed = replace(parsed, present=True)
     spec_override = None
+
+    from claims.parser import income_band
+    if income_band(text):
+        # Area Median Income and HUD income limits, from HUD's own table.
+        from services import ami
+        try:
+            dp = await ami.figure(text, parsed)
+        except SourceUnavailable:
+            dp = None
+        if dp is not None:
+            return done(_found(text, [dp], accessed))
 
     if parsed.metric is None:
         # Strip period and filler words so "debt 2023" reduces to "debt".
