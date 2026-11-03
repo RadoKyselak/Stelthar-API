@@ -296,6 +296,12 @@ async def lookup(query: str, accessed: Optional[date] = None, *, deep: bool = Fa
     text = (query or "").strip()
     if r.ok or not text or r.reason in _FINAL or parse_claim(text).year_is_future:
         return r
+    if deep and reads_as_claim(text):
+        # Extension 2.1.2 and older send any text without a figure here,
+        # including highlighted sentences: those get the claim check.
+        out = await _claim_check(text, client_ip)
+        out.elapsed_seconds = round(time.monotonic() - started, 2)
+        return out
     if not finder.available() or finder.gate(text):
         return r
     if not deep:
@@ -315,6 +321,47 @@ async def lookup(query: str, accessed: Optional[date] = None, *, deep: bool = Fa
                 + ("" if found.exact else " It is the closest official measure, not an exact match."))
     out.elapsed_seconds = round(time.monotonic() - started, 2)
     return out
+
+
+# The same rules as intentOf() in extension/result-view.js: a sentence or a
+# yes/no question is a claim; a measure ("unemployment texas 2023") or a
+# what/how question is a figure to find.
+_CLAIM_VERB = re.compile(
+    r"\b(is|isn['’]t|was|wasn['’]t|are|aren['’]t|were|weren['’]t|has|hasn['’]t|have|had|will|"
+    r"won['’]t|can|can['’]t|cause[sd]?|won|lost|rose|fell|grew|recalled|banned|approved|signed|passed)\b", re.I)
+_WH = re.compile(r"^(what|how|which|when|where|who|whats|what['’]s)\b", re.I)
+
+
+def reads_as_claim(text: str) -> bool:
+    s = " ".join((text or "").split())
+    if not s or _WH.match(s):
+        return False
+    return s.endswith("?") or bool(_CLAIM_VERB.search(s)) or len(s.split()) >= 8
+
+
+async def _claim_check(text: str, client_ip: Optional[str]) -> LookupResult:
+    """The claim's verdict in the lookup card an older extension can draw:
+    the verdict as the figure, what the record shows as the note."""
+    from services import verify_compat
+    d = await verify_compat.verify(text, client_ip=client_ip)
+    verdict = d.get("verdict_detail") or "No verdict"
+    headline = d.get("headline") or d.get("summary") or ""
+    if d.get("degraded") or verdict == "No verdict":
+        return LookupResult(query=text, ok=False, reason=METRIC_UNKNOWN, headline=headline,
+                            degraded=bool(d.get("degraded")), model_calls=d.get("model_calls") or 0)
+    ev = (d.get("evidence") or [{}])[0] or {}
+    cites = [c for c in d.get("citations") or [] if c.get("url")]
+    url = ev.get("source_url") or (cites[0]["url"] if cites else "")
+    agency = ev.get("source") or (cites[0].get("publisher") or cites[0].get("domain") if cites else "")
+    caveats = d.get("caveats") or []
+    return LookupResult(
+        query=text, ok=True, label="Claim check", value=verdict, headline=headline,
+        note=headline,
+        citations={"agency": agency or "", "url": url or "",
+                   "attribution": f"{agency or 'Source'}, {d.get('confidence_tier') or 'Low'} confidence",
+                   "caveat": caveats[0] if caveats else ""},
+        model_calls=d.get("model_calls") or 0,
+    )
 
 
 async def _by_rules(query: str, accessed: Optional[date] = None) -> LookupResult:
