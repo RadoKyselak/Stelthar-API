@@ -441,9 +441,17 @@
   }
 
   // A claim states a value; a lookup only names a measure (and maybe a year).
+  // A figure other than a year, a yes/no question or a sentence is a claim to
+  // check; a short measure ("unemployment texas 2023") or a what/how question
+  // is a figure to find.
+  const VERB = /\b(is|isn['\u2019]t|was|wasn['\u2019]t|are|aren['\u2019]t|were|weren['\u2019]t|has|hasn['\u2019]t|have|had|will|won['\u2019]t|can|can['\u2019]t|cause[sd]?|won|lost|rose|fell|grew|recalled|banned|approved|signed|passed)\b/i;
   function intentOf(text) {
-    const t = String(text || "").replace(/\b(19|20)\d{2}\b/g, " ").replace(/\bq[1-4]\b/gi, " ");
-    return /\d/.test(t) ? "check" : "find";
+    const s = String(text || "").replace(/\s+/g, " ").trim();
+    const t = s.replace(/\b(19|20)\d{2}\b/g, " ").replace(/\bq[1-4]\b/gi, " ");
+    if (/\d/.test(t)) return "check";
+    if (/^(what|how|which|when|where|who|whats|what['\u2019]s)\b/i.test(s)) return "find";
+    if (/\?$/.test(s) || VERB.test(s)) return "check";
+    return s.split(" ").length >= 8 ? "check" : "find";
   }
 
   // Real claims, each answered from an agency's own data (no AI search).

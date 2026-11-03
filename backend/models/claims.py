@@ -31,7 +31,8 @@ class LookupRequest(BaseModel):
     "cpi 2022"), and a three-character floor would reject the shortest real
     queries the omnibox is built for.
     """
-    query: str = Field(..., min_length=2, max_length=200)
+    # Up to 600: extension 2.1.2 and older send highlighted sentences here.
+    query: str = Field(..., min_length=2, max_length=600)
     # True on an explicit search (Enter / Find), never on a keystroke: only
     # then may Claude search the datasets when the rules find nothing.
     deep: bool = False
