@@ -15,6 +15,7 @@ the record cannot settle the claim (no match for the name, a year the data
 does not carry), it returns None and the claim moves on, never a guess.
 """
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional, Tuple
@@ -221,7 +222,20 @@ async def run(r: Read, text: str, parsed) -> Optional[Verdict]:
             return _supplement(r)
         if r.kind == "novel":
             return _novel(r, text, parsed)
-        for name in (_clean(r.product) if r.product else []):
+        names = _clean(r.product) if r.product else []
+        if r.kind == "recall":
+            # "distributed by Coast Citrus Distributors": the firm is the most
+            # exact name a recall claim gives, so it is tried first.
+            products = _clean(_ORIGIN.sub("", r.product)) if r.product else []
+            for firm in _firms(text):
+                v = await _recall(r, firm, products=products)
+                if v is not None:
+                    return v
+            names = products
+        # "Mexico" in "Jalapeños from Sinaloa, Mexico were recalled" is where
+        # the food came from; a place alone would match any firm named for it.
+        names = [n for n in names if not _is_place(n)]
+        for name in names:
             fn = {"approval": _approval, "indication": _indication, "boxed": _boxed,
                   "recall": _recall, "shortage": _shortage}[r.kind]
             v = await fn(r, name)
@@ -554,7 +568,50 @@ _REASONS = {
 
 def _recall_row(x: dict) -> str:
     return " · ".join(s for s in (_fmt(x.get("recall_initiation_date") or ""), x.get("classification") or "",
-                                  (x.get("reason_for_recall") or "").strip()[:90]) if s)
+                                  (x.get("reason_for_recall") or "").strip()[:90].rstrip(".")) if s)
+
+
+# "Fresh Jalapeños from Sinaloa, Mexico": where a food came from is not its name.
+_ORIGIN = re.compile(r"\s+(?:imported from|grown in|made in|produced in|from)\s+.*$", re.I)
+_FIRM = re.compile(r"\b(?:distributed|recalled|sold|packed|packaged|manufactured|made|produced|imported|"
+                   r"supplied|issued)\s+by\s+(?P<f>(?:[A-Z][\w&'’.-]*,?\s?){1,5})")
+
+
+def _firms(text: str) -> List[str]:
+    out = []
+    for m in _FIRM.finditer(text or ""):
+        words = [w.strip(",") for w in m.group("f").split()]
+        while words and words[-1].lower() in _STOP | {"inc", "llc", "co"}:
+            words.pop()
+        name = " ".join(words)
+        if len(name) >= 4 and name.lower() not in ("fda", "the fda"):
+            out.append(name)
+    return out[:2]
+
+
+def _is_place(name: str) -> bool:
+    from claims import geography
+    n = _fold(name).strip(" .")
+    return (n in geography._NON_US or n in geography._STATE_FIPS
+            or n in ("united states", "america", "usa", "u.s", "us"))
+
+
+def _fold(s: str) -> str:
+    """Lower case, accents off: "Jalapeños" -> "jalapenos", as FDA spells it."""
+    return "".join(ch for ch in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(ch)).lower()
+
+
+def _tokens(s: str) -> List[str]:
+    """Words folded and made singular, so "Jalapeños" finds "Jalapeno Pepper"."""
+    return [w[:-1] if len(w) > 4 and w.endswith("s") and not w.endswith(("ss", "us", "is")) else w
+            for w in re.findall(r"[a-z0-9]+", _fold(s))]
+
+
+def _names(text: str, name: str) -> bool:
+    want, have = _tokens(name), _tokens(text)
+    if not want:
+        return False
+    return any(have[i:i + len(want)] == want for i in range(len(have) - len(want) + 1))
 
 
 # Meat, poultry and egg products are recalled by USDA's FSIS, not FDA.
@@ -562,17 +619,28 @@ _USDA = re.compile(r"\b(meats?|deli|ham|bacon|sausages?|hot dogs?|beef|pork|chic
                    r"jerky|salami|pepperoni|bologna|liverwurst|egg products?)\b", re.I)
 
 
-async def _recall(r: Read, name: str) -> Optional[Verdict]:
+async def _recall(r: Read, name: str, products: List[str] = ()) -> Optional[Verdict]:
     """Only what FDA's records show. A recall missing from them, in a year or
     for a reason, may be USDA's (meat, poultry) or older than 2012, so a miss
     is never read as "no recall"."""
     if _USDA.search(r.text) and not r.negated:
         return None
-    n = name.lower()
     def mine(rows):
-        return [x for x in rows if n in (x.get("product_description") or "").lower()
-                or n in (x.get("recalling_firm") or "").lower()]
-    hits = mine(await openfda.recalls(name, r.year))
+        rows = [x for x in rows if _names(x.get("product_description") or "", name)
+                or _names(x.get("recalling_firm") or "", name)]
+        if products:  # a firm named with its product: the record must be that product's
+            rows = [x for x in rows if any(_names(x.get("product_description") or "", p) for p in products)]
+        return rows
+    # FDA writes "Jalapeno", a claim "Jalapeños": the singular is searched
+    # only when the name as written finds nothing.
+    hits = []
+    for q in dict.fromkeys((_fold(name), " ".join(_tokens(name)))):
+        hits = mine(await openfda.recalls(q, r.year))
+        if hits:
+            break
+    want = next((v for k, v in _REASONS.items() if re.search(k, r.reason, re.I)), None)
+    if want and not r.negated:
+        hits = [x for x in hits if want in (x.get("reason_for_recall") or "").lower()]
     if not hits:
         return None
     rows_src = sorted(hits, key=lambda x: x.get("recall_initiation_date") or "", reverse=True)
@@ -587,13 +655,6 @@ async def _recall(r: Read, name: str) -> Optional[Verdict]:
               note="FDA enforcement reports, 2012 on.")
     if r.negated:
         return verdict(CONTRADICTED, f"FDA's recall records show {name} was recalled: {_recall_row(latest)}.", [dp])
-    want = next((v for k, v in _REASONS.items() if re.search(k, r.reason, re.I)), None)
-    if want:
-        hits = [x for x in hits if want in (x.get("reason_for_recall") or "").lower()]
-        if not hits:
-            return None
-        latest = sorted(hits, key=lambda x: x.get("recall_initiation_date") or "", reverse=True)[0]
-        dp.extra["display"] = _recall_row(latest)
     return verdict(SUPPORTED, f"FDA's recall records show it: {_recall_row(latest)}.", [dp])
 
 

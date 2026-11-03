@@ -1,6 +1,6 @@
-// Project Mirador side panel. One field: a sentence with a figure in it is
-// checked as a claim; a measure without one ("unemployment texas 2023") is
-// looked up. Right-click "Check with Project Mirador" sends the highlighted
+// Project Mirador side panel. One field: a sentence or yes/no question is
+// checked as a claim; a short measure ("unemployment texas 2023") is looked
+// up. Right-click "Check with Project Mirador" sends the highlighted
 // text here; the address bar ("mir ...") opens this page in a tab with ?q=.
 const MAX_CLAIM_LEN = 600;
 const View = window.MiradorView;
@@ -68,7 +68,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const run = (t, setField = false) => {
+  const run = (t, setField = false, intent = null) => {
     t = (t || "").trim();
     if (!t) return;
     if (setField) q.value = t;
@@ -81,7 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
       show(View.error(`That's ${t.length} characters, too long to check. Highlight one sentence with one figure in it.`));
       return;
     }
-    if (View.intentOf(t) === "check") check(t);
+    if ((intent || View.intentOf(t)) === "check") check(t);
     else find(t);
   };
 
@@ -148,7 +148,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const takePending = (p) => {
     if (!p || !p.text || Date.now() - p.at > 60000) return;
     chrome.storage.session.remove(PENDING_KEY);
-    run(p.text, true);
+    run(p.text, true, p.intent);
   };
   chrome.storage.session.get(PENDING_KEY, (data) => takePending(data[PENDING_KEY]));
   chrome.storage.onChanged.addListener((changes, area) => {

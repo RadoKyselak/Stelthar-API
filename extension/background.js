@@ -112,8 +112,10 @@ async function verifyClaim(claim, { bypassCache = false } = {}) {
 const PENDING_KEY = "mirador_pending";
 
 // The panel picks this up when it opens, or right away if it is already open.
-const sendToPanel = (text) =>
-  chrome.storage.session.set({ [PENDING_KEY]: { text, at: Date.now() } });
+// intent "check": right-click is "Check with Project Mirador", so the
+// highlighted text is checked as a claim even when it has no figure in it.
+const sendToPanel = (text, intent) =>
+  chrome.storage.session.set({ [PENDING_KEY]: { text, intent, at: Date.now() } });
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
@@ -132,7 +134,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   // open() must run before anything async, or Chrome no longer counts it as
   // the user's click.
   chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
-  sendToPanel(info.selectionText.replace(/\s+/g, " ").trim());
+  sendToPanel(info.selectionText.replace(/\s+/g, " ").trim(), "check");
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {

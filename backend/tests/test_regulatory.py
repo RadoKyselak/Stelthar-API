@@ -207,3 +207,62 @@ async def test_a_settled_claim_costs_nothing(fda_api):
         r = await verify("The FDA approved Wegovy in 2021.", client_ip="1.2.3.4")
     assert r.verdict == SUPPORTED and r.model_calls == 0
     search.assert_not_awaited()
+
+
+# A recall named by its firm and product, with a place in between: the firm
+# and the product settle it; the place ("Mexico") never does.
+_JALAPENO = {"product_description": "Jalapeno Pepper packaged in bulk generic Coast Tropical cardboard packaging.",
+             "recalling_firm": "Coast Citrus Distributors", "classification": "Class I",
+             "recall_initiation_date": "20260722", "recall_number": "H-1242-2026",
+             "reason_for_recall": "Potential Salmonella Javiana contamination"}
+_GUMMY = {"product_description": "Jovy Gummy Worms Neon; packaged in 1lb plastic units.",
+          "recalling_firm": "El Ruisenor De Mexico, Inc.", "classification": "Class II",
+          "recall_initiation_date": "20260824", "recall_number": "H-0130-2027",
+          "reason_for_recall": "undeclared allergen ingredient (Red#40)"}
+_OTHER = {"product_description": "Cucumbers grown in Mexico", "recalling_firm": "Some Farm",
+          "classification": "Class I", "recall_initiation_date": "20260123", "recall_number": "H-0500-2026",
+          "reason_for_recall": "Potential contamination with Salmonella."}
+
+
+@pytest.fixture
+def recall_api(monkeypatch, tmp_path):
+    monkeypatch.setattr(cache_mod, "_CACHE_DIR", tmp_path)
+    asked = []
+
+    async def get(endpoint, search, limit=25):
+        n = _name(search)
+        asked.append(n)
+        rows = {"COAST CITRUS DISTRIBUTORS": [_JALAPENO], "JALAPENO": [_JALAPENO],
+                "MEXICO": [_GUMMY, _OTHER]}.get(n, []) if endpoint == "food/enforcement" else []
+        return {"results": rows, "total": len(rows)}
+    monkeypatch.setattr(openfda, "_get", get)
+    return asked
+
+
+async def test_recall_by_firm_and_product(recall_api):
+    t = ("2026 Recalls of Food Products Associated with Fresh Jalapeños from Sinaloa, Mexico and "
+         "distributed by Coast Citrus Distributors due to the Potential Risk of Salmonella")
+    v = await fda.check(t, None)
+    assert v.verdict == SUPPORTED and v.evidence[0].series_id == "H-1242-2026"
+    assert "July 22, 2026" in v.headline and ".." not in v.headline
+
+
+async def test_recall_spelled_with_accents_and_plurals(recall_api):
+    v = await fda.check("Jalapeños were recalled for salmonella in 2026", None)
+    assert v.verdict == SUPPORTED and v.evidence[0].series_id == "H-1242-2026"
+
+
+async def test_a_place_is_not_a_product(recall_api):
+    assert await fda.check("Fresh Jalapeños from Sinaloa, Mexico were recalled in 2026", None) is None
+    assert "MEXICO" not in recall_api
+
+
+async def test_cited_record_is_the_one_that_matched_the_reason(monkeypatch, tmp_path):
+    monkeypatch.setattr(cache_mod, "_CACHE_DIR", tmp_path)
+
+    async def get(endpoint, search, limit=25):
+        rows = [_GUMMY, _OTHER] if endpoint == "food/enforcement" and _name(search) == "SOME FARM" else []
+        return {"results": [{**r, "recalling_firm": "Some Farm"} for r in rows], "total": len(rows)}
+    monkeypatch.setattr(openfda, "_get", get)
+    v = await fda.check("Some Farm was recalled for salmonella in 2026", None)
+    assert v.verdict == SUPPORTED and v.evidence[0].series_id == "H-0500-2026"
