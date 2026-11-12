@@ -38,6 +38,8 @@ _MONTHS = ("january", "february", "march", "april", "may", "june", "july", "augu
 _DATE = re.compile(r"\b(" + "|".join(m.title() for m in _MONTHS) + r"|"
                    + "|".join(m[:3].title() for m in _MONTHS) + r")\.?\s+(\d{1,2}),?\s+((?:19|20)\d{2})\b")
 _YEAR = re.compile(r"\b((?:19|20)\d{2})\b")
+_MONTH_YEAR = re.compile(r"\b(" + "|".join(m.title() for m in _MONTHS) + r"|"
+                         + "|".join(m[:3].title() for m in _MONTHS) + r")\.?,?\s+((?:19|20)\d{2})\b")
 _ORDINAL = re.compile(r"\b(\d{2,3})(?:st|nd|rd|th)\s+Congress\b", re.I)
 
 # Federal bills: H.R. 1, S. 5, H.J.Res. 7, HR 22. Case matters: "S." after
@@ -166,6 +168,7 @@ class Read:
     cosponsor: bool = False
     signer: str = ""
     year: Optional[int] = None
+    month: Optional[int] = None    # set with year when the claim names a month but no day
     day: Optional[date] = None
 
 
@@ -287,10 +290,15 @@ def read(text: str) -> Optional[Read]:
             r.day = None
     years = [int(y) for y in _YEAR.findall(rest_no_cong)]
     r.year = r.day.year if r.day else (years[0] if years else None)
+    if not r.day:
+        mm = _MONTH_YEAR.search(rest_no_cong)
+        if mm:
+            r.month = next(i for i, x in enumerate(_MONTHS) if x.startswith(mm.group(1).lower()[:3])) + 1
+            r.year = int(mm.group(2))
 
     # Anything numeric left over (a dollar figure, a count) is a claim about
     # the bill's content, which this check does not cover.
-    scrub = _DATE.sub(" ", rest_no_cong)
+    scrub = _MONTH_YEAR.sub(" ", _DATE.sub(" ", rest_no_cong))
     scrub = _YEAR.sub(" ", scrub)
     tally = _TALLY.search(scrub)
     if tally:
@@ -650,15 +658,27 @@ def _president(d: Optional[date]) -> Tuple[str, str]:
     return best
 
 
+def _same_when(r: Read, d: Optional[date]) -> bool:
+    """Whether a date fits the claim's date, month or year."""
+    if d is None:
+        return False
+    if r.day:
+        return d == r.day
+    if r.month:
+        return (d.year, d.month) == (r.year, r.month)
+    return bool(r.year) and d.year == r.year
+
+
 def _when_ok(r: Read, e: Optional[Event]) -> Optional[str]:
     """A mismatch between the claim's date and the event's, as a sentence."""
-    if e is None or e.day is None:
+    if e is None or e.day is None or not (r.day or r.year) or _same_when(r, e.day):
         return None
-    if r.day and r.day != e.day:
-        return f"That happened on {show_date(e.day)}, not {show_date(r.day)}."
-    if r.year and not r.day and r.year != e.day.year:
-        return f"That happened on {show_date(e.day)}, not in {r.year}."
-    return None
+    if r.day:
+        return f"That was on {show_date(e.day)}, not {show_date(r.day)}."
+    if r.month:
+        return (f"That was in {_MONTHS[e.day.month - 1].title()} {e.day.year}, "
+                f"not {_MONTHS[r.month - 1].title()} {r.year}.")
+    return f"That was in {e.day.year}, not in {r.year}."
 
 
 async def judge(r: Read, rec: Record) -> Optional[Tuple[bool, List[str], Optional[Event]]]:
@@ -672,6 +692,12 @@ async def judge(r: Read, rec: Record) -> Optional[Tuple[bool, List[str], Optiona
     override = rec.first("override")
     unsigned = rec.first("unsigned")
     dated: Optional[Event] = None
+
+    def when(*what) -> Optional[Event]:
+        """The event the claim's date points at, else the first."""
+        hits = [e for e in rec.events if e.what in what]
+        return next((e for e in sorted(hits, key=lambda e: e.day or date.max) if _same_when(r, e.day)),
+                    None) or rec.first(*what)
 
     def status_now() -> str:
         if rec.over:
@@ -736,7 +762,7 @@ async def judge(r: Read, rec: Record) -> Optional[Tuple[bool, List[str], Optiona
         need = [LOWER, UPPER] if BOTH in want else [c for c in want if c in (LOWER, UPPER)]
         names = {LOWER: rec.lower, UPPER: "Senate"}
         if ANY in want:
-            ev = rec.first("passed_lower", "passed_upper")
+            ev = when("passed_lower", "passed_upper")
             if rec.law and not ev:
                 ev = law_ev
             if r.passed_neg:
@@ -749,7 +775,7 @@ async def judge(r: Read, rec: Record) -> Optional[Tuple[bool, List[str], Optiona
             else:
                 bad.append(f"{rec.label} has not passed a floor vote: {status_now()}.")
         for ch in need:
-            ev = rec.first("passed_lower" if ch == LOWER else "passed_upper")
+            ev = when("passed_lower" if ch == LOWER else "passed_upper")
             where = names[ch]
             if r.passed_neg:
                 if ev:
@@ -791,6 +817,7 @@ async def judge(r: Read, rec: Record) -> Optional[Tuple[bool, List[str], Optiona
             match = next((e for _, e in votes if e.tally == (a, b) or (r.failed and e.tally == (b, a))), None)
             if match:
                 cited = cited or match
+                dated = match
                 ok.append(f"The recorded vote on {show_date(match.day)} was {match.tally[0]}–{match.tally[1]}.")
             else:
                 shown = "; ".join(f"{e.tally[0]}–{e.tally[1]} ({rec.lower if c == LOWER else 'Senate'}, "

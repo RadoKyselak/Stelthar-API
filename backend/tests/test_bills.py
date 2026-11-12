@@ -108,6 +108,12 @@ def congress_api(monkeypatch, tmp_path):
     ("Congress passed the One Big Beautiful Bill Act.", SUPPORTED, "Senate"),
     ("Rep. Jodey Arrington introduced H.R. 1 in 2025.", SUPPORTED, "Arrington"),
     ("Rep. Nancy Pelosi sponsored H.R. 1 in 2025.", CONTRADICTED, "Arrington"),
+    # H.R. 1 passed the House twice (May 22, 215-214; July 3, 218-214): the month picks the vote.
+    ("The House passed H.R. 1 215-214 in July 2025.", CONTRADICTED, "not July 2025"),
+    ("The House passed H.R. 1 218-214 in July 2025.", SUPPORTED, "July 3, 2025"),
+    ("The House passed H.R. 1 in July 2025.", SUPPORTED, "July 3, 2025"),
+    ("The House passed H.R. 1 in May 2025.", SUPPORTED, "May 22, 2025"),
+    ("The Senate passed H.R. 1 in June 2025.", CONTRADICTED, "not June 2025"),
 ])
 async def test_federal_bill_claims(congress_api, claim, expected, says):
     v = await bills.check(claim)
