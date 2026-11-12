@@ -16,6 +16,7 @@ Bill numbers restart every Congress (and every state session), so a number
 is read with the Congress or year the claim names, else the current one, and
 the answer says which bill it read.
 """
+import asyncio
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -561,22 +562,22 @@ async def _federal(ref: Ref) -> Tuple[Optional[Record], List[str]]:
             return None, []
     if ref.congress is None:
         ref.congress, ref.congress_from = congress_of(_today().year), "current"
-    bill = await congress.bill(ref.congress, ref.kind, ref.number)
+    c, kind, n = ref.congress, ref.kind, ref.number
+    # Congress.gov often takes 10+ seconds a call, so ask for all three at once.
+    bill, titles, acts = await asyncio.gather(congress.bill(c, kind, n), congress.titles(c, kind, n),
+                                              congress.actions(c, kind, n))
     if not bill:
         return None, []
-    titles = await congress.titles(ref.congress, ref.kind, ref.number)
     if ref.canonical:
         if not _names_match(ref.canonical, [t["title"] for t in titles] + [bill.get("title") or ""]):
-            logger.warning("bill name %r does not match %s %s %s", ref.canonical, ref.congress, ref.kind, ref.number)
+            logger.warning("bill name %r does not match %s %s %s", ref.canonical, c, kind, n)
             return None, []
-    acts = await congress.actions(ref.congress, ref.kind, ref.number)
-    c, kind, n = ref.congress, ref.kind, ref.number
 
     async def cospons():
         return await congress.cosponsors(c, kind, n)
 
     rec = _federal_record(ref, bill, acts, cospons)
-    rec.title = _short_title(titles) or rec.title
+    rec.title = ref.canonical or _short_title(titles) or rec.title
     show = f"{_FED_SHOW[kind]} {n}"
     if ref.congress_from == "current":
         caveats.append(f"The claim names no Congress or year; this is {show} of the {_ordinal(c)} Congress "
@@ -588,8 +589,9 @@ async def _federal(ref: Ref) -> Tuple[Optional[Record], List[str]]:
 
 
 def _short_title(titles: List[dict]) -> str:
-    """The name people use: the popular title, else the short title."""
-    for prefix in ("Popular Title", "Short Title(s) as Enacted", "Short Titles as Enacted",
+    """The name people use: the enacted short title, else the popular title
+    (Congress.gov's popular titles can be generic, like "Health care reform bill")."""
+    for prefix in ("Short Title(s) as Enacted", "Short Titles as Enacted", "Popular Title",
                    "Short Title(s) as Passed", "Short Title"):
         hit = next((t["title"] for t in titles if t.get("titleType", "").startswith(prefix)
                     and not t.get("titleType", "").endswith("portions of this bill")), "")

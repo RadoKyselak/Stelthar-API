@@ -33,11 +33,11 @@ def _key() -> str:
 async def _get(path: str, **params) -> Optional[Dict[str, Any]]:
     """The JSON at `path`, or None when Congress.gov has no such record."""
     try:
-        async with httpx.AsyncClient(timeout=15.0) as c:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(25.0, connect=5.0)) as c:
             r = await c.get(f"{config.CONGRESS_API_BASE}/{path}",
                             params={"format": "json", **params}, headers={"X-Api-Key": _key()})
     except httpx.HTTPError as e:
-        raise SourceUnavailable("Congress.gov", f"request failed: {e}") from e
+        raise SourceUnavailable("Congress.gov", f"request failed: {type(e).__name__} {e}") from e
     if r.status_code == 404:
         return None
     if r.status_code == 429:
