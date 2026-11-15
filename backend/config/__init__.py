@@ -45,6 +45,12 @@ HUD_API_BASE = os.getenv("HUD_API_BASE", "https://www.huduser.gov/hudapi/public"
 # from https://open.fda.gov/apis/authentication/ raises that to 120,000.
 OPENFDA_API_KEY = os.getenv("OPENFDA_API_KEY")
 OPENFDA_BASE = os.getenv("OPENFDA_BASE", "https://api.fda.gov")
+# Congress.gov takes any api.data.gov key; CONGRESS_API_KEY, else DATA_GOV_API_KEY.
+CONGRESS_API_BASE = os.getenv("CONGRESS_API_BASE", "https://api.congress.gov/v3")
+# LegiScan (state bills): free key at https://legiscan.com/legiscan-register,
+# 30,000 queries a month. Without it, state bill claims go to search.
+LEGISCAN_API_KEY = os.getenv("LEGISCAN_API_KEY")
+LEGISCAN_BASE = os.getenv("LEGISCAN_BASE", "https://api.legiscan.com/")
 
 # search.gov (search.usa.gov) — free federal-site search, the research harness
 # for anything the structured sources below can't answer. Sign up at

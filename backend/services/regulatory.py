@@ -1,5 +1,6 @@
 """Claims about what a regulator did: FDA approvals, labels, recalls and
-shortages (services/fda.py) and FTC fraud data and rules (services/ftc.py).
+shortages (services/fda.py), FTC fraud data and rules (services/ftc.py), and
+what happened to a bill in Congress or a state legislature (services/bills.py).
 
 These are facts, not figures: "Ozempic is approved for weight loss" is
 settled by the label FDA approved, "the FTC banned noncompetes" by the
@@ -86,6 +87,15 @@ _FTC_HINT = (
     "the rule's status as of today.")
 
 
+_BILL_HINT = (
+    "The claim is about a bill's record. For a federal bill, check Congress.gov "
+    "(congress.gov/bill/...): its actions, the recorded votes in each chamber, whether the "
+    "President signed or vetoed it, and its Public Law number. For a state bill, check the "
+    "state legislature's own bill page. Bill numbers restart every Congress and every session: "
+    "name which one. In OFFICIAL_VALUE give the record, such as \"signed into law July 4, 2025\" "
+    "or \"passed the House 218-214, pending in the Senate\".")
+
+
 _FOOD_COST_TOPIC = re.compile(r"\b(thrifty food plan|food plans?|cost of food|SNAP|food stamps|"
                               r"EBT|WIC|school (?:lunch|meals?))\b", re.I)
 _FOOD_COST_HINT = (
@@ -102,9 +112,12 @@ _NUTRITION_HINT = (
 
 
 def topic(text: str) -> str:
-    """What a claim is about, for routing a miss to search: "fda", "ftc",
+    """What a claim is about, for routing a miss to search: "bill", "fda", "ftc",
     "food_cost", "nutrition", "crime", "health" or ""."""
     t = text or ""
+    from services import bills
+    if bills.read(t) is not None:
+        return "bill"
     if _FDA_TOPIC.search(t):
         return "fda"
     if _FTC_TOPIC.search(t):
@@ -124,16 +137,18 @@ def topic(text: str) -> str:
 def search_hint(text: str) -> str:
     """Where the web search should look, when the free check could not settle it."""
     from services import crime, health
-    return {"fda": _FDA_HINT, "ftc": _FTC_HINT, "food_cost": _FOOD_COST_HINT,
+    return {"bill": _BILL_HINT, "fda": _FDA_HINT, "ftc": _FTC_HINT, "food_cost": _FOOD_COST_HINT,
             "nutrition": _NUTRITION_HINT, "crime": crime.SEARCH_HINT,
             "health": health.SEARCH_HINT}.get(topic(text), "")
 
 
 async def check(text: str, parsed) -> Optional[Verdict]:
-    """A claim checked against the publisher's own record (FDA, FTC, USDA,
-    FBI, CDC, World Bank), or None."""
-    from services import crime, fda, ftc, health, nutrition, worldbank
-    v = await fda.check(text, parsed)
+    """A claim checked against the publisher's own record (Congress.gov and
+    state legislatures, FDA, FTC, USDA, FBI, CDC, World Bank), or None."""
+    from services import bills, crime, fda, ftc, health, nutrition, worldbank
+    v = await bills.check(text, parsed)
+    if v is None:
+        v = await fda.check(text, parsed)
     if v is None:
         v = await ftc.check(text, parsed)
     if v is None:

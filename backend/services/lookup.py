@@ -328,7 +328,7 @@ async def lookup(query: str, accessed: Optional[date] = None, *, deep: bool = Fa
 # what/how question is a figure to find.
 _CLAIM_VERB = re.compile(
     r"\b(is|isn['’]t|was|wasn['’]t|are|aren['’]t|were|weren['’]t|has|hasn['’]t|have|had|will|"
-    r"won['’]t|can|can['’]t|cause[sd]?|won|lost|rose|fell|grew|recalled|banned|approved|signed|passed)\b", re.I)
+    r"won['’]t|can|can['’]t|cause[sd]?|won|lost|rose|fell|grew|recalled|banned|approved|signed|passed|vetoed|enacted|sponsored|introduced)\b", re.I)
 _WH = re.compile(r"^(what|how|which|when|where|who|whats|what['’]s)\b", re.I)
 
 
