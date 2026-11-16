@@ -210,6 +210,8 @@ _CRAWLER_FILES = {
     "robots.txt": "text/plain; charset=utf-8",
     "sitemap.xml": "application/xml; charset=utf-8",
     "llms.txt": "text/plain; charset=utf-8",
+    # Google Search Console ownership check; must stay for the site to remain verified.
+    "googleb5ef9942613b66ba.html": "text/html; charset=utf-8",
 }
 
 

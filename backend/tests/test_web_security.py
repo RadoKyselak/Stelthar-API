@@ -58,6 +58,8 @@ class TestPage:
         assert test_client.get("/llms.txt").text.startswith("# Project Mirador")
         assert test_client.get("/health").status_code == 200
         assert test_client.get("/nope.txt").status_code == 404
+        verify = test_client.get("/googleb5ef9942613b66ba.html")
+        assert verify.text == "google-site-verification: googleb5ef9942613b66ba.html"
 
     def test_injected_markup_cannot_run(self, test_client):
         """XSS: no inline script or style, no eval, no other origin."""
