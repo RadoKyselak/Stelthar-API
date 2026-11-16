@@ -60,6 +60,8 @@ class TestPage:
         assert test_client.get("/nope.txt").status_code == 404
         verify = test_client.get("/googleb5ef9942613b66ba.html")
         assert verify.text == "google-site-verification: googleb5ef9942613b66ba.html"
+        # Bing Webmaster Tools ownership check: must stay on the home page.
+        assert '<meta name="msvalidate.01" content="74E77C32744895F426C1BCE3B02AA7BF">' in test_client.get("/", headers=HTML).text
 
     def test_injected_markup_cannot_run(self, test_client):
         """XSS: no inline script or style, no eval, no other origin."""
