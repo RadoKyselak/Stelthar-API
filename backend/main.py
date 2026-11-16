@@ -2,6 +2,7 @@ import asyncio
 import hmac
 import json
 import pathlib
+import re
 from typing import Dict, Any
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -161,13 +162,27 @@ _STATIC_TYPES = {
     "site.css": "text/css; charset=utf-8",
     "logo.png": "image/png",
     "favicon.png": "image/png",
+    "og.png": "image/png",
 }
 
+# Link-preview crawlers (chat apps, social sites) don't ask for text/html, but
+# they need the page's preview tags; monitors and API clients still get JSON.
+_PREVIEW_BOTS = re.compile(
+    r"facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|discordbot|whatsapp|"
+    r"telegrambot|skypeuripreview|pinterest|redditbot|embedly|applebot|iframely|"
+    r"vkshare|google-inspectiontool|googlebot|bingbot|mastodon|bluesky|cardyb",
+    re.IGNORECASE)
 
-@app.get("/")
+
+def _wants_page(request: Request) -> bool:
+    return ("text/html" in request.headers.get("accept", "")
+            or bool(_PREVIEW_BOTS.search(request.headers.get("user-agent", ""))))
+
+
+@app.api_route("/", methods=["GET", "HEAD"])
 async def home(request: Request):
-    """The web page for browsers; a status line for API clients and monitors."""
-    if "text/html" not in request.headers.get("accept", ""):
+    """The web page for browsers and link previews; a status line for API clients and monitors."""
+    if not _wants_page(request):
         return {"status": "ok", "message": "Stelthar-API is running :)"}
     return HTMLResponse((_STATIC / "index.html").read_text(encoding="utf-8"),
                         headers={"Cache-Control": "no-cache"})
@@ -180,7 +195,7 @@ async def privacy():
                         headers={"Cache-Control": "no-cache"})
 
 
-@app.get("/static/{name}")
+@app.api_route("/static/{name}", methods=["GET", "HEAD"])
 async def static_file(name: str):
     if name not in _STATIC_TYPES:
         raise HTTPException(status_code=404, detail="Not found")

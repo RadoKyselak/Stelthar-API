@@ -29,6 +29,20 @@ class TestPage:
         assert "Check a claim" in page.text and "Find a number" in page.text
         assert test_client.get("/").json()["status"] == "ok"
 
+    def test_link_previews_get_the_page_and_image(self, test_client):
+        """Chat apps and social sites fetch with Accept */*; they must still see the preview tags."""
+        for ua in ("facebookexternalhit/1.1", "Twitterbot/1.0", "Slackbot-LinkExpanding 1.0",
+                   "LinkedInBot/1.0", "Mozilla/5.0 (compatible; Discordbot/2.0)", "WhatsApp/2.23"):
+            page = test_client.get("/", headers={"user-agent": ua, "accept": "*/*"})
+            assert page.headers["content-type"].startswith("text/html"), ua
+            assert 'property="og:image" content="https://stelthar-api.vercel.app/static/og.png"' in page.text
+            assert 'name="twitter:card" content="summary_large_image"' in page.text
+        assert test_client.head("/", headers={"user-agent": "facebookexternalhit/1.1"}).status_code == 200
+        img = test_client.get("/static/og.png")
+        assert img.status_code == 200 and img.headers["content-type"] == "image/png"
+        assert img.content[16:24] == (1200).to_bytes(4, "big") + (630).to_bytes(4, "big")
+        assert test_client.head("/static/og.png").status_code == 200
+
     def test_injected_markup_cannot_run(self, test_client):
         """XSS: no inline script or style, no eval, no other origin."""
         csp = test_client.get("/", headers=HTML).headers["content-security-policy"]
