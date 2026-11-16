@@ -1,0 +1,40 @@
+# Project Mirador
+
+> Project Mirador checks a claim, or finds a number, in official U.S. government data and shows the exact source. Free Chrome extension and web page.
+
+Project Mirador is an independent, free fact checker. It is not a government service.
+
+- Web: https://stelthar-api.vercel.app/
+- Chrome extension: https://chromewebstore.google.com/detail/project-mirador/anehbncclhojcaihgeoebennaccpeegn
+- About and FAQ: https://stelthar-api.vercel.app/about
+- Privacy: https://stelthar-api.vercel.app/privacy
+- Source code: https://github.com/RadoKyselak/Stelthar-API
+
+## How it works
+
+A person highlights a sentence in Chrome (right-click, "Check with Project Mirador") or types a claim on the web page. Project Mirador reads the metric, period and place in the claim, fetches that figure from the agency's own data service, and returns a verdict with the figure and a link to the exact source. It can also look up a number directly and return it with its citation.
+
+## Verdicts
+
+- Supported: the record matches the claim.
+- Mostly accurate: the claim is off by a small step in its last digit.
+- Misleading: a real figure is used in a way the record does not support.
+- Contradicted: the record says otherwise.
+- No verdict: no official record covers the claim, and the answer says why.
+
+## Data sources
+
+- Jobs and prices: Bureau of Labor Statistics (unemployment, inflation (CPI), wages, jobs, by state or nationally)
+- The economy: Bureau of Economic Analysis (GDP, personal income, trade, government receipts and spending)
+- People and places: Census Bureau (population, income, poverty, home values, education, health insurance)
+- Federal money: Treasury and USAspending.gov (the national debt, agency budgets and spending by year)
+- Laws and votes: Congress.gov and state legislatures (whether a bill passed, the recorded vote, who sponsored it, when it was signed)
+- Crime: FBI Crime Data Explorer (violent crime, property crime and murder, by state or nationally)
+- Health: CDC and FDA (life expectancy, overdose deaths, drug approvals, labels and recalls)
+- Consumers and housing: FTC and HUD (fraud losses, FTC rules, area median income and income limits)
+- Food: USDA FoodData Central (calories and nutrients in a food)
+- Other countries: World Bank (population, GDP, unemployment and more for one country)
+
+## Privacy
+
+No accounts, ads, trackers or analytics. Only the text a person chooses to check is sent. The extension cannot read the pages a person visits.

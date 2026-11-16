@@ -2,6 +2,7 @@
 
 Each test names an attack and checks the defence against it.
 """
+import json
 import pathlib
 import re
 from unittest.mock import AsyncMock, patch
@@ -43,6 +44,21 @@ class TestPage:
         assert img.content[16:24] == (1200).to_bytes(4, "big") + (630).to_bytes(4, "big")
         assert test_client.head("/static/og.png").status_code == 200
 
+    def test_search_and_assistant_crawlers_can_read_the_site(self, test_client):
+        for ua in ("Mozilla/5.0 (compatible; Googlebot/2.1)", "GPTBot/1.2", "PerplexityBot/1.0", "ClaudeBot/1.0"):
+            page = test_client.get("/", headers={"user-agent": ua, "accept": "*/*"})
+            assert page.headers["content-type"].startswith("text/html"), ua
+        about = test_client.get("/about")
+        assert about.status_code == 200 and "Bureau of Labor Statistics" in about.text
+        for block in re.findall(r'<script type="application/ld\+json">(.*?)</script>', about.text, flags=re.S):
+            assert json.loads(block)["@context"] == "https://schema.org"
+        robots = test_client.get("/robots.txt")
+        assert robots.headers["content-type"].startswith("text/plain") and "Sitemap:" in robots.text
+        assert "/about</loc>" in test_client.get("/sitemap.xml").text
+        assert test_client.get("/llms.txt").text.startswith("# Project Mirador")
+        assert test_client.get("/health").status_code == 200
+        assert test_client.get("/nope.txt").status_code == 404
+
     def test_injected_markup_cannot_run(self, test_client):
         """XSS: no inline script or style, no eval, no other origin."""
         csp = test_client.get("/", headers=HTML).headers["content-security-policy"]
@@ -73,6 +89,8 @@ class TestPage:
 
     def test_page_source_has_no_inline_code_or_outside_resources(self):
         html = (STATIC / "index.html").read_text()
+        # Structured data for search engines is data, not code: it is never run.
+        html = re.sub(r'<script type="application/ld\+json">.*?</script>', "", html, flags=re.S)
         assert not re.search(r"<script(?![^>]*\bsrc=)", html), "inline script"
         assert "<style" not in html and " style=" not in html and re.search(r"\son\w+=", html) is None
         for m in re.finditer(r'(?:src|href)="([^"]+)"', html):

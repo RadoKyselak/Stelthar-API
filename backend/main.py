@@ -165,12 +165,15 @@ _STATIC_TYPES = {
     "og.png": "image/png",
 }
 
-# Link-preview crawlers (chat apps, social sites) don't ask for text/html, but
-# they need the page's preview tags; monitors and API clients still get JSON.
+# Link-preview, search and assistant crawlers don't ask for text/html, but
+# they need the page itself; monitors and API clients still get JSON.
 _PREVIEW_BOTS = re.compile(
     r"facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|discordbot|whatsapp|"
     r"telegrambot|skypeuripreview|pinterest|redditbot|embedly|applebot|iframely|"
-    r"vkshare|google-inspectiontool|googlebot|bingbot|mastodon|bluesky|cardyb",
+    r"vkshare|google-inspectiontool|googlebot|bingbot|mastodon|bluesky|cardyb|"
+    r"duckduckbot|yandex|baiduspider|gptbot|oai-searchbot|chatgpt-user|claudebot|claude-user|"
+    r"claude-searchbot|perplexitybot|perplexity-user|ccbot|google-extended|amazonbot|bytespider|"
+    r"meta-externalagent|mistralai-user|kagibot|bravebot",
     re.IGNORECASE)
 
 
@@ -193,6 +196,34 @@ async def privacy():
     """The privacy policy the Chrome Web Store listing links to."""
     return HTMLResponse((_STATIC / "privacy.html").read_text(encoding="utf-8"),
                         headers={"Cache-Control": "no-cache"})
+
+
+@app.api_route("/about", methods=["GET", "HEAD"])
+async def about():
+    """What the project is, its sources and common questions: the page search
+    engines and assistants read to describe it."""
+    return HTMLResponse((_STATIC / "about.html").read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-cache"})
+
+
+_CRAWLER_FILES = {
+    "robots.txt": "text/plain; charset=utf-8",
+    "sitemap.xml": "application/xml; charset=utf-8",
+    "llms.txt": "text/plain; charset=utf-8",
+}
+
+
+def _crawler_file(name: str):
+    async def serve():
+        return FileResponse(_STATIC / name, media_type=_CRAWLER_FILES[name],
+                            headers={"Cache-Control": "public, max-age=3600"})
+    return serve
+
+
+# Served from the site root, where crawlers look. Fixed paths only.
+for _name in _CRAWLER_FILES:
+    app.add_api_route(f"/{_name}", _crawler_file(_name), methods=["GET", "HEAD"],
+                      include_in_schema=False)
 
 
 @app.api_route("/static/{name}", methods=["GET", "HEAD"])
