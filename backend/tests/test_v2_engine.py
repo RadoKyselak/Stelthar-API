@@ -423,3 +423,34 @@ class TestHumanize:
     ])
     def test_renders(self, mag, family, expected):
         assert humanize(mag, family) == expected
+
+
+class TestMisreadOnFreeData:
+    """A figure 20x from the claim's usually means the claim was read as the
+    wrong measure or place. With the full pipeline it is read again; on free
+    data alone (a passage, a shared link, a tool call) it gets no verdict
+    rather than a "Contradicted" that is probably about something else."""
+
+    async def run(self, monkeypatch, claim, official, **kw):
+        from evidence.units import PERSONS
+        from services import verify_v2
+
+        async def fetch(parsed):
+            return [Datapoint(quantity=Quantity(official, PERSONS), metric="population",
+                              label="Total population", observed=Period(2025, ANNUAL),
+                              geography=Geography.national(), source="CENSUS", source_url="x")]
+        monkeypatch.setattr(verify_v2, "fetch_structured", fetch)
+        monkeypatch.setattr(verify_v2, "has_structured_adapter", lambda spec: True)
+        return await verify_v2.verify(claim, **kw)
+
+    async def test_no_verdict_and_it_says_why(self, monkeypatch):
+        from claims.verdict import UNSURE_READING
+        from services.verify_v2 import to_response_dict
+        v = await self.run(monkeypatch, "The population is 720,000.", 341_000_000, allow_grounding=False)
+        assert v.verdict == NO_VERDICT and v.reason == UNSURE_READING and v.model_calls == 0
+        d = to_response_dict(v)["display"]
+        assert "may be about something else" in d["reason"]["why"] and d["verdict"]["label"] == "Can't verify"
+
+    async def test_an_ordinary_miss_is_still_contradicted(self, monkeypatch):
+        v = await self.run(monkeypatch, "The population is 150 million.", 341_000_000, allow_grounding=False)
+        assert v.verdict == CONTRADICTED

@@ -33,6 +33,7 @@ from typing import List, Optional, Tuple
 from claims.parser import (
     _MONTH_YEAR_RE, _PRESENT_TENSE_RE, _extract_fiscal_year, _extract_years, parse_claim,
 )
+from evidence.units import PERCENT, UNKNOWN, USD, parse_quantity
 
 STATISTIC = "statistic"   # names a series the free data covers
 RECORD = "record"         # a bill, an FDA or FTC action, a crime or health figure
@@ -106,13 +107,54 @@ def _has_figure(text: str) -> bool:
     return False
 
 
-def _kind(text: str) -> Optional[str]:
-    """What sort of claim a sentence is, or None when there is nothing to check."""
+_YEARLIKE = re.compile(r"^(?:1\d{3}|20\d{2}|2100)$")
+_SCALE = re.compile(r"\b(?:hundred|thousand|million|billion|trillion|bn|tn|mn)\b|\dk\b", re.I)
+
+
+def _states_a_value(parsed, text: str) -> bool:
+    """Whether the figure the parser took from a sentence is really a value of
+    the measure it names.
+
+    A person who types one claim means its number. A sentence picked out of an
+    article may not: "the Panic of 1837 brought unprecedented unemployment"
+    names a measure and holds a number, and checking it as "unemployment was
+    1,837%" would stamp a verdict on something nobody said. So a sentence
+    counts only when its figure is written as that measure is written: a
+    percent sign for a rate, a dollar sign or a scale word for money, and
+    never a bare year or an ordinal ("10th-highest").
+    """
+    value, spec = parsed.claimed_value, parsed.metric
+    if value is None or spec is None:
+        return False
+    raw = (value.raw or "").strip()
+    number = re.search(r"\d[\d,]*(?:\.\d+)?", raw)
+    if not number:
+        return False
+    digits = number.group(0)
+    written = parse_quantity(raw)
+    unit = written.family if written is not None else UNKNOWN
+    if re.search(rf"(?<![\d.,$]){re.escape(digits)}(?:st|nd|rd|th)\b", text, re.I):
+        return False                                    # an ordinal, not a value
+    if unit == UNKNOWN and _YEARLIKE.match(digits) and not _SCALE.search(raw):
+        return False                                    # a year
+    if spec.family == PERCENT:
+        return unit == PERCENT
+    if spec.family == USD:
+        return unit == USD or bool(_SCALE.search(raw))
+    return unit in (UNKNOWN, spec.family)
+
+
+def _is_statistic(text: str) -> bool:
     try:
         parsed = parse_claim(text)
     except Exception:  # noqa: BLE001 — the parser never raises; stay safe if it ever does
-        parsed = None
-    if parsed is not None and parsed.metric is not None and parsed.claimed_value is not None:
+        return False
+    return _states_a_value(parsed, text)
+
+
+def _kind(text: str) -> Optional[str]:
+    """What sort of claim a sentence is, or None when there is nothing to check."""
+    if _is_statistic(text):
         return STATISTIC
     from services import derived, regulatory
     if derived.reads_as_computed(text):
@@ -137,8 +179,7 @@ def _clauses(text: str, base: int) -> List[Tuple[int, int]]:
 
 
 def _is_own_claim(clause: str) -> bool:
-    parsed = parse_claim(clause)
-    return parsed.metric is not None and parsed.claimed_value is not None
+    return _is_statistic(clause)
 
 
 def _shared_period(sentence: str) -> str:

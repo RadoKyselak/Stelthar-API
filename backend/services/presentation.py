@@ -70,6 +70,10 @@ _REASONS = {
         "may be quoting the other one.",
         "",
     ),
+    V.UNSURE_READING: (
+        "The official figure found is far from the claim's, so the claim may be about something else.",
+        "Check this claim on its own, naming the measure and the place.",
+    ),
     "no_source_found": (
         "No published source could be found to check this against.",
         "",

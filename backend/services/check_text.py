@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import config
 from claims import splitter
-from claims.verdict import NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE
+from claims.verdict import LOW, NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE
 from config import logger
 from services.verify_v2 import VerificationV2, to_response_dict, verify
 
@@ -104,6 +104,13 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
         gate = asyncio.Semaphore(config.CHECK_CONCURRENCY)
 
         async def one(span: splitter.ClaimSpan) -> VerificationV2:
+            if span.kind == splitter.OTHER:
+                # A figure, but no measure the free data covers was read from
+                # it with confidence. The engine is not asked: whatever it
+                # made of the sentence would be a guess with a verdict on it.
+                return VerificationV2(
+                    claim=span.claim, verdict=NO_VERDICT, confidence=LOW, reason=NO_SERIES,
+                    headline="None of the official data series we check covers this claim.")
             async with gate:
                 return await verify(span.claim, allow_grounding=False, client_ip=client_ip)
 

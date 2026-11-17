@@ -30,7 +30,8 @@ from claims.metrics import MetricSpec
 from claims.parser import ParsedClaim, parse_claim
 from claims.verdict import (
     ALTERNATE_MEASURE, GEOGRAPHY_UNSUPPORTED, HIGH, LOW, MEDIUM, MISLEADING, MOSTLY_ACCURATE,
-    NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, Verdict, assess,
+    NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, UNSURE_READING, Verdict,
+    assess,
     _phrase_for,
 )
 import config
@@ -840,15 +841,28 @@ async def _verify_one(claim: str, allow_grounding: bool = True,
                 if alt is not None and alt.verdict in (SUPPORTED, MOSTLY_ACCURATE):
                     base = alt
             base, parsed = await _with_record(parse_text, parsed, base)
-            if allow_grounding:
-                from services import interpret
-                if interpret.misread_suspected(parsed, base):
-                    # 720,000 people against the U.S. population: more likely
-                    # the claim was misread than wrong. Read it again.
+            from services import interpret
+            if interpret.misread_suspected(parsed, base):
+                # 720,000 people against the U.S. population: more likely
+                # the claim was misread than wrong.
+                if allow_grounding:
+                    # Read it again.
                     fixed = await _interpreted(text, parse_text, parsed, client_ip, started,
                                                note="rules' reading looked wrong (figures 20x apart)")
                     if fixed is not None:
                         return fixed
+                else:
+                    # Nothing here can read it again (a passage, a shared
+                    # link, a tool call: free data only). "Contradicted" on a
+                    # reading that is probably wrong is worse than no answer.
+                    return VerificationV2(
+                        claim=text, verdict=NO_VERDICT, confidence=LOW, reason=UNSURE_READING,
+                        headline=("The official figure found is very far from the claim's, which usually "
+                                  "means the claim is about a different measure or place."),
+                        evidence=[d.to_dict() for d in base.evidence], tier=TIER_STRUCTURED,
+                        elapsed_seconds=round(time.monotonic() - started, 2),
+                        parsed=_parsed_summary(parsed),
+                        notes=["rules' reading looked wrong (figures 20x apart); not re-read on free data"])
             verdict = _soften_for_alternate_measure(parsed, base)
             # A near miss that another official measure might explain is sent
             # to the search, but the search can only upgrade it (to Supported,

@@ -109,6 +109,36 @@ class TestInheritedContext:
         assert got == ["Unemployment in Texas is 4%", "inflation is 3%"]
 
 
+class TestOnlyRealValues:
+    """A sentence picked out of an article names a measure and holds a number
+    far more often than it states that measure's value."""
+
+    @pytest.mark.parametrize("text", [
+        "The Panic of 1837 was followed by a five-year depression and unprecedented unemployment.",
+        "After 1700, the United States gained population rapidly.",
+        "The U.S. ranks 10th-highest in GDP per capita by purchasing power.",
+        "The unemployment office served 165,000 people last year.",         # a count, not a rate
+        "Median household income rose in 2,300 counties.",                  # not dollars
+    ])
+    def test_a_number_that_is_not_the_measures_value_is_not_a_statistic(self, text):
+        assert [s.kind for s in split_claims(text)[0]] in ([], [OTHER])
+
+    @pytest.mark.parametrize("text", [
+        "Unemployment was 3.6% in 2023.",
+        "The unemployment rate fell to 4.1 percent in October 2026.",
+        "The national debt passed $40 trillion in 2026.",
+        "The national debt passed 40 trillion in 2026.",                    # money by its scale word
+        "Texas has 31 million people.",
+    ])
+    def test_a_value_written_as_the_measure_is_written_is(self, text):
+        assert [s.kind for s in split_claims(text)[0]] == [STATISTIC]
+
+    def test_such_sentences_never_reach_a_page_scan(self):
+        text = ("The Panic of 1837 was followed by unprecedented unemployment. "
+                "Unemployment was 3.6% in 2023.")
+        assert claims_of(text, kinds=(STATISTIC, RECORD)) == ["Unemployment was 3.6% in 2023"]
+
+
 class TestKinds:
     def test_claims_with_no_figure_that_the_series_settle(self):
         spans, _ = split_claims("The economy shrank in the first quarter of 2022. "
@@ -168,9 +198,19 @@ class TestRouting:
     async def test_several_claims_use_free_data_only(self, engine):
         out = await ct.check_text("Unemployment was 3.6% in 2023. Inflation was 9.9% in 2022. "
                                   "About 2 million people attended the parade last weekend.")
-        assert [grounding for _, grounding in engine] == [False, False, False]
+        assert [grounding for _, grounding in engine] == [False, False]
         assert out["tally"]["supported"] == 1 and out["tally"]["contradicted"] == 1
         assert out["tally"]["no-verdict"] == 1 and out["model_calls"] == 0
+
+    async def test_a_bare_figure_is_listed_but_never_run_through_the_engine(self, engine):
+        """No measure was read from it with confidence; whatever the engine
+        made of it would be a guess with a verdict on it."""
+        out = await ct.check_text("Unemployment was 3.6% in 2023. "
+                                  "About 2 million people attended the parade last weekend.")
+        assert [claim for claim, _ in engine] == ["Unemployment was 3.6% in 2023"]
+        parade = out["claims"][1]
+        assert parade["kind"] == "other" and parade["deeper"] is True
+        assert parade["result"]["display"]["verdict"]["label"] == "Can't verify"
 
     async def test_an_unsettled_claim_offers_the_full_check(self, engine):
         out = await ct.check_text("Unemployment was 3.6% in 2023. "
