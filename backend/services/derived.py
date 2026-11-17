@@ -753,6 +753,26 @@ async def _national_income(parsed) -> Optional[Verdict]:
 
 # ------------------------------------------------------------------ entry point
 
+def reads_as_computed(text: str) -> bool:
+    """Whether a claim that states no figure is one this module settles: a
+    direction ("the economy shrank in Q1 2022") or a record ("the lowest
+    unemployment in 50 years"). Fetches nothing. The splitter asks, so that it
+    keeps such a sentence when it picks the claims out of a passage."""
+    topic = _topic(text)
+    if _RECORD_RE.search(text) and topic in ("unemployment", "inflation"):
+        return True
+    if _ANY_NUMBER_RE.search(_SINCE_RE.sub(" ", _QUARTER_RE.sub(" ", _MONTH_YEAR_RE.sub(" ", text)))):
+        return False
+    obs, freq = _subject_period(text)
+    if obs is None:
+        return False
+    if topic == "gdp" and freq == "Q":
+        return bool(_SHRANK_RE.search(text) or _GREW_RE.search(text))
+    if topic == "jobs" and freq == "M":
+        return bool(_LOST_JOBS_RE.search(text) or _ADDED_JOBS_RE.search(text))
+    return False
+
+
 async def check(text: str, parsed) -> Optional[Verdict]:
     """A computed answer for the claim, or None to run the normal pipeline."""
     try:

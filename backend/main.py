@@ -272,6 +272,12 @@ async def detailed_health_check(request: Request):
         "timestamp": asyncio.get_event_loop().time(),
     }
 
+# Newer features, one router each (see routes/__init__.py).
+from routes import check as _check_routes  # noqa: E402
+
+app.include_router(_check_routes.router)
+
+
 @app.post("/v2/verify", dependencies=[Depends(limit("verify"))])
 async def verify_v2_endpoint(req: VerifyRequest, request: Request) -> Dict[str, Any]:
     """Evidence-first verification: exact number, stated period, direct link.

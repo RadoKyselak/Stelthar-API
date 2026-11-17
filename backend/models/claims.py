@@ -45,6 +45,24 @@ class LookupRequest(BaseModel):
         return InputValidator.sanitize_claim(v)
 
 
+class CheckRequest(BaseModel):
+    """Request body for /v2/check: a passage, every claim in it checked."""
+    # The cap in characters is config.CHECK_MAX_CHARS, applied in the validator
+    # so it can be changed without a deploy; 12,000 is its ceiling.
+    text: str = Field(..., min_length=3, max_length=12000)
+    # "text": something a person pasted. "page": a page scan, which keeps only
+    # the claims free government data can settle.
+    mode: str = Field("text", pattern="^(text|page)$")
+
+    @field_validator('text')
+    @classmethod
+    def sanitize_text(cls, v):
+        import config
+        from utils.validation import InputValidator
+
+        return InputValidator.sanitize_passage(v, config.CHECK_MAX_CHARS)
+
+
 class VerifyRequest(BaseModel):
     """Request body for /verify endpoint with validation."""
     claim: str = Field(..., min_length=3, max_length=1000)
