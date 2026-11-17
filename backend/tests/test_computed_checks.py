@@ -153,6 +153,59 @@ class TestFirstPrint:
         assert await derived.first_print_match(p, assess(p, [dp])) is None
 
 
+    async def test_the_match_is_recorded_not_only_worded(self, monkeypatch):
+        monkeypatch.setattr(derived, "_rows", series({("UNRATE", "any"): [(date(2023, 1, 1), 3.4)]}))
+        p = parse_claim("Unemployment was 3.4% in January 2023.")
+        dp = Datapoint(quantity=Quantity(3.5, "percent"), metric="unemployment_rate",
+                       label="Unemployment rate", observed=Period(2023, "monthly", month=1),
+                       geography=Geography.national(), source="BLS", source_url="x")
+        got = await derived.first_print_match(p, assess(p, [dp]))
+        assert got.revision["first"] == "3.4%" and got.revision["current"] == "3.5%"
+        assert got.revision["period"] == "January 2023" and got.revision["archive"]
+
+    async def test_a_years_gdp_growth_as_first_published(self, monkeypatch):
+        # BEA's advance estimate put 2023 at 2.5%; it is 2.9% today.
+        monkeypatch.setattr(derived, "_rows", series({
+            ("A191RL1A225NBEA", "any"): [(date(2023, 1, 1), 2.5)]}))
+        p = parse_claim("Real GDP grew 2.5% in 2023.")
+        dp = Datapoint(quantity=Quantity(2.9, "percent"), metric="real_gdp_growth",
+                       label="Real GDP growth", observed=Period(2023, ANNUAL),
+                       geography=Geography.national(), source="BEA", source_url="x")
+        v = assess(p, [dp])
+        assert v.verdict == CONTRADICTED
+        got = await derived.first_print_match(p, v)
+        assert got is not None and got.verdict == SUPPORTED
+        assert got.revision == {"first": "2.5%", "current": "2.9%", "period": "2023",
+                                "archive": got.revision["archive"], "measure": "Real GDP growth"}
+        assert "first published as 2.5%" in got.headline and "revised to 2.9%" in got.headline
+
+    async def test_a_quarter_still_reads_the_quarterly_series(self, monkeypatch):
+        monkeypatch.setattr(derived, "_rows", series({
+            ("A191RL1Q225SBEA", "any"): [(date(2026, 4, 1), 1.5)],
+            ("A191RL1A225NBEA", "any"): [(date(2026, 1, 1), 9.9)]}))
+        p = parse_claim("GDP grew 1.5% in Q2 2026.")
+        dp = Datapoint(quantity=Quantity(2.2, "percent"), metric="real_gdp_growth",
+                       label="Real GDP growth", observed=Period(2026, "quarterly", quarter=2),
+                       geography=Geography.national(), source="BEA", source_url="x")
+        got = await derived.first_print_match(p, assess(p, [dp]))
+        assert got is not None and got.revision["first"] == "1.5%" and got.revision["period"] == "Q2 2026"
+
+
+    async def test_the_whole_check_without_a_bea_key(self, monkeypatch):
+        """No BEA key: the year's growth comes from FRED's copy, and a claim
+        quoting the advance estimate is settled for free, with the revision."""
+        import config
+        monkeypatch.setattr(config, "BEA_API_KEY", "")
+        monkeypatch.setattr(derived, "_rows", series({
+            ("A191RL1A225NBEA", None): [(date(2023, 1, 1), 2.9)],
+            ("A191RL1A225NBEA", "any"): [(date(2023, 1, 1), 2.5)]}))
+        now = await verify("Real GDP grew 2.9% in 2023.", allow_grounding=False)
+        assert now.verdict == SUPPORTED and now.revision is None
+        assert now.evidence[0]["period_label"] == "2023" and now.model_calls == 0
+        then = await verify("Real GDP grew 2.5% in 2023.", allow_grounding=False)
+        assert then.verdict == SUPPORTED and then.revision["current"] == "2.9%" and then.model_calls == 0
+
+
 class TestFixedFacts:
     def test_took_office_names_the_month(self):
         text, note = derived.took_office("Biden inherited 9% inflation when he took office.")

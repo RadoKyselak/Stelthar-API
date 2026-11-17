@@ -344,6 +344,22 @@ def build_display(v) -> Dict[str, Any]:
         key, label = "unavailable", "Couldn't check"
         meaning = "An outage on our side, not a judgment about the claim."
 
+    # The claim quotes the agency's first release, revised since. Still
+    # Supported (same key, so every client colours it the same), but the label
+    # says which figure it matches: a reader should not take it for today's.
+    revision = None
+    rev = getattr(v, "revision", None)
+    if rev and v.verdict == V.SUPPORTED and status == "ok":
+        label = "Accurate when published"
+        meaning = "Matches the figure the agency first published, which it has since revised."
+        revision = {
+            "first": rev.get("first", ""), "current": rev.get("current", ""),
+            "period": rev.get("period", ""),
+            "text": (f"First published as {rev.get('first', '')}"
+                     + (f" ({_long_date(rev['archive'])} archive)" if rev.get("archive") else "")
+                     + f"; since revised to {rev.get('current', '')}."),
+        }
+
     sources = [_data_source(e) for e in (v.evidence or [])]
     sources += [s for s in (_web_source(c) for c in (v.citations or [])) if s]
     web = [s for s in sources if s["kind"] == "web"]
@@ -383,6 +399,7 @@ def build_display(v) -> Dict[str, Any]:
         "verdict": {"key": key, "label": label, "meaning": meaning},
         "summary": summary,
         "confidence": _confidence(v),
+        "revision": revision,
         "reason": reason,
         "comparisons": comparisons,
         "reported_value": reported_value,

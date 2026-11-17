@@ -79,6 +79,10 @@ class Verdict:
     comparator: str = "equals"
     evidence: List[Datapoint] = field(default_factory=list)
     caveats: List[str] = field(default_factory=list)
+    # Set when the claim matches what the agency first published and the
+    # figure has been revised since: {"first", "current", "period", "archive"}.
+    # The verdict stays Supported; this is what lets a client say so plainly.
+    revision: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {

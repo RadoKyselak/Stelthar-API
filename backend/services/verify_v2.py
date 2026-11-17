@@ -81,6 +81,9 @@ class VerificationV2:
     # Other outlets' published fact-checks of similarly worded claims (Google
     # Fact Check Tools). Shown beside the verdict; never used to reach it.
     fact_checks: List[Dict[str, str]] = field(default_factory=list)
+    # The claim matches the agency's first release, revised since: {"first",
+    # "current", "period", "archive", "measure"}. See derived.first_print_match.
+    revision: Optional[Dict[str, str]] = None
 
 
 async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
@@ -177,6 +180,10 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
                 from services import derived
                 return await derived.gdp_quarter(year, parsed.quarter)
             return await bea_source.fetch_quarter(spec, year, parsed.quarter)
+        if spec.metric == "real_gdp_growth" and year is not None and not config.BEA_API_KEY and (
+                parsed.geography is None or parsed.geography.level == "nation"):
+            from services import derived
+            return await derived.gdp_year(year)
         return await bea_source.fetch(spec, year)
 
     return []
@@ -543,6 +550,7 @@ def _verdict_to_result(
         elapsed_seconds=round(time.monotonic() - started, 2),
         parsed=_parsed_summary(parsed),
         points=[_point(v)] if v.evidence else [],
+        revision=v.revision,
     )
 
 

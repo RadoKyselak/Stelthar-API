@@ -247,3 +247,25 @@ def test_counts_keep_their_written_precision():
     q = parse_claim("U.S. population was about 335 million in 2023").claimed_value
     assert q.family == "persons" and q.precision == 1_000_000
     assert humanize_claim(q.magnitude, q.family, q.precision) == "335 million"
+
+
+class TestRevisedFigure:
+    """A claim that matches the agency's first release, revised since."""
+
+    def result(self, revision):
+        from services.verify_v2 import VerificationV2
+        return VerificationV2(claim="Real GDP grew 2.5% in 2023.", verdict="Supported", confidence="Medium",
+                              headline="h", tier="structured", revision=revision)
+
+    def test_the_label_says_which_figure_it_matches(self):
+        d = build_display(self.result({"first": "2.5%", "current": "2.9%", "period": "2023",
+                                       "archive": "2024-01-31", "measure": "Real GDP growth"}))
+        assert d["verdict"]["key"] == "supported"          # same colour in every client
+        assert d["verdict"]["label"] == "Accurate when published"
+        assert d["revision"]["text"] == ("First published as 2.5% (January 31, 2024 archive); "
+                                         "since revised to 2.9%.")
+        assert "Accurate when published" in d["share_text"]
+
+    def test_an_ordinary_answer_is_unchanged(self):
+        d = build_display(self.result(None))
+        assert d["verdict"]["label"] == "Supported" and d["revision"] is None
