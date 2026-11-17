@@ -269,3 +269,25 @@ class TestRevisedFigure:
     def test_an_ordinary_answer_is_unchanged(self):
         d = build_display(self.result(None))
         assert d["verdict"]["label"] == "Supported" and d["revision"] is None
+
+
+@pytest.mark.asyncio
+class TestReadingAndSharing:
+    async def test_how_the_claim_was_read(self):
+        v = await structured("Unemployment in Texas was 4.1% in 2023", {TEXAS: {2023: [4.0] * 12}})
+        d = to_response_dict(v)["display"]
+        got = {c["label"]: c["value"] for c in d["reading"]}
+        assert got["Place"] == "Texas" and got["Period"] == "2023" and "nemployment" in got["Measure"]
+
+    async def test_an_answer_links_to_its_own_page(self, monkeypatch):
+        monkeypatch.setattr(config, "PUBLIC_BASE_URL", "https://example.test")
+        v = await structured("Unemployment in Texas was 4.1% in 2023", {TEXAS: {2023: [4.0] * 12}})
+        d = to_response_dict(v)["display"]
+        assert d["share_url"] == ("https://example.test/c?claim="
+                                  "Unemployment%20in%20Texas%20was%204.1%25%20in%202023")
+        assert len(d["checked_on"]) == 10
+
+    async def test_nothing_read_nothing_shown(self):
+        from services.verify_v2 import VerificationV2
+        d = build_display(VerificationV2(claim="x" * 700, verdict="No verdict", confidence="Low", headline="h"))
+        assert d["reading"] == [] and d["share_url"] == ""      # too long to carry in a link
