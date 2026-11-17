@@ -4,6 +4,8 @@ These validate the harness mechanics with hand-checkable synthetic inputs —
 NOT a claim about real system accuracy. Actual accuracy numbers only come from
 running `python -m eval.runner` against the live pipeline with real API keys.
 """
+import json
+
 from eval.dataset import EvalClaim, load_claims
 from eval.metrics import ClaimResult, compute_report, score_coverage_honesty, score_verdict
 
@@ -165,3 +167,71 @@ def test_compute_report_calibration_buckets_flag_unreliable_small_samples():
     bucket = next(b for b in report.calibration_buckets if b["confidence_bucket"] == "0.75-1.0")
     assert bucket["n"] == 1
     assert bucket["reliable"] is False
+
+
+class TestRemoteRun:
+    """eval/remote.py: the eval set against a deployed service, over HTTP."""
+
+    def claims(self):
+        from eval.v2_dataset import V2Claim
+        return [
+            V2Claim(id="a", claim="The unemployment rate in 2019 was 3.7%.", expected_verdict="Supported"),
+            V2Claim(id="b", claim="The unemployment rate in 2019 was 6.2%.", expected_verdict="Contradicted"),
+            V2Claim(id="c", claim="The economy is doing great.", expected_verdict="No verdict",
+                    expected_reason="claim_is_not_empirically_testable"),
+        ]
+
+    def service(self, sent, down=False):
+        import httpx
+
+        def handle(request):
+            body = json.loads(request.content)
+            sent.append(body)
+            out = []
+            for line in body["text"].split("\n"):
+                if "economy" in line:
+                    continue          # not read as a claim: left out of the answer
+                verdict = "Contradicted" if "6.2%" in line else "Supported"
+                out.append({"span": line.rstrip("."), "claim": line.rstrip("."), "result": {
+                    "verdict": "No verdict" if down else verdict,
+                    "reason": "source_unavailable" if down else None,
+                    "evidence": [] if down else [{"x": 1}], "tier": "structured", "model_calls": 0,
+                    "headline": "h"}})
+            return httpx.Response(200, json={"claims": out})
+        return httpx.Client(transport=httpx.MockTransport(handle))
+
+    def test_answers_are_matched_to_claims_and_scored(self):
+        from eval import remote
+        sent = []
+        outcomes = remote.run(self.claims(), "http://svc", client=self.service(sent), pause=0)
+        # The opinion was left out of the passage's claims: declined, as expected.
+        assert [o.correct for o in outcomes] == [True, True, True]
+        assert outcomes[2].predicted_reason == remote.NOT_A_CLAIM
+        assert sent[0]["mode"] == "text" and sent[0]["text"].count("\n") == 2
+
+    def test_leaving_out_a_claim_that_data_should_settle_is_a_miss(self):
+        from eval import remote
+        from eval.v2_dataset import V2Claim
+        dropped = V2Claim(id="d", claim="The economy is doing great in 2023.", expected_verdict="Supported")
+        outcomes = remote.run([dropped, self.claims()[0]], "http://svc", client=self.service([]), pause=0)
+        assert outcomes[0].correct is False
+
+    def test_a_lone_claim_is_never_sent_alone(self):
+        """One claim in a request gets the full, paid pipeline; two never do."""
+        from eval import remote
+        sent = []
+        remote.run(self.claims()[:1], "http://svc", client=self.service(sent), pause=0)
+        assert sent[0]["text"].count("\n") == 1
+
+    def test_no_accuracy_when_a_source_was_down(self):
+        from eval import remote
+        outcomes = remote.run(self.claims()[:2], "http://svc", client=self.service([], down=True), pause=0)
+        got = remote.to_json(outcomes, "http://svc")
+        assert got["degraded"] == 2 and got["accuracy"] is None
+
+    def test_results_carry_the_ground_truth(self):
+        from eval import remote
+        outcomes = remote.run(self.claims()[:2], "http://svc", client=self.service([]), pause=0)
+        got = remote.to_json(outcomes, "http://svc")
+        assert got["accuracy"] == 1.0 and got["model_calls"] == 0
+        assert set(got["outcomes"][0]) >= {"id", "claim", "expected", "got", "correct", "truth"}
