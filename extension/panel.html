@@ -61,6 +61,8 @@
     .recent .v[data-verdict="supported"]::before { background: var(--ok); opacity: 1; }
     .recent .v[data-verdict="mostly-accurate"]::before, .recent .v[data-verdict="misleading"]::before { background: var(--warn); opacity: 1; }
     .recent .v[data-verdict="contradicted"]::before { background: var(--bad); opacity: 1; }
+    .recent .d { flex: none; min-width: 58px; text-align: right; font-size: 12px; color: var(--muted); }
+    #out .cut { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); }
 
     .fine { margin: 24px 16px 16px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
     .fine p { margin: 0; }
@@ -96,7 +98,8 @@
   </section>
 
   <div class="fine" id="q-hint">
-    <p>Tip: highlight text on any page, right-click, and choose Check with Project Mirador.</p>
+    <p>Tip: highlight a sentence, a paragraph or a whole article on any page, right-click, and choose
+      Check with Project Mirador. Every claim in it is checked on its own.</p>
     <p>Checked against data from BLS, BEA, the Census Bureau, the Treasury, the Federal Reserve,
       the Labor Department and Freddie Mac.
       Independent; not a government service.

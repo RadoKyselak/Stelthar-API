@@ -54,6 +54,22 @@
 .mv .mv-loading { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
 .mv .mv-loading::before { content: ""; flex: none; width: 14px; height: 14px; border-radius: 50%;
   border: 2px solid var(--line); border-top-color: var(--ink); animation: mv-spin .8s linear infinite; }
+/* A passage in the narrow panel: the verdict above its claim, the claim's card at reading size. */
+.mv .mv-tally-h { font-size: 18px; font-weight: 500; letter-spacing: -.01em; }
+.mv [data-verdict="supported"] { --tone: var(--ok, #1b6b3a); }
+.mv [data-verdict="mostly-accurate"] { --tone: #8a5a00; }
+.mv [data-verdict="misleading"] { --tone: #9a3c0b; }
+.mv [data-verdict="contradicted"] { --tone: #a11b1b; }
+.mv .mv-claims summary { grid-template-columns: 1fr; padding: 12px 0; }
+.mv .mv-claim-v { grid-row: auto; font-weight: 500; }
+.mv .mv-claim-s { grid-column: 1; }
+.mv .mv-claim-t { font-size: 14.5px; }
+.mv .mv-claims .mv-alert-h { display: none; }
+.mv .mv-claims .mv-fig { font-size: 34px; }
+.mv .mv-claims .mv-fig.mv-long { font-size: 24px; }
+.mv .mv-claims .mv-sec { margin-top: 16px; }
+.mv .mv-read li { border-color: var(--line); }
+.mv .mv-rev { border-radius: 0 8px 8px 0; font-size: 13.5px; color: var(--ink); }
 @keyframes mv-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .mv .mv-loading::before { animation-duration: 2.4s; } }
 `;
