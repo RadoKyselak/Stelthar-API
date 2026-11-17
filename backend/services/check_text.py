@@ -66,8 +66,11 @@ def _tally(entries: List[Dict[str, Any]]) -> Dict[str, int]:
     return tally
 
 
-async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = None) -> Dict[str, Any]:
-    """Every claim in `text`, checked. Never raises."""
+async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = None,
+                     free_only: bool = False) -> Dict[str, Any]:
+    """Every claim in `text`, checked. Never raises. `free_only` keeps even a
+    single claim on agency data: for callers that are not a person asking
+    (an assistant's tool call), who must never spend a paid call."""
     started = time.monotonic()
     text = (text or "").strip()
     page = mode == PAGE
@@ -88,11 +91,15 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
         # One claim: the whole text, through the whole pipeline. The engine
         # picks the sentence itself when the text is long, as it did before.
         whole = splitter.ClaimSpan(text, text, 0, len(text), spans[0].kind if spans else splitter.OTHER)
-        from evidence import fact_checks
-        related = fact_checks.start(text)
-        v = await verify(text, client_ip=client_ip)
-        v.fact_checks = await fact_checks.finish(related)
-        entries = [_entry(0, whole, v, False)]
+        if free_only:
+            v = await verify(text, allow_grounding=False, client_ip=client_ip)
+            entries = [_entry(0, whole, v, _could_go_deeper(v))]
+        else:
+            from evidence import fact_checks
+            related = fact_checks.start(text)
+            v = await verify(text, client_ip=client_ip)
+            v.fact_checks = await fact_checks.finish(related)
+            entries = [_entry(0, whole, v, False)]
     else:
         gate = asyncio.Semaphore(config.CHECK_CONCURRENCY)
 

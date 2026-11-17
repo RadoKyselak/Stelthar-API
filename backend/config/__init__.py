@@ -184,6 +184,10 @@ CHECK_CONCURRENCY = _env_int("CHECK_CONCURRENCY", 4, 1, 8)
 CHECK_PER_MINUTE = _env_int("CHECK_PER_MINUTE", 6, 1, 1000)
 CHECK_PER_DAY = _env_int("CHECK_PER_DAY", 60, 1, 100000)
 
+# POST /mcp: the checks as tools for an assistant (Model Context Protocol).
+# Answers from agency data only. "off" takes the endpoint away (404).
+MCP_ENABLED = (os.getenv("MCP_ENABLED") or "on").strip().lower() not in ("0", "off", "false", "no")
+
 # Keyless government data endpoints (no API key required)
 USASPENDING_BASE_URL = os.getenv("USASPENDING_BASE_URL", "https://api.usaspending.gov")
 TREASURY_FISCAL_BASE_URL = os.getenv(
