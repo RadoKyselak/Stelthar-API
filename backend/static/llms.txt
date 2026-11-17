@@ -7,12 +7,14 @@ Project Mirador is an independent, free fact checker. It is not a government ser
 - Web: https://stelthar-api.vercel.app/
 - Chrome extension: https://chromewebstore.google.com/detail/project-mirador/anehbncclhojcaihgeoebennaccpeegn
 - About and FAQ: https://stelthar-api.vercel.app/about
+- How a claim is judged: https://stelthar-api.vercel.app/methodology
+- API for developers: https://stelthar-api.vercel.app/developers
 - Privacy: https://stelthar-api.vercel.app/privacy
 - Source code: https://github.com/RadoKyselak/Stelthar-API
 
 ## How it works
 
-A person highlights a sentence in Chrome (right-click, "Check with Project Mirador") or types a claim on the web page. Project Mirador reads the metric, period and place in the claim, fetches that figure from the agency's own data service, and returns a verdict with the figure and a link to the exact source. It can also look up a number directly and return it with its citation.
+A person highlights a sentence, a paragraph or a whole article in Chrome (right-click, "Check with Project Mirador") or pastes it on the web page. A passage is cut into its claims and each is answered on its own. Project Mirador reads the metric, period and place in the claim, fetches that figure from the agency's own data service, and returns a verdict with the figure and a link to the exact source. It can also look up a number directly and return it with its citation.
 
 ## Verdicts
 

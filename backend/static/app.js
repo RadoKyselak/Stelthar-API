@@ -122,6 +122,30 @@
   MODES.check.tab.addEventListener("click", () => mode !== "check" && setMode("check"));
   MODES.find.tab.addEventListener("click", () => mode !== "find" && setMode("find"));
 
+  // Claims to try, each answered from an agency's own data. The last is a
+  // passage, to show that every claim in it gets its own answer.
+  const TRIES = V.examples.concat([
+    "Inflation hit 9.1% in June 2022, and gas averaged $7 a gallon in June 2022. Real GDP grew 2.5% in 2023.",
+  ]);
+  const tries = $("tries");
+  if (tries) {
+    tries.replaceChildren(...TRIES.map((text) => {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = text;
+      b.addEventListener("click", () => {
+        if (mode !== "check") setMode("check");
+        q.value = text;
+        syncButton();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        check(text);
+      });
+      li.appendChild(b);
+      return li;
+    }));
+  }
+
   // Deep links: ?claim=… or ?find=… fill the box but never run on their own.
   // A shared link must not make every visitor's browser send a check (each
   // could cost a paid search); the visitor presses the button.

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Mirador for developers: the fact-check API</title>
+  <meta name="description" content="Check claims and look up official U.S. government figures from your own code. A free JSON API with no key, and an endpoint for assistants.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Project Mirador">
+  <meta property="og:url" content="https://stelthar-api.vercel.app/developers">
+  <meta property="og:title" content="Project Mirador for developers">
+  <meta property="og:description" content="Check claims and look up official U.S. government figures from your own code. A free JSON API with no key, and an endpoint for assistants.">
+  <meta property="og:image" content="https://stelthar-api.vercel.app/static/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/static/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <main class="doc">
+    <p class="doc-back"><a href="/">&larr; Check a claim</a></p>
+    <h1>For developers</h1>
+    <p class="doc-meta">A free JSON API. No key, no account. Last updated November 17, 2026.</p>
+
+    <h2>What you get</h2>
+    <p>The same checks the extension and this site run. Send a claim or a passage; get back a verdict, the
+      official figure, the agency series it came from and a ready-made citation. Base address:
+      <code>https://stelthar-api.vercel.app</code>.</p>
+
+    <h2>Check a passage</h2>
+    <p><code>POST /v2/check</code> takes up to 8,000 characters and answers each claim in it.</p>
+    <pre><code>curl -s https://stelthar-api.vercel.app/v2/check \
+  -H 'Content-Type: application/json' \
+  -d '{"text": "Inflation hit 9.1% in June 2022. Gas averaged $7 a gallon in June 2022."}'</code></pre>
+    <ul>
+      <li><code>claims</code>: one entry per claim, in order. <code>span</code> is the claim as written,
+        <code>claim</code> is what was checked, <code>result</code> is the answer (the same object
+        <code>/v2/verify</code> returns).</li>
+      <li><code>tally</code>: how many claims fell under each verdict.</li>
+      <li><code>deeper</code>: true when agency data did not settle a claim and the full check might. Send that
+        claim to <code>/v2/verify</code>.</li>
+      <li><code>"mode": "page"</code> keeps only the claims agency data can settle.</li>
+    </ul>
+    <p>One claim in the text gets the full check. Two or more are checked on agency data only.</p>
+
+    <h2>Check one claim</h2>
+    <p><code>POST /v2/verify</code> takes <code>{"claim": "..."}</code>, up to 1,000 characters.</p>
+    <pre><code>curl -s https://stelthar-api.vercel.app/v2/verify \
+  -H 'Content-Type: application/json' \
+  -d '{"claim": "Unemployment in Texas was 4.1% in 2023"}'</code></pre>
+    <ul>
+      <li><code>verdict</code>: Supported, Mostly accurate, Contradicted, Misleading or No verdict.</li>
+      <li><code>confidence</code>: High, Medium or Low.</li>
+      <li><code>reason</code>: set when there is no verdict; says what would have to change for one to exist.</li>
+      <li><code>evidence</code>: the official figure, its period, place, agency, series and source address.</li>
+      <li><code>revision</code>: set when the claim matches a figure the agency has since revised.</li>
+      <li><code>tier</code> and <code>model_calls</code>: how the answer was reached. Most are
+        <code>structured</code> with zero model calls.</li>
+      <li><code>display</code>: the same answer in plain language, ready to show: the label, a summary, how the
+        claim was read, the sources and a citation.</li>
+    </ul>
+
+    <h2>Look up a figure</h2>
+    <p><code>POST /v2/lookup</code> takes <code>{"query": "unemployment rate texas 2023"}</code> and returns the
+      figure with its citation in several forms. On a miss, <code>suggestions</code> names what it can fetch.</p>
+
+    <h2>For assistants</h2>
+    <p><code>POST /mcp</code> speaks the Model Context Protocol (streamable HTTP), so an assistant that supports
+      it can check claims and look up figures as tools. It offers <code>check_text</code>,
+      <code>check_claim</code> and <code>find_figure</code>, all answered from agency data only.</p>
+
+    <h2>Limits and fair use</h2>
+    <ul>
+      <li>Per connection: 20 claim checks a minute and 300 a day; 6 passage checks a minute and 60 a day;
+        60 lookups a minute and 2,000 a day. Over a limit, the answer is <code>429</code> with
+        <code>Retry-After</code>.</li>
+      <li>Calls from a web page in someone&rsquo;s browser are not allowed (no cross-origin access). Call from your
+        server.</li>
+      <li>Answers come from agencies that revise their figures. Store the date with anything you keep.</li>
+      <li>The service is free and comes with no guarantee of uptime. If you build something that depends on
+        it, <a href="https://github.com/RadoKyselak/Stelthar-API/issues">say hello</a> first.</li>
+    </ul>
+
+    <h2>Source</h2>
+    <p>The code is public at <a href="https://github.com/RadoKyselak/Stelthar-API">github.com/RadoKyselak/Stelthar-API</a>.
+      How a claim is judged is on the <a href="/methodology">method page</a>.</p>
+  </main>
+  <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
+</body>
+</html>

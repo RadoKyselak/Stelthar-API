@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How Project Mirador checks a claim: method, verdicts and limits</title>
+  <meta name="description" content="How Project Mirador checks a claim against official U.S. government data: where each figure comes from, what each verdict means, and what it cannot check.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Project Mirador">
+  <meta property="og:url" content="https://stelthar-api.vercel.app/methodology">
+  <meta property="og:title" content="How Project Mirador checks a claim">
+  <meta property="og:description" content="How Project Mirador checks a claim against official U.S. government data: where each figure comes from, what each verdict means, and what it cannot check.">
+  <meta property="og:image" content="https://stelthar-api.vercel.app/static/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/static/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <main class="doc">
+    <p class="doc-back"><a href="/">&larr; Check a claim</a></p>
+    <h1>How a claim is checked</h1>
+    <p class="doc-meta">The method, the verdicts and the limits. Last updated November 17, 2026.</p>
+
+    <h2>The short version</h2>
+    <p>A claim is read for three things: what it measures, where, and when. That figure is then fetched from
+      the agency that publishes it, and the claim&rsquo;s number is compared with the agency&rsquo;s. The answer shows
+      the official figure, the rows it was read from and a link to the series, so you can check the check.</p>
+
+    <h2>Step by step</h2>
+    <ol>
+      <li><strong>The text is cut into claims.</strong> A sentence that states two statistics
+        (&ldquo;unemployment was 3.6% and inflation was 4.1% in 2023&rdquo;) is two claims. A comparison
+        (&ldquo;from 5.2% in 2021 to 3.6% in 2023&rdquo;) stays one. If a year or a place is stated once for
+        several claims, it is added to each, and the answer shows the claim as it was checked.</li>
+      <li><strong>Each claim is read by fixed rules,</strong> not guessed: the measure (the unemployment rate,
+        CPI inflation, the national debt), the place (the nation, a state, a county, a city) and the period
+        (a year, a quarter, a month, or &ldquo;now&rdquo;).</li>
+      <li><strong>The figure comes from the agency&rsquo;s own data service</strong> (see
+        <a href="/about">the list of sources</a>), never from a news story or a summary of one.</li>
+      <li><strong>The two numbers are compared</strong> by the rules below.</li>
+      <li><strong>The answer names its source:</strong> the agency, the dataset, the series or table, the period,
+        and the published rows the figure was read from, with the cited row marked.</li>
+    </ol>
+
+    <h2>Which figure a claim is held to</h2>
+    <ul>
+      <li><strong>The period the claim names.</strong> &ldquo;In June 2022&rdquo; is that month. &ldquo;In 2023&rdquo; is the
+        year&rsquo;s figure. &ldquo;Is&rdquo; or &ldquo;now&rdquo;, with no date, is the newest figure the agency has
+        published.</li>
+      <li><strong>The place the claim names.</strong> A city is never answered with its state&rsquo;s figure, nor a
+        state with the nation&rsquo;s. If no official figure exists for that place, the answer says so.</li>
+      <li><strong>The agency&rsquo;s headline measure.</strong> Inflation is the 12-month change in the CPI for all
+        urban consumers, as the Bureau of Labor Statistics headlines it. Where an agency publishes more than one
+        official figure for the same thing (two surveys of household income, for instance), a near miss is not
+        marked wrong on one of them alone.</li>
+      <li><strong>Fiscal years</strong> for the budget, the deficit, receipts and outlays, which the Treasury
+        reports that way.</li>
+    </ul>
+    <p>Every answer shows the measure, place and period it was read as, so a wrong reading is visible.</p>
+
+    <h2>What the verdicts mean</h2>
+    <h3>Supported</h3>
+    <p>The official figure matches the claim to the precision the claim was written to. &ldquo;9%&rdquo; agrees with
+      9.06%; &ldquo;3.7%&rdquo; does not agree with 4.0%. For &ldquo;over&rdquo;, &ldquo;under&rdquo;, &ldquo;at least&rdquo; and
+      &ldquo;at most&rdquo;, the claim&rsquo;s number is a threshold: &ldquo;the debt is over $33 trillion&rdquo; is supported
+      by $40 trillion. Rounding never covers a gap of more than 10%.</p>
+    <h3>Accurate when published</h3>
+    <p>The claim matches the figure the agency first released, and the agency has revised it since. Both
+      figures are shown, with the date of the archive the first one was read from. This is checked for the
+      unemployment rate and for real GDP growth, by month, quarter and year.</p>
+    <h3>Mostly accurate</h3>
+    <p>The claim is off by one step in its last written digit, and by no more than 5% of the official figure:
+      4.1% against 4.0%. The size of the gap is stated.</p>
+    <h3>Contradicted</h3>
+    <p>The official figure is further from the claim than that.</p>
+    <h3>Misleading</h3>
+    <p>The number is real, but the claim uses it in a way the record does not support: a figure that is right
+      alongside a record (&ldquo;the lowest since 1969&rdquo;) that is not, for example.</p>
+    <h3>Can&rsquo;t verify</h3>
+    <p>No verdict is given, and the answer says why: no official series covers the claim, the figure for that
+      period is not published yet, the claim compares points in time that one figure cannot settle, or the
+      claim is an opinion or a prediction. A source that failed to respond is reported as an outage, never as
+      a judgment about the claim.</p>
+
+    <h2>Confidence</h2>
+    <p>High, medium or low, never a percentage. High means the agency&rsquo;s own published figure for the period
+      and place in the claim. Medium means the same with a note to read, such as a revision. For an answer
+      found by search, high means the page of the agency that publishes the figure, giving the figure and its
+      period, or a reliable page that a published fact-check agrees with; medium means a reliable page alone,
+      or an official page that leaves out the figure or the period.</p>
+
+    <h2>When no data service covers a claim</h2>
+    <p>Most checks end at the step above and use no model at all. When the fixed rules cannot read a claim,
+      or no wired series covers it, a single claim (not a passage) may be searched for in the agencies&rsquo;
+      datasets and then in published sources, with the help of an AI provider named in the
+      <a href="/privacy">privacy policy</a>. Those answers are marked &ldquo;Found by web search&rdquo; and link the
+      pages they rest on. A verdict stands only if the page it rests on was really returned by the search and
+      is official or reliable (a professional fact-checker, a research institute, a journal or a newspaper of
+      record); otherwise none is given. A passage of several claims, and a shared link, are checked on agency data only.</p>
+
+    <h2>What it does not do</h2>
+    <ul>
+      <li>It does not rate opinions, predictions, or who deserves credit or blame.</li>
+      <li>It does not judge whether a true figure is being used fairly, beyond the cases named above.</li>
+      <li>It does not carry a statistic from one clause to another: &ldquo;4.1% in Texas and 5.3% in California&rdquo; is
+        left as one claim, which it will usually decline, rather than guess what the second number measures.</li>
+      <li>It reads English only.</li>
+    </ul>
+
+    <h2>Revisions and dates</h2>
+    <p>Agencies revise what they publish. Every answer carries the date it was checked, and figures for an
+      open period are fetched again within the hour. A check you saved earlier can be run again.</p>
+
+    <h2>Corrections</h2>
+    <p>If an answer is wrong, <a href="https://github.com/RadoKyselak/Stelthar-API/issues">open an issue</a> with
+      the claim and what the agency&rsquo;s record says. Fixes are made in the open, in the project&rsquo;s public
+      code, and each comes with a test that holds the corrected case.</p>
+
+    <h2>Independence</h2>
+    <p>Project Mirador is an independent project with no ads and no accounts. It is not a government service,
+      and is not affiliated with or endorsed by any agency whose data it shows. The same rules are applied to
+      every claim, whoever made it.</p>
+  </main>
+  <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
+</body>
+</html>

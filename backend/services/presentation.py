@@ -257,8 +257,11 @@ def _confidence(v) -> Dict[str, Any]:
             V.MEDIUM: "The agency's own published figure, with a note to read.",
         }.get(v.confidence, "Official figure, but the match to the claim is uncertain.")
     else:
+        # See verify_v2._graded_result for what earns each tier.
         text = {
-            V.MEDIUM: "Official sources found by web search back this verdict.",
+            V.HIGH: ("Found by web search on the page of the agency that publishes the figure, "
+                     "or on a reliable page that a published fact-check agrees with."),
+            V.MEDIUM: "Found by web search in an official or reliable source. Read the notes.",
         }.get(v.confidence, "Only non-official sources were found; treat this with care.")
     return {"tier": v.confidence, "text": text}
 
