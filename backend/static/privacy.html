@@ -12,7 +12,7 @@
   <main class="doc">
     <p class="doc-back"><a href="/">&larr; Check a claim</a></p>
     <h1>Privacy</h1>
-    <p class="doc-meta">Project Mirador (the Chrome extension) and this web page. Last updated October 29, 2026.</p>
+    <p class="doc-meta">Project Mirador (the Chrome extension) and this web page. Last updated November 17, 2026.</p>
 
     <h2>The short version</h2>
     <p>The only thing we receive is the text you choose to check or look up. There are no accounts, ads,
@@ -22,7 +22,7 @@
     <ul>
       <li>When you highlight text and choose <strong>Check with Project Mirador</strong>, type a claim in the
         side panel, or use this page, that text is sent to our server (stelthar-api.vercel.app) to be checked.
-        Nothing else on the page is sent.</li>
+        If you highlight a whole article, the whole of what you highlighted is sent. Nothing else on the page is.</li>
       <li>Our server asks the agencies' public data services (the Bureau of Labor Statistics, the Bureau of
         Economic Analysis, the Census Bureau, the Treasury and the Federal Reserve Bank of St. Louis) for the
         figures the claim is about.</li>
@@ -30,7 +30,11 @@
         fact-checks of similar claims.</li>
       <li>When the built-in rules can't read a claim, or a search you submit, its text may be sent to an AI
         provider (Anthropic) to find the figure in government datasets or, for claims, in published sources.
-        This is capped at a small number of requests per day.</li>
+        This is capped at a small number of requests per day. A passage of several claims, and a shared
+        link, are checked on agency data only and are never sent to an AI provider.</li>
+      <li>A link you make with <strong>Copy link</strong> carries the claim&rsquo;s text in its address. Whoever you
+        send it to, and any app that draws a preview of the link, sees that text, and opening the link runs
+        the check again on our server.</li>
     </ul>
 
     <h2>What is kept</h2>
@@ -55,6 +59,6 @@
     <h2>Questions</h2>
     <p>Open an issue at <a href="https://github.com/RadoKyselak/Stelthar-API/issues">github.com/RadoKyselak/Stelthar-API</a>.</p>
   </main>
-  <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a></footer>
+  <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
 </body>
 </html>

@@ -13,7 +13,7 @@ from .claims import (
     ClaimAnalysis,
     ClaimType,
     APIQueryPlan,
-    VerifyRequest, LookupRequest,
+    VerifyRequest, LookupRequest, CheckRequest,
 )
 from .verdicts import (
     VerdictType,
@@ -24,6 +24,7 @@ from .verdicts import (
 from .confidence import ConfidenceBreakdown
 
 __all__ = [
+    "CheckRequest",
     "APIErrorResponse",
     "SourceData",
     "APIResult",

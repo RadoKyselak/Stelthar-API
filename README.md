@@ -58,8 +58,9 @@ Stelthar's fact-checking API verifies claims by comparing them against official 
 ## ✨ Key Features
 
 -  **Real-time claim verification** against official government data sources
--  **Evidence-based verdicts**: Supported, Contradicted, or Inconclusive
--  **Confidence scoring** that reflects data coverage and match quality
+-  **Evidence-based verdicts**: Supported, Mostly accurate, Contradicted, Misleading, or Can't verify (with the reason)
+-  **Whole passages**: highlight a paragraph or an article and every claim in it is checked on its own
+-  **Confidence as a tier** (High, Medium or Low), never a percentage that looks more exact than it is
 -  **Direct links** to the primary sources used for verification
 -  **Browser extension** that checks highlighted text in a side panel, with no access to the pages you visit
 -  **API-first design** for easy integration into apps, dashboards, and extensions
@@ -71,15 +72,15 @@ Stelthar's fact-checking API verifies claims by comparing them against official 
 1. **Highlight**: Select any text claim on a webpage
 2. **Verify**: Right-click and choose **Check with Project Mirador**; the answer opens in the side panel
 3. **Review**: Receive an instant verdict with:
-   - Supported/Contradicted/Inconclusive status
-   - Confidence score (0-100%)
+   - A verdict for each claim: Supported, Mostly accurate, Contradicted, Misleading, or Can't verify
+   - The official figure, how the claim was read (measure, place, period) and a confidence tier
    - Links to official government sources
    - Relevant data points used for verification
 
 **Under the Hood:**
 - Your claim is sent to the Stelthar API
 - The API queries multiple government databases (Data.gov, BLS, BEA, etc.)
-- AI-powered analysis compares your claim against official data
+- Fixed rules compare the claim with the agency's figure; a model is used only when no data series covers the claim
 - Results are returned with full source attribution
 
 ---
@@ -101,14 +102,14 @@ The Stelthar API powers Project Mirador and is available for integration into yo
 **Quick Example:**
 
 ```javascript
-// Example API request (pseudocode)
-fetch('https://api.stelthar.com/verify', {
+// Check every claim in a passage (call this from a server, not a web page)
+fetch('https://stelthar-api.vercel.app/v2/check', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    claim: "The unemployment rate in 2024 was 3.7%"
+    text: "Inflation hit 9.1% in June 2022. Gas averaged $7 a gallon in June 2022."
   })
 })
 .then(response => response.json())
@@ -146,7 +147,9 @@ See the [API Documentation](#api-documentation) section below for detailed endpo
 - Congress.gov (bills & legislation)
 
 ### AI & Intelligence
-- **Gemini API** (restrained for fact-checking purposes)
+- Most checks use no model at all. For a claim no data series covers: Anthropic's Claude (dataset tools, then
+  web search), behind hard daily call and spend caps (`backend/utils/spend_guard.py`). Gemini runs only if chosen
+  with `AI_SEARCH_PROVIDER=gemini`.
 
 ### Development Tools
 - **API Testing**: Postman
@@ -162,7 +165,7 @@ model is only called when no official series covers the claim.
 | Tier | What runs | Cost | Typical latency |
 |---|---|---|---|
 | 1 — structured | Deterministic claim parser → BLS, BEA, Census ACS, Treasury | 0 model calls | 0.3–1s |
-| 2 — grounded | One Gemini call with Google Search grounding | 1 model call | 3–8s |
+| 2 — grounded | One web-search call (Claude by default; Gemini if chosen) | 1 model call | 3–8s |
 
 - **Parse:** metric, year (calendar vs fiscal), month, geography, comparator
   ("more than", "under") and the precision the claim was written to.
@@ -194,15 +197,22 @@ https://stelthar-api.vercel.app
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /verify` | Verify a claim. v2 engine, v1-compatible response (what the extension calls). |
-| `POST /v2/verify` | Same engine, v2-only response fields. |
+| `POST /v2/check` | Check every claim in a passage (up to 8,000 characters). One claim gets the full check; two or more are checked on free official data only. What the site and extension 2.2 call. |
+| `POST /v2/verify` | Check one claim, with the full pipeline. |
 | `POST /v2/lookup` | "What is the official figure?" — value plus ready-to-paste citations. |
+| `GET /c?claim=...` | A claim's check as a page to send someone, with the verdict in the link preview. Free data only. |
+| `POST /mcp` | The checks as Model Context Protocol tools (`check_text`, `check_claim`, `find_figure`). Free data only. |
+| `POST /verify` | One claim, v1-compatible response (what extensions before 2.2 call). |
+| `POST /v1/verify` | Legacy multi-pass planner, kept for comparison. Off unless `ENABLE_LEGACY_V1=true`. |
+| `GET /health` | Model in use, configured sources (details need `X-Health-Token`). |
 
-Every verify response carries a `display` block: the verdict, each figure compared
-(claim beside official, with the gap), the sources (agency, dataset, series, link) and a
-ready-to-paste citation. The extension's side panel renders this block.
-| `POST /v1/verify` | Legacy multi-pass planner, kept for comparison. |
-| `GET /health` | Model in use, configured sources. |
+Every check carries a `display` block: the verdict, each figure compared (claim beside official,
+with the gap), how the claim was read, the sources (agency, dataset, series, link) and a
+ready-to-paste citation. The extension's side panel and the site render this block.
+
+The site documents the API at [/developers](https://stelthar-api.vercel.app/developers) and the rules
+behind each verdict at [/methodology](https://stelthar-api.vercel.app/methodology). What changed in 2.2,
+its switches and how to roll each part back: [docs/release-2.2.md](docs/release-2.2.md).
 
 #### `POST /verify`
 

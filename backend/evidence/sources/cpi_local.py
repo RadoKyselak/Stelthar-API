@@ -75,15 +75,20 @@ async def fetch(metric: str, label: str, geo: Geography, year: Optional[int],
     if not code or not item:
         return []
     sid = f"CUUR{code}{item}"
+    newest = False
     if year is None and month is None and present:
         latest = await bls_source.fetch_latest_monthly(metric, label, sid, "percent")
         if not latest:
             return []
-        year, month = latest[0].observed.year, latest[0].observed.month
+        year, month, newest = latest[0].observed.year, latest[0].observed.month, True
     if year is None:
         from datetime import datetime, timezone
         year = datetime.now(timezone.utc).year - 1
-    got = await bls_source.fetch_inflation(metric, label, sid, year, month=month)
+    if newest:
+        # The newest month may have no year-ago index to compare with.
+        got = await bls_source.fetch_latest_inflation(metric, label, sid, year, month)
+    else:
+        got = await bls_source.fetch_inflation(metric, label, sid, year, month=month)
     where = Geography(name=f"{AREAS[code]} (BLS price area)", level="metro", fips=f"CPI{code}")
     out = []
     for dp in got:

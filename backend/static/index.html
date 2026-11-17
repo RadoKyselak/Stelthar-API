@@ -37,19 +37,49 @@
       </div>
       <form id="form" class="ask" role="search" autocomplete="off">
         <label for="q" class="sr" id="q-label">Claim to check</label>
-        <input id="q" name="q" type="text" maxlength="1000" spellcheck="false"
+        <input id="q" name="q" type="text" maxlength="8000" spellcheck="false"
           placeholder="Unemployment in Texas was 4.1% in 2023">
         <button id="go" type="submit" aria-label="Check">
           <span>Search</span>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
       </form>
+      <p class="hint" id="hint">Paste a sentence or a whole article. Every claim in it is checked against the
+        agency&rsquo;s own data.</p>
     </div>
   </section>
   <main class="main">
     <div id="out" class="out" aria-live="polite"></div>
   </main>
-  <footer class="foot">Independent fact checker · Not a government website · <a href="https://chromewebstore.google.com/detail/project-mirador/anehbncclhojcaihgeoebennaccpeegn" target="_blank" rel="noopener">Chrome extension</a> · <a href="/about">About</a> · <a href="/privacy">Privacy</a></footer>
+  <section class="pitch" id="pitch" aria-label="What Project Mirador does">
+    <div class="pitch-in">
+      <div class="tries">
+        <h2>Try one</h2>
+        <ul id="tries"></ul>
+      </div>
+      <ol class="steps">
+        <li><span class="n" aria-hidden="true">1</span>
+          <h3>Paste or highlight</h3>
+          <p>A sentence, a paragraph or a whole article. In Chrome, highlight it, right-click and choose
+            Check with Project Mirador.</p></li>
+        <li><span class="n" aria-hidden="true">2</span>
+          <h3>Read from the agency</h3>
+          <p>Each figure comes from the data service of the agency that publishes it: the Bureau of Labor
+            Statistics, the Census Bureau, the Treasury and <a href="/about">ten more</a>.</p></li>
+        <li><span class="n" aria-hidden="true">3</span>
+          <h3>See the receipt</h3>
+          <p>The official figure, the rows it was read from, the series it belongs to and a citation you can
+            copy. <a href="/methodology">How a claim is judged</a>.</p></li>
+      </ol>
+      <ul class="facts">
+        <li><strong>Free, with no account.</strong> No ads and no trackers.</li>
+        <li><strong>Private by design.</strong> The extension cannot read the pages you visit.</li>
+        <li><strong>Open.</strong> The <a href="/developers">code</a> and the <a href="/methodology">method</a>
+          are public.</li>
+      </ul>
+    </div>
+  </section>
+  <footer class="foot">Independent fact checker · Not a government website · <a href="https://chromewebstore.google.com/detail/project-mirador/anehbncclhojcaihgeoebennaccpeegn" target="_blank" rel="noopener">Chrome extension</a> · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
   <script src="/static/result-view.js"></script>
   <script src="/static/app.js"></script>
 </body>

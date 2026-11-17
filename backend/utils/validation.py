@@ -49,7 +49,26 @@ class InputValidator:
             raise ValidationError("Claim must be at least 3 characters long after removing invalid content")
 
         return claim
-    
+
+    @staticmethod
+    def sanitize_passage(text: str, max_chars: int) -> str:
+        """A passage for /v2/check. As sanitize_claim, but line breaks are
+        kept: a page scan sends one sentence per line, and the splitter reads
+        a line break as the end of a sentence."""
+        text = (text or "").strip()
+        if len(text) < 3:
+            raise ValidationError("Text must be at least 3 characters long")
+        if len(text) > max_chars:
+            raise ValidationError(f"Text cannot exceed {max_chars} characters")
+        for pattern in InputValidator.XSS_PATTERNS:
+            text = pattern.sub(' ', text)
+        text = InputValidator.CONTROL_CHARS_PATTERN.sub('', text)
+        lines = (re.sub(r'[^\S\n]+', ' ', line).strip() for line in text.split("\n"))
+        text = "\n".join(line for line in lines if line)
+        if len(text) < 3:
+            raise ValidationError("Text must be at least 3 characters long after removing invalid content")
+        return text
+
     @staticmethod
     def validate_claim(claim: str) -> tuple[bool, Optional[str]]:
         try:

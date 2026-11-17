@@ -63,6 +63,12 @@
     history.replaceState(null, "", url);
   }
 
+  const cardOptions = {
+    // The full check for one claim of a passage, asked for by the reader.
+    onDeeper: (claim) => postJSON("/v2/verify", { claim }),
+    onEdit: () => { q.focus(); q.select(); },
+  };
+
   async function check(text) {
     text = (text || "").trim();
     if (!text) return;
@@ -70,9 +76,10 @@
     go.disabled = true;
     out.replaceChildren(V.loading());
     try {
-      const result = await postJSON("/v2/verify", { claim: text });
+      // One claim or a whole passage: each claim in it is answered on its own.
+      const result = await postJSON("/v2/check", { text });
       if (mine !== ticket) return;
-      out.replaceChildren(V.render(result));
+      out.replaceChildren(V.renderPassage(result, cardOptions));
       remember(text);
     } catch (e) {
       if (mine === ticket) out.replaceChildren(V.error(e.message, { onRetry: () => check(text) }));
@@ -115,6 +122,30 @@
   MODES.check.tab.addEventListener("click", () => mode !== "check" && setMode("check"));
   MODES.find.tab.addEventListener("click", () => mode !== "find" && setMode("find"));
 
+  // Claims to try, each answered from an agency's own data. The last is a
+  // passage, to show that every claim in it gets its own answer.
+  const TRIES = V.examples.concat([
+    "Inflation hit 9.1% in June 2022, and gas averaged $7 a gallon in June 2022. Real GDP grew 2.5% in 2023.",
+  ]);
+  const tries = $("tries");
+  if (tries) {
+    tries.replaceChildren(...TRIES.map((text) => {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = text;
+      b.addEventListener("click", () => {
+        if (mode !== "check") setMode("check");
+        q.value = text;
+        syncButton();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        check(text);
+      });
+      li.appendChild(b);
+      return li;
+    }));
+  }
+
   // Deep links: ?claim=… or ?find=… fill the box but never run on their own.
   // A shared link must not make every visitor's browser send a check (each
   // could cost a paid search); the visitor presses the button.
@@ -123,7 +154,15 @@
     setMode("find", { keepText: true });
     q.value = params.get("find").slice(0, 200);
   } else if (params.get("claim")) {
-    q.value = params.get("claim").slice(0, 1000);
+    q.value = params.get("claim").slice(0, 8000);
+  }
+  // A shared check (/c?claim=…): the server already ran it on free data and
+  // put the answer in the page, so it shows at once and nothing is sent.
+  const shared = $("shared");
+  if (shared) {
+    try {
+      out.replaceChildren(V.render(JSON.parse(shared.textContent), cardOptions));
+    } catch (e) { /* the claim is in the box; the visitor can press Check */ }
   }
   syncButton();
 })();

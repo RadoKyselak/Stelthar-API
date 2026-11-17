@@ -24,6 +24,8 @@ from utils import spend_guard
 _KINDS = {
     "verify": lambda: (config.VERIFY_PER_MINUTE, config.VERIFY_PER_DAY),
     "lookup": lambda: (config.LOOKUP_PER_MINUTE, config.LOOKUP_PER_DAY),
+    # One passage can hold a dozen claims, so it gets a smaller allowance.
+    "check": lambda: (config.CHECK_PER_MINUTE, config.CHECK_PER_DAY),
 }
 
 

@@ -257,8 +257,11 @@ def _confidence(v) -> Dict[str, Any]:
             V.MEDIUM: "The agency's own published figure, with a note to read.",
         }.get(v.confidence, "Official figure, but the match to the claim is uncertain.")
     else:
+        # See verify_v2._graded_result for what earns each tier.
         text = {
-            V.MEDIUM: "Official sources found by web search back this verdict.",
+            V.HIGH: ("Found by web search on the page of the agency that publishes the figure, "
+                     "or on a reliable page that a published fact-check agrees with."),
+            V.MEDIUM: "Found by web search in an official or reliable source. Read the notes.",
         }.get(v.confidence, "Only non-official sources were found; treat this with care.")
     return {"tier": v.confidence, "text": text}
 
@@ -336,6 +339,38 @@ def _share_text(label: str, v, comparisons, citation: str) -> str:
     return "\n".join(lines)
 
 
+def _reading(points: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """How the claim was read: the measure, the place and the period the
+    answer is for. The engine picks these (CPI-U, not core; the city, not its
+    state; the latest month for "is"), and a reader who cannot see the choice
+    cannot tell a wrong answer from a different question."""
+    if not points:
+        return []
+    first = points[0]
+    periods: List[str] = []
+    for p in points:
+        when = p.get("period") or ""
+        if when and when not in periods:
+            periods.append(when)
+    out = [
+        {"label": "Measure", "value": first.get("measure") or ""},
+        {"label": "Place", "value": first.get("place") or ""},
+        {"label": "Period", "value": " and ".join(periods)},
+        {"label": "Basis", "value": _short_basis(first.get("basis") or "")},
+    ]
+    return [c for c in out if c["value"]]
+
+
+def share_url(claim: str) -> str:
+    """The page that shows this claim's check to someone else (routes/share.py)."""
+    import config
+    from urllib.parse import quote
+    claim = (claim or "").strip()
+    if not claim or len(claim) > 600:
+        return ""
+    return f"{config.PUBLIC_BASE_URL}/c?claim={quote(claim, safe='')}"
+
+
 def build_display(v) -> Dict[str, Any]:
     status = _status(v)
     key, meaning = _VERDICTS.get(v.verdict, ("no-verdict", ""))
@@ -344,10 +379,29 @@ def build_display(v) -> Dict[str, Any]:
         key, label = "unavailable", "Couldn't check"
         meaning = "An outage on our side, not a judgment about the claim."
 
+    comparisons = [_comparison(p) for p in (v.points or [])]
+
+    # The claim quotes the agency's first release, revised since. Still
+    # Supported (same key, so every client colours it the same), but the label
+    # says which figure it matches: a reader should not take it for today's.
+    revision = None
+    rev = getattr(v, "revision", None)
+    if rev and v.verdict == V.SUPPORTED and status == "ok":
+        label = "Accurate when published"
+        meaning = "Matches the figure the agency first published, which it has since revised."
+        for c in comparisons:
+            c["relation"] = "first"      # matches the first release, not today's figure
+        revision = {
+            "first": rev.get("first", ""), "current": rev.get("current", ""),
+            "period": rev.get("period", ""),
+            "text": (f"First published as {rev.get('first', '')}"
+                     + (f" ({_long_date(rev['archive'])} archive)" if rev.get("archive") else "")
+                     + f"; since revised to {rev.get('current', '')}."),
+        }
+
     sources = [_data_source(e) for e in (v.evidence or [])]
     sources += [s for s in (_web_source(c) for c in (v.citations or [])) if s]
     web = [s for s in sources if s["kind"] == "web"]
-    comparisons = [_comparison(p) for p in (v.points or [])]
 
     summary = (v.headline or "").strip()
     reported = getattr(v, "reported", None) or {}
@@ -383,6 +437,8 @@ def build_display(v) -> Dict[str, Any]:
         "verdict": {"key": key, "label": label, "meaning": meaning},
         "summary": summary,
         "confidence": _confidence(v),
+        "reading": _reading(v.points or []),
+        "revision": revision,
         "reason": reason,
         "comparisons": comparisons,
         "reported_value": reported_value,
@@ -393,5 +449,7 @@ def build_display(v) -> Dict[str, Any]:
         "citation": citation,
         "citation_html": citation_html,
         "share_text": _share_text(label, v, comparisons, citation.split("\n")[0] if citation else ""),
+        "share_url": share_url(v.claim) if status == "ok" else "",
+        "checked_on": date.today().isoformat(),
         "fact_checks": list(getattr(v, "fact_checks", None) or [])[:3],
     }

@@ -166,6 +166,28 @@ VERIFY_PER_DAY = _env_int("VERIFY_PER_DAY", 300, 1, 100000)
 LOOKUP_PER_MINUTE = _env_int("LOOKUP_PER_MINUTE", 60, 1, 1000)
 LOOKUP_PER_DAY = _env_int("LOOKUP_PER_DAY", 2000, 1, 100000)
 
+# Where the site is served from: the address a shared result links back to.
+PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "https://stelthar-api.vercel.app").strip().rstrip("/")
+
+# --- Checking a passage (POST /v2/check) --------------------------------------
+# A pasted paragraph or a page holds several claims; each is checked on its
+# own, on free government data only. Turning MULTI_CLAIM off makes /v2/check
+# treat any text as one claim again, exactly as /v2/verify does: the switch to
+# flip if the splitter ever misreads real text.
+MULTI_CLAIM = (os.getenv("MULTI_CLAIM") or "on").strip().lower() not in ("0", "off", "false", "no")
+# Most claims one request may check. Each is a call to an agency with its own
+# daily quota (BLS: 500 a day with a key), so this is a hard cap.
+CHECK_MAX_CLAIMS = _env_int("CHECK_MAX_CLAIMS", 12, 1, 25)
+CHECK_MAX_CHARS = _env_int("CHECK_MAX_CHARS", 8000, 600, 12000)
+# How many of those run at once.
+CHECK_CONCURRENCY = _env_int("CHECK_CONCURRENCY", 4, 1, 8)
+CHECK_PER_MINUTE = _env_int("CHECK_PER_MINUTE", 6, 1, 1000)
+CHECK_PER_DAY = _env_int("CHECK_PER_DAY", 60, 1, 100000)
+
+# POST /mcp: the checks as tools for an assistant (Model Context Protocol).
+# Answers from agency data only. "off" takes the endpoint away (404).
+MCP_ENABLED = (os.getenv("MCP_ENABLED") or "on").strip().lower() not in ("0", "off", "false", "no")
+
 # Keyless government data endpoints (no API key required)
 USASPENDING_BASE_URL = os.getenv("USASPENDING_BASE_URL", "https://api.usaspending.gov")
 TREASURY_FISCAL_BASE_URL = os.getenv(

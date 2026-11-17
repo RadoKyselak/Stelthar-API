@@ -31,7 +31,7 @@ from claims.verdict import (CONTRADICTED, HIGH, MEDIUM, MISLEADING, MOSTLY_ACCUR
                             Verdict)
 from config import logger
 from evidence.cache import cached
-from evidence.datapoint import (MONTHLY, POINT_IN_TIME, QUARTERLY, Datapoint, Geography,
+from evidence.datapoint import (ANNUAL, MONTHLY, POINT_IN_TIME, QUARTERLY, Datapoint, Geography,
                                 Period)
 from evidence.excerpt import make as make_excerpt, row as ex_row
 from evidence.units import INDEX, JOBS, PERCENT, PERSONS, USD, Quantity, humanize
@@ -48,7 +48,7 @@ _BEA = ("U.S. Bureau of Economic Analysis", "BEA")
 @dataclass(frozen=True)
 class Series:
     sid: str
-    freq: str        # "M" monthly, "Q" quarterly
+    freq: str        # "M" monthly, "Q" quarterly, "A" annual
     family: str
     title: str
     publisher: Tuple[str, str]
@@ -64,6 +64,8 @@ CPI_NSA = Series("CUUR0000SA0", "M", INDEX, "Consumer Price Index for All Urban 
                  _BLS, "index, 1982-84=100, not seasonally adjusted")
 GDP = Series("A191RL1Q225SBEA", "Q", PERCENT, "Real gross domestic product, percent change", _BEA,
              "percent change at a seasonally adjusted annual rate")
+GDP_ANNUAL = Series("A191RL1A225NBEA", "A", PERCENT, "Real gross domestic product, percent change",
+                    _BEA, "percent change from the preceding year")
 
 
 def fred_series(sid: str, title: str = "", units: str = "") -> Series:
@@ -136,6 +138,8 @@ async def _bls_monthly(series_id: str, start_year: int, end_year: int) -> List[T
 
 
 def _end_of(obs: date, freq: str) -> date:
+    if freq == "A":
+        return date(obs.year, 12, 31)
     if freq == "Q":
         m = obs.month + 2
         return date(obs.year, m, calendar.monthrange(obs.year, m)[1])
@@ -149,7 +153,8 @@ async def first_release(s: Series, obs: date) -> Optional[Tuple[float, date]]:
     advance estimate about a month after the quarter. The first archive date
     that has the observation holds the first print; later revisions come a
     month (jobs) or two (GDP) after it."""
-    steps = (31, 40, 50, 60, 75) if s.freq == "Q" else (12, 25, 40)
+    # A year's first GDP figure comes with the fourth quarter's advance estimate.
+    steps = (31, 40, 50, 60, 75) if s.freq in ("Q", "A") else (12, 25, 40)
     today = datetime.now(timezone.utc).date()
     for days in steps:
         vd = _end_of(obs, s.freq) + timedelta(days=days)
@@ -169,6 +174,8 @@ def _num(s: str) -> float:
 
 
 def _when(d: date, freq: str) -> str:
+    if freq == "A":
+        return str(d.year)
     if freq == "Q":
         return f"Q{(d.month - 1) // 3 + 1} {d.year}"
     return f"{_MONTHS[d.month - 1]} {d.year}"
@@ -218,7 +225,9 @@ def _topic(text: str) -> str:
 
 def _datapoint(s: Series, d: date, value: float, raw: str, excerpt, *, metric: str,
                label: str = "", basis: str = "", vintage: Optional[date] = None) -> Datapoint:
-    if s.freq == "Q":
+    if s.freq == "A":
+        period = Period(year=d.year, kind=ANNUAL, basis=basis)
+    elif s.freq == "Q":
         period = Period(year=d.year, kind=QUARTERLY, quarter=(d.month - 1) // 3 + 1, basis=basis)
     else:
         period = Period(year=d.year, kind=MONTHLY, month=d.month, basis=basis)
@@ -577,7 +586,11 @@ async def record_aside(text: str) -> Optional[Verdict]:
 
 # ------------------------------------------------------------------ first print
 
-_FIRST_PRINT = {"unemployment_rate": UNRATE, "real_gdp_growth": GDP}
+# By metric, then by how often the figure is published.
+_FIRST_PRINT = {
+    "unemployment_rate": {"M": UNRATE},
+    "real_gdp_growth": {"Q": GDP, "A": GDP_ANNUAL},
+}
 
 
 async def first_print_match(parsed, v: Verdict) -> Optional[Verdict]:
@@ -585,17 +598,21 @@ async def first_print_match(parsed, v: Verdict) -> Optional[Verdict]:
     published. Claims quote the release they read; BLS and BEA revise later.
     Returns the claim judged against the first print, with the revision named."""
     spec = parsed.metric
-    s = _FIRST_PRINT.get(spec.metric if spec else "")
-    if s is None or not v.evidence or parsed.claimed_value is None:
+    by_freq = _FIRST_PRINT.get(spec.metric if spec else "")
+    if not by_freq or not v.evidence or parsed.claimed_value is None:
         return None
     if parsed.geography is not None and parsed.geography.level != "nation":
         return None
     dp = v.evidence[0]
     obs_p = dp.observed
-    if s.freq == "M" and obs_p.month and obs_p.year:
-        obs = date(obs_p.year, obs_p.month, 1)
-    elif s.freq == "Q" and obs_p.quarter and obs_p.year:
-        obs = date(obs_p.year, 3 * obs_p.quarter - 2, 1)
+    if not obs_p.year:
+        return None
+    if obs_p.month and "M" in by_freq:
+        s, obs = by_freq["M"], date(obs_p.year, obs_p.month, 1)
+    elif obs_p.quarter and "Q" in by_freq:
+        s, obs = by_freq["Q"], date(obs_p.year, 3 * obs_p.quarter - 2, 1)
+    elif not obs_p.month and not obs_p.quarter and "A" in by_freq:
+        s, obs = by_freq["A"], date(obs_p.year, 1, 1)
     else:
         return None
     first = await first_release(s, obs)
@@ -610,7 +627,10 @@ async def first_print_match(parsed, v: Verdict) -> Optional[Verdict]:
             f"({vd:%B %-d, %Y} archive), which the claim matches; it has since been revised to "
             f"{dp.quantity.magnitude:g}%.")
     return replace(v, verdict=SUPPORTED, confidence=MEDIUM,
-                   headline=f"{v.headline.split(': close')[0].rstrip('.')}. {note}")
+                   headline=f"{v.headline.split(': close')[0].rstrip('.')}. {note}",
+                   revision={"first": f"{value:g}%", "current": f"{dp.quantity.magnitude:g}%",
+                             "period": _when(obs, s.freq), "archive": vd.isoformat(),
+                             "measure": dp.label})
 
 
 # ------------------------------------------------------------------ fixed facts
@@ -753,6 +773,26 @@ async def _national_income(parsed) -> Optional[Verdict]:
 
 # ------------------------------------------------------------------ entry point
 
+def reads_as_computed(text: str) -> bool:
+    """Whether a claim that states no figure is one this module settles: a
+    direction ("the economy shrank in Q1 2022") or a record ("the lowest
+    unemployment in 50 years"). Fetches nothing. The splitter asks, so that it
+    keeps such a sentence when it picks the claims out of a passage."""
+    topic = _topic(text)
+    if _RECORD_RE.search(text) and topic in ("unemployment", "inflation"):
+        return True
+    if _ANY_NUMBER_RE.search(_SINCE_RE.sub(" ", _QUARTER_RE.sub(" ", _MONTH_YEAR_RE.sub(" ", text)))):
+        return False
+    obs, freq = _subject_period(text)
+    if obs is None:
+        return False
+    if topic == "gdp" and freq == "Q":
+        return bool(_SHRANK_RE.search(text) or _GREW_RE.search(text))
+    if topic == "jobs" and freq == "M":
+        return bool(_LOST_JOBS_RE.search(text) or _ADDED_JOBS_RE.search(text))
+    return False
+
+
 async def check(text: str, parsed) -> Optional[Verdict]:
     """A computed answer for the claim, or None to run the normal pipeline."""
     try:
@@ -826,3 +866,17 @@ async def gdp_quarter(year: int, quarter: int) -> List[Datapoint]:
                        make_excerpt([ex_row(when, f"{v:.1f}", cited=True)], units=GDP.units),
                        metric="real_gdp_growth", label="Real GDP, percent change",
                        basis="seasonally adjusted annual rate")]
+
+
+async def gdp_year(year: int) -> List[Datapoint]:
+    """Real GDP growth for one year, from FRED's copy of BEA's series. Used
+    when no BEA key is set, so a missing key is not an outage."""
+    obs = date(year, 1, 1)
+    rows = await _rows(GDP_ANNUAL, obs, obs)
+    if not rows:
+        return []
+    _, v = rows[0]
+    return [_datapoint(GDP_ANNUAL, obs, v, f"{v:.1f}",
+                       make_excerpt([ex_row(str(year), f"{v:.1f}", cited=True)], units=GDP_ANNUAL.units),
+                       metric="real_gdp_growth", label="Real GDP, percent change",
+                       basis="percent change from the preceding year")]

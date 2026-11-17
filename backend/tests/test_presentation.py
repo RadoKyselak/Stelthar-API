@@ -247,3 +247,47 @@ def test_counts_keep_their_written_precision():
     q = parse_claim("U.S. population was about 335 million in 2023").claimed_value
     assert q.family == "persons" and q.precision == 1_000_000
     assert humanize_claim(q.magnitude, q.family, q.precision) == "335 million"
+
+
+class TestRevisedFigure:
+    """A claim that matches the agency's first release, revised since."""
+
+    def result(self, revision):
+        from services.verify_v2 import VerificationV2
+        return VerificationV2(claim="Real GDP grew 2.5% in 2023.", verdict="Supported", confidence="Medium",
+                              headline="h", tier="structured", revision=revision)
+
+    def test_the_label_says_which_figure_it_matches(self):
+        d = build_display(self.result({"first": "2.5%", "current": "2.9%", "period": "2023",
+                                       "archive": "2024-01-31", "measure": "Real GDP growth"}))
+        assert d["verdict"]["key"] == "supported"          # same colour in every client
+        assert d["verdict"]["label"] == "Accurate when published"
+        assert d["revision"]["text"] == ("First published as 2.5% (January 31, 2024 archive); "
+                                         "since revised to 2.9%.")
+        assert "Accurate when published" in d["share_text"]
+
+    def test_an_ordinary_answer_is_unchanged(self):
+        d = build_display(self.result(None))
+        assert d["verdict"]["label"] == "Supported" and d["revision"] is None
+
+
+@pytest.mark.asyncio
+class TestReadingAndSharing:
+    async def test_how_the_claim_was_read(self):
+        v = await structured("Unemployment in Texas was 4.1% in 2023", {TEXAS: {2023: [4.0] * 12}})
+        d = to_response_dict(v)["display"]
+        got = {c["label"]: c["value"] for c in d["reading"]}
+        assert got["Place"] == "Texas" and got["Period"] == "2023" and "nemployment" in got["Measure"]
+
+    async def test_an_answer_links_to_its_own_page(self, monkeypatch):
+        monkeypatch.setattr(config, "PUBLIC_BASE_URL", "https://example.test")
+        v = await structured("Unemployment in Texas was 4.1% in 2023", {TEXAS: {2023: [4.0] * 12}})
+        d = to_response_dict(v)["display"]
+        assert d["share_url"] == ("https://example.test/c?claim="
+                                  "Unemployment%20in%20Texas%20was%204.1%25%20in%202023")
+        assert len(d["checked_on"]) == 10
+
+    async def test_nothing_read_nothing_shown(self):
+        from services.verify_v2 import VerificationV2
+        d = build_display(VerificationV2(claim="x" * 700, verdict="No verdict", confidence="Low", headline="h"))
+        assert d["reading"] == [] and d["share_url"] == ""      # too long to carry in a link

@@ -1,8 +1,14 @@
-const BACKEND_URL = "https://stelthar-api.vercel.app/verify";
-// v2: results cached under the old key include a week of "Inconclusive"
-// answers produced while the backend's Gemini model was retired. A new key
-// drops them on update instead of serving them for another 12 hours.
-const CACHE_KEY = "stelthar_cache_v2";
+const API = "https://stelthar-api.vercel.app";
+// A passage, each claim in it answered on its own. One claim gets the full
+// check; several are checked on free official data.
+const CHECK_URL = `${API}/v2/check`;
+// The full check for one claim: what "Search further" runs.
+const VERIFY_URL = `${API}/v2/verify`;
+// What every version before 2.2 called. Used only if /v2/check is not there
+// (an older server, or the feature switched off by taking the route out).
+const LEGACY_URL = `${API}/verify`;
+// v3: answers are stored as a passage ({claims: [...]}), not one result.
+const CACHE_KEY = "stelthar_cache_v3";
 const HISTORY_KEY = "stelthar_history";
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12h — gov data doesn't change intra-day
 const CACHE_MAX_ENTRIES = 50;
@@ -40,71 +46,94 @@ async function setCachedResult(claim, result) {
   await storageSet({ [CACHE_KEY]: cache });
 }
 
-async function appendHistory(claim, result) {
+const verdictLabel = (result) =>
+  (result && result.display && result.display.verdict && result.display.verdict.label) ||
+  (result && (result.verdict_detail || result.verdict)) || "Can't verify";
+
+// An outage is not a finding: saving it would keep showing the outage after
+// the service recovers.
+const isOutage = (result) =>
+  !!(result && (result.degraded || (result.display && result.display.status === "unavailable")));
+
+async function appendHistory(text, check) {
   const data = await storageGet([HISTORY_KEY]);
   const history = data[HISTORY_KEY] || [];
+  const claims = check.claims || [];
   const entry = {
-    claim,
-    verdict: result.verdict_detail || result.verdict || "Inconclusive",
-    confidence: result.confidence ?? null,
-    confidence_tier: result.confidence_tier || null,
+    claim: text,
+    // One claim: its verdict. A passage: how many claims it held.
+    verdict: claims.length === 1 ? verdictLabel(claims[0].result) : `${claims.length} claims`,
     ts: Date.now(),
   };
   const deduped = history.filter(
-    (h) => normalizeClaim(h.claim) !== normalizeClaim(claim)
+    (h) => normalizeClaim(h.claim) !== normalizeClaim(text)
   );
   deduped.unshift(entry);
   await storageSet({ [HISTORY_KEY]: deduped.slice(0, HISTORY_MAX_ENTRIES) });
 }
 
-async function verifyClaim(claim, { bypassCache = false } = {}) {
-  if (!bypassCache) {
-    const cached = await getCachedResult(claim);
-    if (cached) return { ...cached, _cached: true };
-  }
-
+async function postJSON(url, body, what) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let resp;
   try {
-    resp = await fetch(BACKEND_URL, {
+    resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ claim }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
   } catch (e) {
     if (e.name === "AbortError") {
-      throw new Error("Verification timed out. Try a shorter, more specific claim (a number, a year, and what it measures).");
+      throw new Error("The check took too long. Try a shorter, more specific claim (a number, a year, and what it measures).");
     }
-    throw new Error("Could not reach the verification service. Check your connection and try again.");
+    throw new Error("Could not reach the checking service. Check your connection and try again.");
   } finally {
     clearTimeout(timer);
   }
-
   if (resp.status === 429) {
-    throw new Error("Daily rate limit reached (100 checks/day). Cached results are still available.");
+    throw new Error("Too many checks from this connection for now. Try again in a little while; saved results still open.");
   }
   if (!resp.ok) {
     let detail = resp.statusText;
     try {
       const errJson = await resp.json();
-      detail = errJson.detail || detail;
+      detail = typeof errJson.detail === "string" ? errJson.detail : detail;
     } catch (e) {
       // keep statusText
     }
-    throw new Error(`Verification failed (${resp.status}): ${detail}`);
+    const err = new Error(`${what} failed (${resp.status}): ${detail}`);
+    err.status = resp.status;
+    throw err;
   }
-
-  const result = await resp.json();
-  // A degraded answer is an outage, not a finding; caching it would keep
-  // showing the outage after the service recovers.
-  if (!result.degraded) {
-    await setCachedResult(claim, result);
-    await appendHistory(claim, result);
-  }
-  return result;
+  return resp.json();
 }
+
+// Every claim in `text`, checked. Answers with the passage shape the result
+// card draws: { claims: [{ span, claim, deeper, result }], truncated }.
+async function checkText(text, { bypassCache = false } = {}) {
+  if (!bypassCache) {
+    const cached = await getCachedResult(text);
+    if (cached) return { ...cached, _cached: true };
+  }
+  let check;
+  try {
+    check = await postJSON(CHECK_URL, { text }, "The check");
+  } catch (e) {
+    if (e.status !== 404 && e.status !== 405) throw e;
+    // No /v2/check on this server: one claim, the way versions before 2.2 asked.
+    const result = await postJSON(LEGACY_URL, { claim: text.slice(0, 1000) }, "The check");
+    check = { claims: [{ index: 0, span: text, claim: text, deeper: false, result }], count: 1, truncated: false };
+  }
+  if (!(check.claims || []).some((c) => isOutage(c.result))) {
+    await setCachedResult(text, check);
+    await appendHistory(text, check);
+  }
+  return check;
+}
+
+// The full check for one claim of a passage, asked for by the person reading.
+const checkDeeper = (claim) => postJSON(VERIFY_URL, { claim }, "The search");
 
 // Everything opens in Chrome's side panel. The extension never runs on the
 // page itself: right-click passes the highlighted text, so no access to
@@ -143,11 +172,17 @@ chrome.commands.onCommand.addListener((command, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "verifyClaim") {
-    verifyClaim(message.claim, { bypassCache: message.bypassCache })
+  if (message.type === "checkText") {
+    checkText(message.text, { bypassCache: message.bypassCache })
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true; // async sendResponse
+  }
+  if (message.type === "deeper") {
+    checkDeeper(message.claim)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
   }
   if (message.type === "lookup") {
     runLookup(message.query, !!message.deep)
@@ -172,7 +207,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // query landed on the series they meant.
 // ===========================================================================
 
-const LOOKUP_URL = "https://stelthar-api.vercel.app/v2/lookup";
+const LOOKUP_URL = `${API}/v2/lookup`;
 
 const lookupMemo = new Map(); // query -> result, best-effort across a keystroke burst
 

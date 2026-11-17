@@ -83,6 +83,36 @@
 .mv-ex-n { margin: 0; padding: 6px 10px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); }
 .mv-quote { margin: 12px 0 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--line); font-size: 13px; color: var(--ink2); }
 .mv-quote-by { display: block; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+
+/* How the claim was read: the measure, place and period the answer is for. */
+.mv-read { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.mv-read li { padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; color: var(--ink2);
+  overflow-wrap: anywhere; }
+.mv-read b { font-weight: 500; color: var(--muted); }
+.mv-rev { margin: 10px 0 0; padding: 8px 10px; border-left: 3px solid var(--tone); background: var(--subtle);
+  font-size: 13px; color: var(--ink2); }
+.mv-meta { margin: 0 0 10px; font-size: 12.5px; color: var(--muted); }
+
+/* A passage: how its claims fell, then each claim, opened on request. */
+.mv-tally-h { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
+.mv-tally-l { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 0; padding: 0; list-style: none; }
+.mv-tally-l li { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--tone); }
+.mv-tally-l li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.mv-claims { margin: 14px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.mv-claims > li { border-bottom: 1px solid var(--line); }
+.mv-claims summary { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 10px 0; cursor: pointer;
+  list-style: none; }
+.mv-claims summary::-webkit-details-marker { display: none; }
+.mv-claims summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+.mv-claim-v { grid-row: 1 / span 2; align-self: start; display: inline-flex; align-items: center; gap: 6px; min-width: 104px;
+  margin-top: 1px; line-height: 1.35; font-size: 12.5px; font-weight: 600; color: var(--tone); }
+.mv-claim-v::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none;
+  align-self: flex-start; margin-top: 5px; }
+.mv-claim-t { font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.mv-claim-s { grid-column: 2; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.mv-claim-b { padding: 4px 0 16px; }
+.mv-claim-b > .mv-note:first-child { margin-top: 0; }
+.mv-claims .mv-fig { font-size: 24px; }
 `;
 
   function el(tag, cls, text) {
@@ -157,6 +187,36 @@
     return wrap;
   }
 
+  /** "Copy link": the claim's own page, with what the check found. */
+  function shareButton(d) {
+    const url = safeUrl(d.share_url);
+    if (!url) return null;
+    const b = el("button", "mv-linkbtn", "Copy link");
+    b.type = "button";
+    b.title = "A link to this check, to send to someone";
+    b.addEventListener("click", async () => {
+      const text = [d.share_text, url].filter(Boolean).join("\n");
+      const ok = await copyText(text);
+      b.textContent = ok ? "Link copied" : "Couldn't copy";
+      setTimeout(() => { b.textContent = "Copy link"; }, 2500);
+    });
+    return b;
+  }
+
+  /** The measure, place and period the answer is for, as labelled chips. */
+  function readingChips(d) {
+    const chips = (d.reading || []).filter((c) => c && c.value);
+    if (!chips.length) return null;
+    const ul = el("ul", "mv-read");
+    ul.setAttribute("aria-label", "How the claim was read");
+    chips.forEach((c) => {
+      const li = el("li");
+      li.append(el("b", "", `${c.label} `), document.createTextNode(c.value));
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+
   function alertBox(key, heading, body) {
     const a = el("div", "mv-alert");
     a.dataset.verdict = key;
@@ -171,6 +231,7 @@
     if (!c.claim) return "";
     switch (c.relation) {
       case "exact": return "The claim matches the official figure.";
+      case "first": return `The claim says ${c.claim}, the figure the agency first published.`;
       case "within": return `The claim says ${c.claim}, within the margin of the official figure.`;
       case "off": return `The claim says ${c.claim}, a difference of ${c.gap || c.gap_short}.`;
       default: return `The claim says ${c.claim}.`;
@@ -298,13 +359,19 @@
     } else alertBody.push(d.summary);
     if (d.reason && d.reason.next) alertBody.push(d.reason.next);
     root.appendChild(alertBox(key, d.verdict.label, alertBody));
+    if (d.revision && d.revision.text) {
+      const rev = el("p", "mv-rev", d.revision.text);
+      rev.dataset.verdict = key;
+      root.appendChild(rev);
+    }
 
+    const chips = readingChips(d);
     if (comps.length === 1) {
       const c = comps[0];
       const sec = el("div", "mv-sec");
-      sec.append(el("div", "mv-label", "Official figure"),
+      sec.append(el("div", "mv-label", d.revision ? "Official figure today" : "Official figure"),
         el("p", c.official.length > 16 ? "mv-fig mv-long" : "mv-fig", c.official),
-        el("p", "mv-what", describe(c)));
+        chips || el("p", "mv-what", describe(c)));
       const ex = excerptBox(c.excerpt);
       if (ex) sec.appendChild(ex);
       root.appendChild(sec);
@@ -320,7 +387,7 @@
         table.appendChild(tr);
       });
       const first = comps[0];
-      sec.append(table, el("p", "mv-what", [first.measure, first.place, first.basis].filter(Boolean).join(", ")));
+      sec.append(table, chips || el("p", "mv-what", [first.measure, first.place, first.basis].filter(Boolean).join(", ")));
       comps.slice(0, 2).forEach((c) => { const ex = excerptBox(c.excerpt); if (ex) sec.appendChild(ex); });
       root.appendChild(sec);
     } else if (d.reported_value) {
@@ -339,13 +406,26 @@
     (d.notes || []).slice(0, 2).forEach((n) => root.appendChild(el("p", "mv-note", n)));
 
     const src = sourceLine(d);
-    if (src || d.citation || opts.onRecheck) {
+    const share = shareButton(d);
+    // How sure the answer is, and when it was checked: official figures get revised.
+    const meta = [d.confidence && d.confidence.tier ? `${d.confidence.tier} confidence. ${d.confidence.text || ""}`.trim() : "",
+      shortDate(d.checked_on) ? `Checked ${shortDate(d.checked_on)}.` : ""].filter(Boolean).join(" ");
+    if (src || d.citation || opts.onRecheck || share || (meta && key !== "no-verdict" && key !== "unavailable")) {
       const foot = el("div", "mv-foot");
       if (src) foot.appendChild(src);
+      if (meta && key !== "no-verdict" && key !== "unavailable") foot.appendChild(el("p", "mv-meta", meta));
       if (d.method && d.method.kind === "dataset") {
         foot.appendChild(el("p", "mv-how", "Matched to the agency's series; the figure comes straight from its data."));
       }
       const actions = d.citation ? citeButton(d.citation, d.citation_html) : el("div", "mv-actions");
+      if (share) actions.appendChild(share);
+      if (typeof opts.onEdit === "function" && chips) {
+        const edit = el("button", "mv-linkbtn", "Not what you meant?");
+        edit.type = "button";
+        edit.title = "Edit the claim: name the measure, place or period you mean.";
+        edit.addEventListener("click", () => opts.onEdit());
+        actions.appendChild(edit);
+      }
       if (typeof opts.onRecheck === "function") {
         const again = el("button", "mv-linkbtn", "Check again");
         again.type = "button";
@@ -358,6 +438,113 @@
     }
     const fc = factChecks(d);
     if (fc) root.appendChild(fc);
+    return root;
+  }
+
+  const TALLY_WORDS = { "supported": "supported", "mostly-accurate": "mostly accurate",
+    "contradicted": "contradicted", "misleading": "misleading", "no-verdict": "can't verify",
+    "unavailable": "couldn't check" };
+  const TALLY_ORDER = ["contradicted", "misleading", "mostly-accurate", "supported", "no-verdict", "unavailable"];
+
+  /** What a claim's answer rests on, in one line. */
+  function oneLine(d) {
+    if (d.revision && d.revision.text) return d.revision.text;
+    const comps = (d.comparisons || []).filter((c) => c.official);
+    if (comps.length === 1) {
+      const c = comps[0];
+      return [`${c.source || "Official figure"}: ${c.official}`, c.context].filter(Boolean).join(" \u00b7 ");
+    }
+    if (d.reason && d.reason.why) return d.reason.why;
+    const first = String(d.summary || "").split(/(?<=[.!?])\s/)[0];
+    return first.length > 140 ? `${first.slice(0, 137)}\u2026` : first;
+  }
+
+  /**
+   * A passage checked claim by claim (POST /v2/check).
+   * opts: { onDeeper(claim): Promise<result> } runs the full check for one
+   * claim the free data could not settle; every option of render() applies
+   * to the claim cards too.
+   */
+  function renderPassage(check, opts) {
+    opts = opts || {};
+    const entries = ((check && check.claims) || []).map((e) => Object.assign({}, e));
+    if (entries.length === 1) return render(entries[0].result, opts);
+    const root = el("div", "mv");
+    root.setAttribute("role", "region");
+    const open = new Set();
+
+    const draw = () => {
+      const counts = {};
+      entries.forEach((e) => {
+        const k = displayOf(e.result).verdict.key || "no-verdict";
+        counts[k] = (counts[k] || 0) + 1;
+      });
+      const head = el("div", "mv-tally");
+      const n = entries.length;
+      head.appendChild(el("p", "mv-tally-h", n ? `${n} claims checked` : "Nothing to check here"));
+      if (!n) head.appendChild(el("p", "mv-alert-b",
+        "No sentence here states a figure that official data covers."));
+      const ul = el("ul", "mv-tally-l");
+      ul.setAttribute("aria-label", "How the claims fell");
+      TALLY_ORDER.filter((k) => counts[k]).forEach((k) => {
+        const li = el("li", "", `${counts[k]} ${TALLY_WORDS[k]}`);
+        li.dataset.verdict = k;
+        ul.appendChild(li);
+      });
+      if (ul.childNodes.length) head.appendChild(ul);
+      root.setAttribute("aria-label", n ? `${n} claims checked` : "Nothing to check");
+
+      const list = el("ol", "mv-claims");
+      entries.forEach((e, i) => {
+        const d = displayOf(e.result);
+        const key = d.verdict.key || "no-verdict";
+        const li = el("li");
+        const det = el("details");
+        det.open = open.has(i);
+        det.addEventListener("toggle", () => { if (det.open) open.add(i); else open.delete(i); });
+        const sum = el("summary");
+        const v = el("span", "mv-claim-v", d.verdict.label);
+        v.dataset.verdict = key;
+        sum.append(v, el("span", "mv-claim-t", `\u201c${e.span || e.claim}\u201d`),
+          el("span", "mv-claim-s", oneLine(d)));
+        const body = el("div", "mv-claim-b");
+        if (e.claim && e.span && e.claim !== e.span) {
+          body.appendChild(el("p", "mv-note", `Checked as: \u201c${e.claim}\u201d`));
+        }
+        body.appendChild(render(e.result, opts));
+        if (e.deeper && typeof opts.onDeeper === "function") {
+          const more = el("button", "mv-btn mv-btn-outline", "Search further");
+          more.type = "button";
+          more.title = "Search the government datasets, then published sources, for this one claim.";
+          more.addEventListener("click", async () => {
+            more.disabled = true;
+            more.textContent = "Searching\u2026";
+            try {
+              const result = await opts.onDeeper(e.claim);
+              if (result) { e.result = result; e.deeper = false; }
+            } catch (err) {
+              e.result = { display: { verdict: { key: "unavailable", label: "Couldn't check" },
+                summary: (err && err.message) || "Something went wrong.", comparisons: [], notes: [], sources: [] } };
+            }
+            open.add(i);
+            draw();
+          });
+          const wrap = el("div", "mv-actions");
+          wrap.appendChild(more);
+          body.appendChild(wrap);
+        }
+        det.append(sum, body);
+        li.appendChild(det);
+        list.appendChild(li);
+      });
+
+      const parts = [head];
+      if (n) parts.push(list);
+      if (check && check.truncated) parts.push(el("p", "mv-note",
+        `Only the first ${n} claims were checked. Highlight less text to check the rest.`));
+      root.replaceChildren(...parts);
+    };
+    draw();
     return root;
   }
 
@@ -461,6 +648,6 @@
     "The federal deficit was $1.8 trillion in 2024",
   ];
 
-  global.MiradorView = { css: CSS, render, renderLookup, loading, error, safeUrl, copyText,
+  global.MiradorView = { css: CSS, render, renderPassage, renderLookup, loading, error, safeUrl, copyText,
     verdictKey, intentOf, examples: EXAMPLES };
 })(typeof window !== "undefined" ? window : this);
