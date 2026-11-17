@@ -180,3 +180,55 @@ async def test_debt_held_by_the_public_is_not_the_total(monkeypatch):
     p = parse_claim("Federal debt held by the public is $40 trillion.")
     v = await _REAL_DEBT_CHECK(p.text, p)
     assert v.verdict == MISLEADING and "$32.71 trillion" in v.headline
+
+
+class TestLatestInflation:
+    """"Inflation is 3%" is about the newest published 12-month rate. BLS has no
+    October 2025 index, so October 2026 has no rate: the answer is September's,
+    never last year's annual average (which is what the engine fell back to)."""
+
+    async def test_steps_back_to_the_newest_month_that_has_a_rate(self, monkeypatch):
+        from evidence.sources import bls
+        asked = []
+
+        async def fake(metric, label, series_id, year, month=None):
+            asked.append((year, month))
+            return ["september"] if (year, month) == (2026, 9) else []
+
+        monkeypatch.setattr(bls, "fetch_inflation", fake)
+        got = await bls.fetch_latest_inflation("inflation_rate", "CPI", "CUUR0000SA0", 2026, 10)
+        assert got == ["september"] and asked == [(2026, 10), (2026, 9)]
+
+    async def test_crosses_a_year_boundary(self, monkeypatch):
+        from evidence.sources import bls
+        asked = []
+
+        async def fake(metric, label, series_id, year, month=None):
+            asked.append((year, month))
+            return []
+
+        monkeypatch.setattr(bls, "fetch_inflation", fake)
+        assert await bls.fetch_latest_inflation("m", "l", "s", 2027, 2, back=2) == []
+        assert asked == [(2027, 2), (2027, 1), (2026, 12)]
+
+    async def test_a_present_tense_claim_uses_it(self, monkeypatch):
+        from claims.parser import parse_claim
+        from evidence.sources import bls
+        from services import verify_v2
+
+        class Obs:
+            year, month = 2026, 10
+
+        class Latest:
+            observed = Obs()
+
+        async def latest(*a, **k):
+            return [Latest()]
+
+        async def newest(metric, label, series_id, year, month, back=3):
+            return [("rate for", year, month)]
+
+        monkeypatch.setattr(bls, "fetch_latest_monthly", latest)
+        monkeypatch.setattr(bls, "fetch_latest_inflation", newest)
+        got = await verify_v2.fetch_structured(parse_claim("Inflation is now 3%"))
+        assert got == [("rate for", 2026, 10)]

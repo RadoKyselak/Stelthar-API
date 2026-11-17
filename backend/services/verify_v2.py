@@ -119,8 +119,8 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
                     spec.metric, spec.label, spec.series_id, spec.family)
                 if latest:
                     obs = latest[0].observed
-                    got = await bls_source.fetch_inflation(
-                        spec.metric, spec.label, spec.series_id, obs.year, month=obs.month)
+                    got = await bls_source.fetch_latest_inflation(
+                        spec.metric, spec.label, spec.series_id, obs.year, obs.month)
                     if got:
                         return got
             elif spec.bls_kind == "rate":

@@ -289,6 +289,24 @@ async def fetch_monthly(
     return []
 
 
+async def fetch_latest_inflation(
+    metric: str, label: str, series_id: str, year: int, month: int, back: int = 3,
+) -> List[Datapoint]:
+    """The newest month that has a 12-month change, starting at (year, month).
+
+    A month can have an index and no 12-month change: BLS published no index
+    for October 2025 (the government was shut down), so October 2026 has no
+    year-ago figure to compare with. "Inflation is 3%" is about the latest
+    published rate, which is then September's, not last year's annual average.
+    """
+    for _ in range(back + 1):
+        got = await fetch_inflation(metric, label, series_id, year, month=month)
+        if got:
+            return got
+        year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+    return []
+
+
 async def fetch_inflation(
     metric: str, label: str, series_id: str, year: int, month: Optional[int] = None,
 ) -> List[Datapoint]:
