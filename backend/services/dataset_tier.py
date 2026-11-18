@@ -20,7 +20,7 @@ from typing import List, Optional, Set
 
 import config
 from claims.parser import ParsedClaim, income_band
-from claims.verdict import HIGH, MEDIUM, NO_VERDICT, assess
+from claims.verdict import CONTRADICTED, HIGH, MEDIUM, MOSTLY_ACCURATE, NO_VERDICT, assess
 from config import logger
 from evidence import ai_search
 from evidence.datasets import Candidate, census_profile, finder, fred, picker
@@ -295,19 +295,120 @@ async def _answer(text, parsed, c: Candidate, stat: str, census_year, census_geo
     return result
 
 
-async def verify_found(text: str, parsed: ParsedClaim, client_ip: Optional[str], started: float):
+async def verify_found(text: str, parsed: ParsedClaim, client_ip: Optional[str], started: float,
+                       said_on: str = ""):
     """The claim's figure found by Claude in the government datasets, judged
     by the usual rules. None when nothing fits, so web search can try."""
-    if parsed.claimed_value is None or parsed.is_trend_claim or parsed.has_unresolved_period:
-        return None
+    import re
+    if not re.search(r"\d", text):
+        return None      # nothing to compare a figure with
     if income_band(text) or not finder.available():
         return None
     if ai_search.gate(text, names_a_metric=True):
         return None
     found = await finder.find(text, "check", client_ip=client_ip,
-                              figure=parsed.claimed_value.raw or "")
+                              figure=(parsed.claimed_value.raw or "") if parsed.claimed_value else "",
+                              said_on=said_on)
+    return judge_found(text, parsed, found, started)
+
+
+# A computed figure this close to the claim's is not called wrong.
+_COMPUTED_CLOSE = 0.05
+# Measures with a second official total, and how far apart the two run.
+_SECOND_MEASURE = {"national_debt": 0.45}
+_OP_WORDS = {"difference": "less", "percent_change": "percent change from", "ratio": "divided by",
+             "percent_of": "as a percent of"}
+
+
+def combine(found) -> Optional["Datapoint"]:
+    """The figure two fetched figures give, computed here: a difference, a
+    percent change, one divided by the other, or one as a percent of the
+    other. None when the two cannot honestly be combined that way (unlike
+    units for a difference, a zero divisor, different places)."""
+    from evidence.datapoint import Datapoint
+    from evidence.excerpt import make as make_excerpt, row as ex_row
+    from evidence.units import JOBS, PERCENT, PERSONS, USD, Quantity
+    a, b, op = found.datapoint, found.second, found.operation
+    if a is None or b is None or op not in _OP_WORDS:
+        return None
+    if a.geography.name != b.geography.name:
+        return None
+    x, y = a.quantity.magnitude, b.quantity.magnitude
+    fa, fb = a.quantity.family, b.quantity.family
+    if op == "difference":
+        if fa != fb:
+            return None
+        value, family = x - y, fa
+    elif op in ("percent_change", "percent_of"):
+        if fa != fb or fa == PERCENT or not y:
+            return None      # a percent of a percent is points, which is another claim
+        value, family = ((x - y) / abs(y) * 100.0 if op == "percent_change" else x / y * 100.0), PERCENT
+    else:
+        if not y or fa != USD or fb not in (PERSONS, JOBS):
+            return None      # dollars per person is the one ratio with a unit a claim states
+        value, family = x / y, USD
+    q = Quantity(magnitude=value, family=family)
+    rows = [ex_row(f"{a.label}, {a.observed.describe()}", a.display_value(), cited=True),
+            ex_row(f"{b.label}, {b.observed.describe()}", b.display_value())]
+    label = f"{a.label} {_OP_WORDS[op]} {b.label.lower() if b.label != a.label else 'the earlier figure'}"
+    return Datapoint(
+        quantity=q, metric=a.metric, label=label[:140], observed=a.observed, geography=a.geography,
+        source=a.source, source_url=a.source_url, series_id=a.series_id, as_of=a.as_of,
+        raw_value=f"{value:.6g}",
+        extra={"excerpt": make_excerpt(rows, units="", note=f"Computed: {a.display_value()} "
+                                       f"{_OP_WORDS[op]} {b.display_value()}."),
+               "computed": op})
+
+
+def _claims_figure(text: str, found):
+    """The claim's own number as the finder copied it, if it is in the text
+    word for word; a model never supplies a figure."""
+    from evidence.units import parse_quantity
+    fig = " ".join((found.claim_figure or "").split())
+    if not fig or fig.lower() not in " ".join(text.split()).lower():
+        return None
+    return parse_quantity(fig)
+
+
+def judge_found(text: str, parsed: ParsedClaim, found, started: float):
+    """What the engine makes of a figure the finder chose: the same checks and
+    verdict rules whoever drove the tools (the model in production, a test
+    harness in eval/agent_harness.py). None when the figure cannot stand."""
     dp = found.datapoint
     if dp is None or not found.exact:
+        return None
+    from claims.parser import not_a_published_figure
+    if not_a_published_figure(text):
+        # "On the promise of keeping unemployment under 8 percent": a right
+        # lookup of the unemployment rate still judges a sentence that is not
+        # about the unemployment rate.
+        return None
+    computed = found.operation != "value"
+    if computed:
+        dp = combine(found)
+        if dp is None:
+            return None
+    # The claim's figure: the finder's reading of it when it gave one that is
+    # in the text, else the rules'. With the finder's reading, the claim's
+    # period is the figure's (the finder matched it), not what the rules made
+    # of a sentence they could not read.
+    quoted = _claims_figure(text, found)
+    if quoted is not None:
+        from evidence.units import UNKNOWN
+        if quoted.family == UNKNOWN:
+            quoted = replace(quoted, family=dp.quantity.family)
+        parsed = replace(parsed, claimed_value=quoted, all_values=[quoted],
+                         # ("More than $13 trillion" elsewhere in the sentence is not how
+                         # the sentence holds this figure.)
+                         comparator=found.comparator or "equals",
+                         year=None if computed else parsed.year, month=None if computed else parsed.month,
+                         all_years=[] if computed else parsed.all_years, has_unresolved_period=False,
+                         structured_blocker="",
+                         # The place too: the finder matched it (and a national figure for a
+                         # local question was already refused); the rules, on a sentence they
+                         # could not read, make "President Obama" a place.
+                         geography=dp.geography)
+    elif computed or parsed.claimed_value is None or parsed.is_trend_claim or parsed.has_unresolved_period:
         return None
     # The figure must be for the claim's place and year: Claude chose the
     # series, and a national number must never stand in for a city's.
@@ -321,11 +422,29 @@ async def verify_found(text: str, parsed: ParsedClaim, client_ip: Optional[str],
     from services.verify_v2 import _verdict_to_result  # avoid an import cycle
     judged = replace(parsed, geography=dp.geography,
                      metric=parsed.metric if parsed.metric and parsed.metric.metric == dp.metric else None)
-    result = _verdict_to_result(text, judged, assess(judged, [dp]), started)
+    verdict = assess(judged, [dp])
+    if computed and verdict.verdict == CONTRADICTED and verdict.relative_delta is not None:
+        gap = abs(verdict.relative_delta)
+        if gap <= _COMPUTED_CLOSE:
+            # $47,900 a person against $48,495: the speaker divided one day's
+            # debt by one population estimate, the engine another day's by
+            # another. Arithmetic on two figures cannot be held to the dollar.
+            verdict = replace(verdict, verdict=MOSTLY_ACCURATE,
+                              headline=f"{verdict.headline.rstrip('.')}: close, for a figure worked out from two others.")
+        elif gap <= _SECOND_MEASURE.get(found.datapoint.metric, 0.0):
+            # The debt has two official totals a third apart (all of it, and
+            # the part held by the public). A share of "the debt" that misses
+            # one may be a share of the other, and which was meant is not said.
+            return None
+    result = _verdict_to_result(text, judged, verdict, started)
     if result.verdict == NO_VERDICT:
         return None
     result.tier = TIER_DATASET
     result.model_calls = found.model_calls
+    if computed:
+        # Say that the official figure shown is arithmetic on two published ones.
+        note = ((dp.extra or {}).get("excerpt") or {}).get("note") or ""
+        result.caveats = [f"No agency publishes this figure as such. {note}"] + list(result.caveats)
     # A model chose the series, so the answer is never rated above Medium.
     if result.confidence == HIGH:
         result.confidence = MEDIUM

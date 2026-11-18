@@ -369,3 +369,30 @@ class TestWageGrowth:
     async def test_real_wages_are_left_alone(self):
         v = await structured("Real wages rose 2% in 2022", PAY)
         assert v.verdict == "No verdict"
+
+
+class TestASentenceIsNotAFigure:
+    """A web answer about a record ("which party held the House") reports a
+    sentence where a statistic reports a number. Drawn in the slot for a
+    number, it was set in headline type and cut off mid-word."""
+
+    def display(self, value, explanation="The House Historian's table lists Democratic majorities throughout."):
+        from services.verify_v2 import VerificationV2
+        v = VerificationV2(claim="Democrats won a House majority once in the 1980s", verdict="Contradicted",
+                           confidence="High", headline="h", tier="grounded",
+                           reported={"value": value, "explanation": explanation, "period": "", "source_org": ""})
+        return build_display(v)
+
+    def test_a_sentence_goes_in_the_explanation_only(self):
+        d = self.display("Democrats held the House majority in every Congress from the 84th (1955–57) "
+                         "through the 103rd (1993–95), including all of the 1980s")
+        assert d["reported_value"] == "" and d["reported_context"] == ""
+        assert d["summary"].startswith("The House Historian's table")
+
+    def test_with_no_explanation_the_sentence_is_the_summary(self):
+        d = self.display("Democrats held the House majority throughout the 1980s", explanation="")
+        assert d["reported_value"] == "" and d["summary"] == "Democrats held the House majority throughout the 1980s"
+
+    @pytest.mark.parametrize("value", ["7.3%", "$40.2 trillion", "about 1.4 million jobs", "258 seats"])
+    def test_a_figure_is_still_shown_as_one(self, value):
+        assert self.display(value)["reported_value"] == value

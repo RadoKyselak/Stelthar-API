@@ -848,7 +848,8 @@ async def verify(claim: str, allow_grounding: bool = True,
                 evidence=v.evidence, tier=v.tier, elapsed_seconds=v.elapsed_seconds, parsed=v.parsed,
                 notes=list(v.notes) + ["period taken from the date the claim was said"])
     else:
-        v = await _verify_one(text, allow_grounding, client_ip)
+        v = await _verify_one(text, allow_grounding, client_ip,
+                              said_on=said_on.isoformat() if said_on else "")
         if said_on is None and v.verdict != NO_VERDICT and v.tier in (TIER_STRUCTURED,):
             p = parse_claim(text)
             if p.metric is not None and p.year is None and p.quarter is None:
@@ -860,7 +861,7 @@ async def verify(claim: str, allow_grounding: bool = True,
 
 
 async def _verify_one(claim: str, allow_grounding: bool = True,
-                      client_ip: Optional[str] = None) -> VerificationV2:
+                      client_ip: Optional[str] = None, said_on: str = "") -> VerificationV2:
     started = time.monotonic()
     text = (claim or "").strip()
     if not text:
@@ -1067,7 +1068,7 @@ async def _verify_one(claim: str, allow_grounding: bool = True,
     from services import regulatory
     reg_hint = regulatory.search_hint(text)
     if not reg_hint:
-        ds = await dataset_tier.verify_found(text, parsed, client_ip, started)
+        ds = await dataset_tier.verify_found(text, parsed, client_ip, started, said_on=said_on)
         if ds is not None:
             return ds
 

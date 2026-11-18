@@ -46,7 +46,7 @@ class TestWhatAnUndatedClaimMeans:
 def answering(verdict):
     seen = []
 
-    async def fake(claim, allow_grounding=True, client_ip=None):
+    async def fake(claim, allow_grounding=True, client_ip=None, said_on=""):
         seen.append((claim, allow_grounding))
         return VerificationV2(claim=claim, verdict=verdict, confidence=HIGH, headline="h", tier="structured")
     return fake, seen

@@ -431,6 +431,8 @@ _MOVED_BY_RE = re.compile(
 _NOT_A_PUBLISHED_FIGURE_RE = re.compile(
     r"\btarget(?:s|ed)?\b|\bgoal\b|\bforecast(?:s|ed|ing)?\b|\bproject(?:ed|s|ion|ions)\b|"
     r"\bpredict(?:ed|s|ion|ions)\b|\bexpect(?:ed|s|ing|ation|ations)?\b|\bon track to\b|"
+    # "pushed the stimulus through on the promise of keeping unemployment under 8 percent"
+    r"\bpromis(?:e|es|ed|ing)\b|\bpledg(?:e|es|ed|ing)\b|\bvow(?:s|ed)?\b|"
     # "an estimated $15.6 trillion for 2012 based on activity during the first two quarters"
     r"\bestimated?\b.{0,60}?\bbased on\b", re.IGNORECASE)
 # What would happen, or what someone wants to happen: "if participation were
@@ -458,6 +460,13 @@ _OTHER_POVERTY_RE = re.compile(
 _BY_COMPARISON_RE = re.compile(
     r"\b(?:this|the same|that same)\s+(?:time|point|period|month|quarter|week)\s+(?:in|of|last|a year)\b"
     r"|\bat this point (?:in|last)\b", re.IGNORECASE)
+
+
+def not_a_published_figure(text: str) -> bool:
+    """Whether a sentence is about a target, a forecast, a promise or what
+    would happen: nothing an agency has published can settle it, however the
+    sentence was read and whoever read it."""
+    return bool(_NOT_A_PUBLISHED_FIGURE_RE.search(text or "") or _HYPOTHETICAL_RE.search(text or ""))
 
 
 def _is_a_change(spec: MetricSpec) -> bool:
