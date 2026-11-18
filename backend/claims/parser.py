@@ -346,6 +346,13 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
                     f"nonfarm employment")
         if _SINCE_DATE_RE.search(text):
             return "the claim counts a change since a date; the series gives one month or one year"
+    if spec.metric == "wage_growth":
+        if _REAL_DOLLARS_RE.search(text) or re.search(r"\breal\b|\bafter inflation\b|\bpurchasing power\b", text, re.I):
+            return "the claim is about wages after inflation; the series is in current dollars"
+        if _SINCE_DATE_RE.search(text):
+            return "the claim counts a change since a date; the series gives a 12-month change"
+        if re.search(r"\b(median|minimum|weekly|annual|salar(?:y|ies))\b", text, re.I):
+            return "the claim is about a different measure of pay; the series is average hourly earnings"
     if spec.family == _units.USD and _REAL_DOLLARS_RE.search(text):
         return "the claim is inflation-adjusted; the series is in current dollars"
     if spec.metric == "real_gdp_growth" and _NOMINAL_RE.search(text):

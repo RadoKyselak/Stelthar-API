@@ -325,3 +325,35 @@ class TestReachedInTheYear:
     async def test_a_claim_that_matches_the_average_never_looks_at_months(self):
         v = await structured("Unemployment fell to 5.4% in 2021", US)
         assert v.verdict in ("Supported", "Mostly accurate") and v.evidence[0]["period_label"] == "2021"
+
+
+AHE = "CES0500000003"
+# Average hourly earnings, all private employees, by month (dollars).
+PAY = {AHE: {2022: [31.63, 31.63, 31.83, 31.94, 32.06, 32.18, 32.33, 32.43, 32.52, 32.66, 32.80, 32.92],
+             2023: [33.02, 33.13, 33.25, 33.40, 33.51, 33.66, 33.80, 33.89, 34.01, 34.11, 34.25, 34.36]}}
+
+
+@pytest.mark.asyncio
+class TestWageGrowth:
+    """"Wages are up X%" is the 12-month change in average hourly earnings."""
+
+    async def test_a_month(self):
+        v = await structured("Wage growth was 4.4% in December 2023", PAY)
+        assert v.verdict == "Supported" and v.model_calls == 0          # (34.36 - 32.92) / 32.92 = 4.37%
+        e = v.evidence[0]
+        assert e["series_id"] == AHE and e["period_label"] == "December 2023"
+        assert "seasonally adjusted" in e["period_basis"] and "not seasonally" not in e["period_basis"]
+        rows = v.points[0]["excerpt"]["rows"]
+        assert rows[0]["label"] == "Average hourly earnings, Dec 2022" and rows[2]["cited"] is True
+
+    async def test_a_wrong_figure(self):
+        v = await structured("Wages rose 9% in December 2023", PAY)
+        assert v.verdict == "Contradicted"
+
+    async def test_wages_are_never_checked_against_prices(self):
+        v = await structured("Wages grew 4.4% in December 2023, beating inflation", PAY)
+        assert v.evidence[0]["metric"] == "wage_growth"
+
+    async def test_real_wages_are_left_alone(self):
+        v = await structured("Real wages rose 2% in 2022", PAY)
+        assert v.verdict == "No verdict"

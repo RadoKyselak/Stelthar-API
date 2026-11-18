@@ -124,7 +124,8 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
                 if latest:
                     obs = latest[0].observed
                     got = await bls_source.fetch_latest_inflation(
-                        spec.metric, spec.label, spec.series_id, obs.year, obs.month)
+                        spec.metric, spec.label, spec.series_id, obs.year, obs.month,
+                        noun=spec.yoy_noun, adjustment=spec.yoy_adjustment)
                     if got:
                         return got
             elif spec.bls_kind == "rate":
@@ -140,7 +141,8 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
             year = datetime.now(timezone.utc).year - 1
         if spec.bls_kind == "cpi_yoy":
             return await bls_source.fetch_inflation(
-                spec.metric, spec.label, spec.series_id, year, month=parsed.month
+                spec.metric, spec.label, spec.series_id, year, month=parsed.month,
+                noun=spec.yoy_noun, adjustment=spec.yoy_adjustment,
             )
         if parsed.month is not None:
             return await bls_source.fetch_monthly(

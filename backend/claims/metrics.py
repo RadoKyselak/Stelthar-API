@@ -33,6 +33,10 @@ class MetricSpec:
     # Source-specific addressing.
     series_id: Optional[str] = None          # BLS
     bls_kind: Optional[str] = None           # "rate" | "cpi_yoy"
+    # For "cpi_yoy" (a 12-month change computed from a level): what the level
+    # is called in the rows shown, and how BLS adjusts the series.
+    yoy_noun: str = "Index"
+    yoy_adjustment: str = "not seasonally adjusted"
     bea_table: Optional[str] = None          # BEA
     bea_line: Optional[str] = None
     # Text the row's LineDescription must contain. A renumbered table then
@@ -129,6 +133,21 @@ _SPECS: List[MetricSpec] = [
         metric="avg_hourly_earnings", label="Average hourly earnings, private",
         source="BLS", family=USD, series_id="CES0500000003", bls_kind="rate",
         phrases=("average hourly earnings", "average hourly wage", "hourly earnings"),
+    ),
+    # "Wages are up 4%": the 12-month change in the same series, which is how
+    # the jobs report states wage growth ("average hourly earnings have
+    # increased by 3.8 percent over the past 12 months").
+    MetricSpec(
+        metric="wage_growth", label="Average hourly earnings, 12-month change",
+        source="BLS", family=PERCENT, series_id="CES0500000003", bls_kind="cpi_yoy",
+        yoy_noun="Average hourly earnings", yoy_adjustment="seasonally adjusted",
+        phrases=("wage growth", "growth in wages", "wages grew", "wages rose", "wages increased",
+                 "wages are up", "wages were up", "wages went up", "wages have risen", "wages have grown",
+                 "wages have gone up", "wages have increased", "wages are rising", "wages are growing",
+                 "pay rose", "pay grew", "pay is up", "pay growth", "earnings growth",
+                 "hourly earnings rose", "hourly earnings grew", "hourly earnings increased",
+                 "hourly earnings are up", "hourly earnings have increased", "hourly earnings have risen"),
+        notes="All private-sector employees, nominal (not adjusted for inflation).",
     ),
     # ---- Unemployment by group (BLS CPS) ---------------------------------
     # Selected by qualifier ("the unemployment rate for Black workers") or by

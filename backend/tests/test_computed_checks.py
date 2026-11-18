@@ -244,7 +244,7 @@ class TestLatestInflation:
         from evidence.sources import bls
         asked = []
 
-        async def fake(metric, label, series_id, year, month=None):
+        async def fake(metric, label, series_id, year, month=None, **kw):
             asked.append((year, month))
             return ["september"] if (year, month) == (2026, 9) else []
 
@@ -256,7 +256,7 @@ class TestLatestInflation:
         from evidence.sources import bls
         asked = []
 
-        async def fake(metric, label, series_id, year, month=None):
+        async def fake(metric, label, series_id, year, month=None, **kw):
             asked.append((year, month))
             return []
 
@@ -278,7 +278,7 @@ class TestLatestInflation:
         async def latest(*a, **k):
             return [Latest()]
 
-        async def newest(metric, label, series_id, year, month, back=3):
+        async def newest(metric, label, series_id, year, month, back=3, **kw):
             return [("rate for", year, month)]
 
         monkeypatch.setattr(bls, "fetch_latest_monthly", latest)

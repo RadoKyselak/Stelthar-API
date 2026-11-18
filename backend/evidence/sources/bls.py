@@ -291,6 +291,7 @@ async def fetch_monthly(
 
 async def fetch_latest_inflation(
     metric: str, label: str, series_id: str, year: int, month: int, back: int = 3,
+    noun: str = "Index", adjustment: str = "not seasonally adjusted",
 ) -> List[Datapoint]:
     """The newest month that has a 12-month change, starting at (year, month).
 
@@ -300,7 +301,8 @@ async def fetch_latest_inflation(
     published rate, which is then September's, not last year's annual average.
     """
     for _ in range(back + 1):
-        got = await fetch_inflation(metric, label, series_id, year, month=month)
+        got = await fetch_inflation(metric, label, series_id, year, month=month, noun=noun,
+                                    adjustment=adjustment)
         if got:
             return got
         year, month = (year - 1, 12) if month == 1 else (year, month - 1)
@@ -309,8 +311,11 @@ async def fetch_latest_inflation(
 
 async def fetch_inflation(
     metric: str, label: str, series_id: str, year: int, month: Optional[int] = None,
+    noun: str = "Index", adjustment: str = "not seasonally adjusted",
 ) -> List[Datapoint]:
-    """Year-over-year percent change from a price index.
+    """Year-over-year percent change from a price index, or from any other
+    level BLS reports this way (`noun` names it in the rows shown: "Average
+    hourly earnings").
 
     Annual basis compares annual average to annual average. Monthly basis
     compares a month to the SAME month a year earlier. Mixing the two — which is
@@ -333,9 +338,9 @@ async def fetch_inflation(
         if cur is None or not prev:
             return []
         pct = (cur - prev) / prev * 100.0
-        basis = f"12-month change from {_MONTH_NAMES[month - 1]} {year - 1}, not seasonally adjusted"
+        basis = f"12-month change from {_MONTH_NAMES[month - 1]} {year - 1}, {adjustment}"
         period = Period(year=year, kind=MONTHLY, month=month, basis=basis)
-        labels = (f"Index, {_MON[month - 1]} {year - 1}", f"Index, {_MON[month - 1]} {year}")
+        labels = (f"{noun}, {_MON[month - 1]} {year - 1}", f"{noun}, {_MON[month - 1]} {year}")
     else:
         cur, cur_basis, _ = _annual_value(rows, year)
         prev, _, _ = _annual_value(rows, year - 1)
@@ -349,7 +354,7 @@ async def fetch_inflation(
         )
         cur_raw = f"{cur:.{_decimals(rows, year)}f}"
         prev_raw = f"{prev:.{_decimals(rows, year - 1)}f}"
-        labels = (f"Index, {year - 1} annual average", f"Index, {year} annual average")
+        labels = (f"{noun}, {year - 1} annual average", f"{noun}, {year} annual average")
 
     # BLS publishes 12-month changes to one decimal, computed from the index
     # exactly as here ("9.1 percent" for June 2022). The comparison and the

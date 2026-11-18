@@ -25,7 +25,13 @@ from claims.parser import parse_claim
     ("Housing costs rose 6% in 2023", "cpi_shelter", False),
     ("Tuition inflation was 5% in 2023", "inflation_rate", True),
     ("Inflation for childcare was 6% in 2023", "inflation_rate", True),
-    ("Wages grew 4.1% in 2023, beating inflation", "inflation_rate", True),
+    # Wages have their own series (the 12-month change in average hourly
+    # earnings), so a wage figure is checked as one, never against the CPI.
+    ("Wages grew 4.1% in 2023, beating inflation", "wage_growth", False),
+    ("Wages are up 5% from last year", "wage_growth", False),
+    ("Real wages rose 2% in 2022", "wage_growth", True),
+    ("Wages are up 20% since January 2021", "wage_growth", True),
+    ("Median weekly wages rose 4% in 2023", "wage_growth", True),
     ("Inflation was 4.1% in 2023", "inflation_rate", False),
     ("Annual inflation was 4.1% in 2023", "inflation_rate", False),
     ("Inflation in June 2022 hit 9.1%", "inflation_rate", False),
