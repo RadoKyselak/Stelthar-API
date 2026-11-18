@@ -235,3 +235,42 @@ class TestRemoteRun:
         got = remote.to_json(outcomes, "http://svc")
         assert got["accuracy"] == 1.0 and got["model_calls"] == 0
         assert set(got["outcomes"][0]) >= {"id", "claim", "expected", "got", "correct", "truth"}
+
+
+# ------------------------------------------------------------ real sentences
+
+def test_the_news_set_loads_and_every_row_can_be_scored():
+    """Sentences from real pages (eval/news_claims.jsonl). Each needs a
+    verdict the scorer knows and, for a decline, the reason expected."""
+    from eval.remote import SETS
+    from eval.v2_dataset import load_v2_claims
+    rows = load_v2_claims(SETS["news"])
+    assert len(rows) >= 30
+    assert len({r.id for r in rows}) == len(rows) and len({r.claim for r in rows}) == len(rows)
+    for r in rows:
+        assert r.expected_verdict in ("Supported", "Contradicted", "No verdict")
+        assert (r.expected_reason is not None) == (r.expected_verdict == "No verdict")
+        if r.expected_verdict != "No verdict":
+            assert r.truth_source and r.truth_value is not None      # where the truth can be re-read
+
+
+def test_the_news_set_holds_all_three_outcomes_and_its_known_gaps():
+    from eval.remote import SETS
+    from eval.v2_dataset import load_v2_claims
+    rows = load_v2_claims(SETS["news"])
+    assert {r.expected_verdict for r in rows} == {"Supported", "Contradicted", "No verdict"}
+    assert sum("A known gap" in r.notes for r in rows) >= 2      # true sentences it cannot yet confirm
+
+
+def test_what_the_parser_makes_of_the_news_set_without_a_network():
+    """The part that needs no agency: a sentence expected to be declined is
+    read as nothing checkable, and one expected to be checked is read as a
+    figure for one period."""
+    from claims.parser import parse_claim
+    from eval.remote import SETS
+    from eval.v2_dataset import load_v2_claims
+    for r in load_v2_claims(SETS["news"]):
+        got = parse_claim(r.claim)
+        checkable = (got.metric is not None and not got.structured_blocker and got.claimed_value is not None
+                     and (got.geography is None or got.geography.level in ("nation", "state")))
+        assert checkable == (r.expected_verdict != "No verdict"), r.id

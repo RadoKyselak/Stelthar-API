@@ -9,6 +9,7 @@ and the answers are scored by the same rules and printed by the same report.
     python -m eval.remote                                   # the public service
     python -m eval.remote --base http://localhost:8000      # a local one
     python -m eval.remote --out eval/results/2026-11-17.json
+    python -m eval.remote --set news                        # real sentences (news_claims.jsonl)
 
 What it measures is the free engine as deployed: the part that answers from
 agency data. A claim only the paid search can settle will show as a miss here,
@@ -33,6 +34,9 @@ from eval.v2_dataset import V2Claim, load_v2_claims  # noqa: E402
 from eval.v2_runner import Outcome, report  # noqa: E402
 
 DEFAULT_BASE = "https://stelthar-api.vercel.app"
+_HERE = pathlib.Path(__file__).resolve().parent
+# None is the default set (v2_claims.jsonl).
+SETS = {"agency": None, "news": _HERE / "news_claims.jsonl"}
 BATCH = 10            # claims per request; the service checks at most 12
 PAUSE_SECONDS = 11.0  # the service allows 6 passage checks a minute per visitor
 NOT_A_CLAIM = "not_recognised_as_a_claim"
@@ -122,9 +126,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--base", default=DEFAULT_BASE, help="The service to test.")
     ap.add_argument("--out", help="Write the full results here as JSON.")
+    ap.add_argument("--set", choices=sorted(SETS), default="agency",
+                    help="agency: figures read from the agencies (default). "
+                         "news: sentences as releases and wire stories wrote them.")
     args = ap.parse_args()
 
-    outcomes = run(load_v2_claims(), args.base)
+    outcomes = run(load_v2_claims(SETS[args.set]), args.base)
     if args.out:
         path = pathlib.Path(args.out)
         path.parent.mkdir(parents=True, exist_ok=True)
