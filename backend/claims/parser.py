@@ -447,6 +447,16 @@ _HYPOTHETICAL_RE = re.compile(
 _BY_AN_AMOUNT_RE = re.compile(
     r"\bby\s+(?:about\s+|nearly\s+|roughly\s+|almost\s+|more than\s+|over\s+|at least\s+)?[$]?(\d[\d,]*(?:\.\d+)?)",
     re.IGNORECASE)
+# A neighbouring measure answered for the one asked: the all-items index for
+# "the CPI for shelter", goods and services for "the trade balance in goods".
+_CPI_PART_OR_CHANGE_RE = re.compile(
+    r"\b(?:percent(?:age)? change|change in)\b|\b(?:index|cpi(?:-u)?\)?)\s+for\s+(?!all\b)[a-z]", re.IGNORECASE)
+_GOODS_ONLY_RE = re.compile(r"\b(?:balance|deficit|surplus|trade)\s+in\s+goods\b(?!\s+and\s+services)", re.IGNORECASE)
+# One named day or week: "on January 10, 2025", "the week of March 24, 2025".
+_ONE_DAY_RE = re.compile(
+    rf"\b(?:on|as of)\s+(?:{_MONTH_NAMES_RE})\.?\s+\d{{1,2}},?\s+(?:19|20)\d\d\b|\bweek\s+(?:of|ending|ended)\b",
+    re.IGNORECASE)
+_DAILY_METRICS = frozenset(("national_debt", "debt", "minimum_wage"))
 # GDP as what something else is measured against: "debt to GDP rose to 99%".
 _AGAINST_GDP_RE = re.compile(
     r"\bto[- ](?:the\s+)?(?:u\.?s\.?\s+)?gdp\b|\b(?:%|percent|share|percentage|proportion|fraction)\s+of\s+"
@@ -500,6 +510,14 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
         return "the claim is about what would happen or is proposed, not a published figure"
     if _BY_COMPARISON_RE.search(text):
         return "the claim names its period only by comparison (\u201cthis time in\u201d); the period is not stated"
+    if spec.metric.startswith("fed_funds") and re.search(r"\beffective\b", text, re.I):
+        return "the question is about the effective federal funds rate; the series is the target range"
+    if spec.metric == "cpi_index" and _CPI_PART_OR_CHANGE_RE.search(text):
+        return "the question is about one category of prices or a change; the series is the all-items index level"
+    if spec.metric == "trade_deficit" and _GOODS_ONLY_RE.search(text):
+        return "the question is about trade in goods only; the series is goods and services"
+    if _ONE_DAY_RE.search(text) and spec.metric not in _DAILY_METRICS:
+        return "the question is for one day or week; the series is monthly or yearly"
     if spec.metric in ("gdp", "real_gdp_growth") and _AGAINST_GDP_RE.search(text):
         return "the claim measures something against GDP; it is not a figure for GDP itself"
     if spec.metric.startswith("unemployment_rate") and _OTHER_UNEMPLOYMENT_RE.search(text):
