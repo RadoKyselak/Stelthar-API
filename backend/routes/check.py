@@ -51,6 +51,10 @@ async def check_endpoint(req: CheckRequest, request: Request) -> Dict[str, Any]:
         said = date.fromisoformat(req.said_on) if req.said_on else None
         result = await check_text(req.text, mode=req.mode, client_ip=client_ip(request), said_on=said)
         result["said_on"] = req.said_on or ""
+    from utils import usage
+    await usage.count("page" if req.url is not None else "passage")
+    await usage.count("claims", result["count"])
+    await usage.count_verdicts(e["result"]["display"]["verdict"]["key"] for e in result["claims"])
     logger.info(
         "passage check complete",
         extra={

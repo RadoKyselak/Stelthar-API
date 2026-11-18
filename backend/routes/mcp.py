@@ -311,6 +311,8 @@ async def _handle(msg: Any, request: Request) -> Optional[Dict[str, Any]]:
         arguments = params.get("arguments") or {}
         if not isinstance(arguments, dict):
             return _error(msg_id, -32602, "Tool arguments must be an object.")
+        from utils import usage
+        await usage.count(f"mcp:{name}")
         try:
             got = await handler(arguments, request)
         except ToolError as e:

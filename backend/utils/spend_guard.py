@@ -283,6 +283,10 @@ async def record_spend(usd: float) -> None:
         await _get_store().incr(f"ai:{_day()}:spend_micro", int(round(usd * 1e6)))
     except StoreUnavailable as e:
         logger.error("Could not record AI spend of $%.4f: %s", usd, e)
+    # Kept beyond the two-day budget window, for the usage report.
+    from utils import usage
+    await usage.count("ai_calls")
+    await usage.count("ai_spend_micro", int(round(usd * 1e6)))
 
 
 async def status() -> Dict[str, object]:
