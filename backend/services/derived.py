@@ -263,7 +263,12 @@ _LOST_JOBS_RE = re.compile(r"\b(lost|shed|cut|eliminated|losing|shedding)\s+(?:\
                           r"|\bpayrolls?\s+(?:fell|declined|dropped|shrank|contracted)\b", re.I)
 _ADDED_JOBS_RE = re.compile(r"\b(added|gained|created|adding|gaining|creating)\s+(?:\w+\s+)?jobs\b"
                             r"|\bpayrolls?\s+(?:rose|grew|increased|expanded)\b", re.I)
-_ANY_NUMBER_RE = re.compile(r"\d[\d,.]*\s*(%|percent|million|billion|thousand|k\b)|\$\s*\d", re.I)
+# A figure, with or without a unit after it. "Payrolls rose by 150,000" names
+# no unit; it was taken for a claim about direction only, and "private
+# payrolls rose by 150,000" came back Supported because total payrolls rose.
+_ANY_NUMBER_RE = re.compile(r"\d[\d,.]*\s*(%|percent|million|billion|thousand|k\b)|\$\s*\d"
+                            r"|(?<![\d,.])\d{1,3}(?:,\d{3})+(?![\d,])"
+                            r"|(?<![\d,.])(?!(?:19|20)\d\d\b)\d{3,}\b", re.I)
 
 
 async def _direction(text: str) -> Optional[Verdict]:
@@ -276,6 +281,11 @@ async def _direction(text: str) -> Optional[Verdict]:
     obs, freq = _subject_period(text)
     if obs is None:
         return None
+    if topic == "jobs":
+        # One industry's jobs, or private payrolls, are not total payrolls.
+        from claims.parser import _PRIVATE_PAYROLLS_RE, _SECTOR_RE
+        if _SECTOR_RE.search(text) or _PRIVATE_PAYROLLS_RE.search(text) or re.search(r"\bprivate[- ]sector\b", text, re.I):
+            return None
     if topic == "gdp" and freq == "Q":
         down = bool(_SHRANK_RE.search(text))
         if not down and not _GREW_RE.search(text):

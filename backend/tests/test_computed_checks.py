@@ -91,6 +91,16 @@ class TestDirection:
     async def test_a_figure_is_left_to_the_normal_check(self):
         assert await derived._direction("The economy added 250,000 jobs in September 2026.") is None
 
+    @pytest.mark.parametrize("claim", [
+        "Private payrolls rose by 150,000 in October 2026.",       # a figure with no unit after it
+        "Payrolls rose by 900 in October 2026.",
+        "Private-sector payrolls rose in October 2026.",            # a part of payrolls
+        "Manufacturing lost jobs in July 2026.",                    # one industry
+    ])
+    async def test_not_a_claim_about_which_way_total_payrolls_went(self, claim, monkeypatch):
+        monkeypatch.setattr(derived, "_rows", series({("PAYEMS", None): PAY, ("PAYEMS", "any"): PAY_FIRST}))
+        assert await derived._direction(claim) is None
+
 
 class TestChangeSince:
     async def test_prices_since_a_month(self, monkeypatch):
