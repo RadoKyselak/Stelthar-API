@@ -13,6 +13,7 @@ rather than being forced into a table lookup that cannot answer it.
 
 Adding a metric is a data change, not a code change — which is the point.
 """
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -391,6 +392,12 @@ _SPECS: List[MetricSpec] = [
                  "gdp grew", "real gdp grew", "economy grew", "gdp rose",
                  "gdp increased", "gdp expanded", "economy expanded",
                  "gdp growth rate", "growth in gdp",
+                 # The words BEA's own release uses.
+                 "gross domestic product increased", "gross domestic product grew",
+                 "gross domestic product rose", "gross domestic product expanded",
+                 "gross domestic product decreased", "gross domestic product fell",
+                 "gross domestic product contracted", "gross domestic product declined",
+                 "gross domestic product shrank", "gdp decreased", "real gdp decreased",
                  # Falls: the parser makes "GDP shrank 2.2%" a value of -2.2%.
                  "gdp fell", "real gdp fell", "gdp shrank", "real gdp shrank",
                  "gdp contracted", "real gdp contracted", "gdp declined", "gdp dropped",
@@ -533,13 +540,23 @@ def supported_metric_names() -> List[str]:
     return sorted(BY_METRIC)
 
 
+# An abbreviation given in brackets after the name it stands for: "gross
+# domestic product (GDP) increased" is read as "gross domestic product gdp
+# increased", so the phrase "gdp increased" is still found.
+_BRACKETED_SHORT_NAME = re.compile(r"\(([a-z][a-z-]{1,9})\)")
+
+
+def _haystack(text: str) -> str:
+    return f" {' '.join(_BRACKETED_SHORT_NAME.sub(r'\1', text.lower()).split())} "
+
+
 def match_metrics(text: str) -> List[MetricSpec]:
     """Every series a claim's wording matches, longest phrase first. The
     parser picks the first one in the claim's units: "gas prices rose 5%"
     and "gas prices were $3.50" share words but not a series."""
     if not text:
         return []
-    haystack = f" {' '.join(text.lower().split())} "
+    haystack = _haystack(text)
     out: List[MetricSpec] = []
     for phrase, spec in _PHRASE_INDEX:
         if spec in out:
@@ -559,7 +576,7 @@ def match_metric(text: str) -> Optional[MetricSpec]:
     """
     if not text:
         return None
-    haystack = f" {' '.join(text.lower().split())} "
+    haystack = _haystack(text)
     for phrase, spec in _PHRASE_INDEX:
         # Whole-phrase match with boundaries, so "unemployment" does not fire
         # inside "underemployment".
