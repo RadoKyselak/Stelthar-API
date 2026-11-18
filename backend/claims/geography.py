@@ -344,6 +344,14 @@ def _local_place(text: str) -> Optional[Geography]:
     return None
 
 
+# A wire story opens with where it was filed: "WASHINGTON (AP) — The U.S.
+# economy grew...". That is the reporter's desk, not what the sentence is
+# about; read as the place, it sent a national figure to Washington state.
+DATELINE_RE = re.compile(
+    r"^\s*[A-Z][A-Za-z .,'\u2019-]{1,40}?\s*\((?:AP|Reuters|AFP|UPI|Bloomberg|CNN|NPR|PBS)\)\s*[\u2014\u2013-]+\s*"
+    r"|^\s*[A-Z]{3,}(?:[ .][A-Z.]{2,})*(?:,\s*[A-Z][A-Za-z.]+)?\s*[\u2014\u2013]\s*")
+
+
 def resolve_geography(text: str) -> Optional[Geography]:
     """Return the geography a claim is about, or None if it names no place.
 
@@ -353,6 +361,7 @@ def resolve_geography(text: str) -> Optional[Geography]:
     """
     if not text:
         return None
+    text = DATELINE_RE.sub("", text, count=1)
     lowered = " ".join(text.lower().split())
 
     local = _local_place(text)
@@ -431,7 +440,8 @@ def resolve_geography(text: str) -> Optional[Geography]:
         candidate = " ".join(match.group(1).split())
         if candidate.lower() in _NOT_A_PLACE:
             continue
-        if any(word.lower() in _NOT_A_PLACE for word in candidate.split()):
+        # ("the July-September quarter": a hyphenated pair of months is not a place either.)
+        if any(word.lower() in _NOT_A_PLACE for word in re.split(r"[\s\-\u2013/]+", candidate)):
             continue
         # "Q" out of "Q2", stray initials — too short to be a place name.
         if len(candidate) < 3:

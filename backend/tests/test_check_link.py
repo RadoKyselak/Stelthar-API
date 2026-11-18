@@ -227,7 +227,8 @@ class TestCheckLink:
         assert checked.await_args.kwargs["mode"] == "page"              # free data only, strict selection
         assert "The unemployment rate was 4.1 percent in October 2026" in checked.await_args.args[0]
         assert got["page"] == {"url": "https://example.gov/story", "host": "example.gov",
-                               "title": "Jobs report: October", "paragraphs": 4}
+                               "title": "Jobs report: October", "paragraphs": 4, "published": ""}
+        assert checked.await_args.kwargs["as_of"] is None               # the page gives no date
 
     @pytest.mark.parametrize("url", ["https://www.youtube.com/watch?v=abc", "https://youtu.be/abc",
                                      "https://x.com/someone/status/1", "https://m.tiktok.com/v/1"])

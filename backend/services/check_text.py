@@ -22,10 +22,17 @@ statistics that one official figure can settle are checked, and only those
 that end in a verdict are listed. The rest are reported as a count
 (`unsettled`), not as rows of "Can't verify" about sentences nobody asked about.
 
+A page that says when it was published (`as_of`) dates the months it names
+without a year. Where the text around such a sentence names some other year,
+the reading is less sure, and the claim is listed only when the official
+figure agrees with it: a mismatch there may be the reading's fault, not the
+sentence's, so it is counted with the unsettled.
+
 Nothing here reaches a verdict. Each claim's answer is the engine's own.
 """
 import asyncio
 import time
+from datetime import date
 from typing import Any, Dict, List, Optional
 
 import config
@@ -72,11 +79,17 @@ def _tally(entries: List[Dict[str, Any]]) -> Dict[str, int]:
     return tally
 
 
+# What a reading that rests on the page's date must come back as to be listed
+# when the text nearby names another year.
+_BEARS_THE_READING_OUT = frozenset({"supported", "mostly-accurate"})
+
+
 async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = None,
-                     free_only: bool = False) -> Dict[str, Any]:
+                     free_only: bool = False, as_of: Optional[date] = None) -> Dict[str, Any]:
     """Every claim in `text`, checked. Never raises. `free_only` keeps even a
     single claim on agency data: for callers that are not a person asking
-    (an assistant's tool call), who must never spend a paid call."""
+    (an assistant's tool call), who must never spend a paid call. `as_of` is
+    the day the text was published, when the page says."""
     started = time.monotonic()
     text = (text or "").strip()
     page = mode == PAGE
@@ -86,7 +99,8 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
         kinds = (splitter.STATISTIC, splitter.RECORD) if page else (
             splitter.STATISTIC, splitter.RECORD, splitter.OTHER)
         try:
-            spans, truncated = splitter.split_claims(text, config.CHECK_MAX_CLAIMS, kinds, strict=page)
+            spans, truncated = splitter.split_claims(text, config.CHECK_MAX_CLAIMS, kinds, strict=page,
+                                                     as_of=as_of if page else None)
         except Exception:  # noqa: BLE001 — a splitter bug must not take the check down
             logger.exception("Splitting failed for %r", text[:120])
             spans, truncated = [], False
@@ -127,8 +141,11 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
     if page:
         # Nobody chose these sentences, so one that ended without a verdict is
         # not an answer to anything: it is counted, not listed.
+        tentative = {i for i, s in enumerate(spans) if s.tentative}
         settled = [e for e in entries
-                   if e["result"]["display"]["verdict"]["key"] not in ("no-verdict", "unavailable")]
+                   if e["result"]["display"]["verdict"]["key"] not in ("no-verdict", "unavailable")
+                   and (e["index"] not in tentative
+                        or e["result"]["display"]["verdict"]["key"] in _BEARS_THE_READING_OUT)]
         unsettled = len(entries) - len(settled)
         entries = [dict(e, index=i) for i, e in enumerate(settled)]
 

@@ -54,7 +54,8 @@ _MONTH_YEAR_RE = re.compile(
 )
 # A month name after a preposition, capitalised ("in May", never "may").
 _BARE_MONTH_RE = re.compile(
-    r"\b(?:in|during|for|by|through|of)\s+(January|February|March|April|May|June|July|August|September|"
+    r"\b(?:in|during|for|by|through|of)\s+(?:early\s+|late\s+|mid-?\s*)?"
+    r"(January|February|March|April|May|June|July|August|September|"
     r"October|November|December)\b(?!\s*,?\s*(?:of\s+)?\d{4})")
 # Bill designators and other numerals that look like years but are not.
 _NON_YEAR_CONTEXT_RE = re.compile(
@@ -64,11 +65,51 @@ _NON_YEAR_CONTEXT_RE = re.compile(
 
 _JOBS_CHANGE_RE = re.compile(
     r"\b(added|adds|add|created|creates|create|gained|gains|lost|lose|loses|shed|sheds|cut|"
-    r"eliminated)\s+(?:a\s+(?:net\s+|record\s+)?|about\s+|nearly\s+|roughly\s+|around\s+|almost\s+|"
+    r"eliminated)\s+(?:(?:a|an)\s+(?:[a-z-]+\s+){0,2}|about\s+|nearly\s+|roughly\s+|around\s+|almost\s+|"
     r"more than\s+|over\s+|just over\s+|just under\s+|under\s+|some\s+)?[\d,.]+\s*"
     r"(?:million|thousand|k|m)?\s+(?:new\s+|net\s+)?jobs\b",
     re.IGNORECASE,
 )
+
+# The jobs report's own wording: "Total nonfarm payroll employment rose by
+# 165,000 in October". The change in payrolls, as "added 165,000 jobs" is.
+_PAYROLLS_CHANGE_RE = re.compile(
+    r"\b(?:nonfarm\s+)?payroll(?:s\b|\s+employment\b|\s+jobs\b)\s+(?:[a-z]+\s+){0,2}?"
+    r"(rose|increased|grew|climbed|expanded|edged up|were up|was up|fell|declined|dropped|decreased|"
+    r"contracted|shrank|edged down|were down|was down)\s+by\s+"
+    r"(?:about\s+|nearly\s+|roughly\s+|around\s+|almost\s+|more than\s+|over\s+|just over\s+|just under\s+)?"
+    r"[\d,.]+\s*(?:million|thousand|k)?\b",
+    re.IGNORECASE,
+)
+# Private payrolls are a part of the total, and no series here is that part.
+_PRIVATE_PAYROLLS_RE = re.compile(r"\bprivate(?:[- ]sector)?\s+(?:nonfarm\s+)?payroll", re.IGNORECASE)
+_PAYROLLS_FELL = frozenset(("fell", "declined", "dropped", "decreased", "contracted", "shrank", "edged down",
+                            "were down", "was down"))
+
+# "The number of people" is the population only when nothing narrows it. "The
+# number of people marginally attached to the labor force" (1.6 million) is
+# not a claim that 1.6 million people live in the country.
+_PEOPLE_COUNT_RE = re.compile(
+    r"\b(?i:number of people)\b(?!\s*$|\s*[,.;:]|\s+(?i:is|was|are|were|has|have|had|reached|hit|grew|rose|fell|"
+    r"topped|passed|exceeds|exceeded|stands|stood|living|residing|who\s+live|who\s+reside)\b"
+    r"|\s+(?i:in)\s+(?:(?i:the\s+)?(?i:u\.?s\.?|united states|america|country|nation|world|state|city)\b|[A-Z]))")
+_POPULATION_WORD_RE = re.compile(r"\bpopulation\b|\bresidents\b|\bhow many people live\b", re.IGNORECASE)
+
+# A figure counted in something no series here is counted in: "34.4 hours",
+# "12 cents", "25 basis points". Naming a measure in the same sentence does not
+# make such a figure a value of it.
+_FOREIGN_UNIT = (r"hours?|minutes?|weeks?|days?|months?|years?|cents?|(?:basis|percentage)\s+points?|points?|times|"
+                 r"miles?|gallons?|barrels?|tons?|pounds?|degrees?|seats?|votes?|acres?|square\s+(?:feet|miles)")
+
+
+def _in_a_foreign_unit(raw: str, claimed: Optional[Quantity]) -> bool:
+    if claimed is None or claimed.family != "unknown":
+        return False
+    number = re.search(r"\d[\d,]*(?:\.\d+)?", claimed.raw or "")
+    if not number:
+        return False
+    return bool(re.search(rf"(?<![\d.,$]){re.escape(number.group(0))}\s*-?\s*(?:{_FOREIGN_UNIT})\b", raw, re.IGNORECASE))
+
 
 _PRICES_ROSE_RE = re.compile(
     r"^\s*(?:u\.?s\.?\s+|american\s+|overall\s+|consumer\s+)?prices\s+"
@@ -83,6 +124,8 @@ _SIGNED_CHANGE_METRICS = frozenset({
 _FELL_BY_RE = re.compile(
     r"\b(?:fell|fall|falls|shrank|shrink|shrinks|contracted|contract|contracts|declined|"
     r"declines|dropped|drops|decreased|decreases|went down)\s+(?:by\s+)?"
+    # "fell at an annual rate of 0.6 percent" is as much a fall as "fell 0.6 percent".
+    r"(?:at\s+an?\s+(?:seasonally\s+adjusted\s+)?(?:annual|annualized|annualised)\s+rate\s+of\s+)?"
     r"(?:about\s+|nearly\s+|roughly\s+|around\s+|almost\s+)?\d",
     re.IGNORECASE,
 )
@@ -167,7 +210,7 @@ _UNIVERSE_OK = {
 
 _QUARTER_RE = re.compile(
     r"\bq[1-4]\b|\b(?:first|second|third|fourth|1st|2nd|3rd|4th)[- ]quarter\b|"
-    r"\bquarterly\b|\bannuali[sz]ed\b|\bannual rate\b|\bsaar\b",
+    r"\bquarterly\b|\bannuali[sz]ed\b|\bannual (?:rate|pace|clip)\b|\bsaar\b",
     re.IGNORECASE,
 )
 _PER_CAPITA_RE = re.compile(r"\bper\s+(?:capita|person|head|resident|worker|household)\b", re.IGNORECASE)
@@ -208,6 +251,38 @@ _QUARTER_YEAR_RE = re.compile(
     r"|\b(first|second|third|fourth|1st|2nd|3rd|4th)[- ]quarter(?:\s+of)?\s+(\d{4})\b",
     re.IGNORECASE,
 )
+# A quarter named by its months: "from July through September 2026", "the
+# July-September quarter". The news wires write it this way more often than
+# "the third quarter".
+_QUARTER_BY_MONTHS_RE = re.compile(
+    r"\b(January|April|July|October|Jan|Apr|Jul|Oct)\.?\s*(?:-|\u2013|\u2014|through\b|thru\b|to\b)\s*"
+    r"(March|June|September|December|Mar|Jun|Sept?|Dec)\b\.?"
+    r"(?:\s+(?:quarter|period))?(?:\s+of)?(?:\s+((?:19|20)\d\d)\b)?",
+    re.IGNORECASE,
+)
+_QUARTER_OF_MONTHS = {(1, 3): 1, (4, 6): 2, (7, 9): 3, (10, 12): 4}
+_ORDINAL_QUARTER_RE = re.compile(r"\b(first|second|third|fourth|1st|2nd|3rd|4th)[- ]quarter\b", re.IGNORECASE)
+
+
+def named_quarter(text: str):
+    """(quarter, year or None, (start, end) of the words) for the quarter a
+    claim names, with or without its year; (None, None, None) when it names
+    none. "July through September" is the third quarter; "July through
+    October" is not a quarter."""
+    text = text or ""
+    for m in _QUARTER_BY_MONTHS_RE.finditer(text):
+        q = _QUARTER_OF_MONTHS.get((_MONTHS[m.group(1).lower()], _MONTHS[m.group(2).lower()]))
+        if q:
+            return q, (int(m.group(3)) if m.group(3) else None), m.span()
+    q, year = _extract_quarter(text)
+    if q is not None:
+        return q, year, None
+    m = _ORDINAL_QUARTER_RE.search(text)
+    if m:
+        return _ORDINAL_Q[m.group(1).lower()], None, m.span()
+    return None, None, None
+
+
 _QUARTER_TOKEN_RE = re.compile(r"\bq[1-4]\b|\b(\d{4})q[1-4]\b", re.IGNORECASE)
 
 # Metrics that have a quarterly series wired up, and the phrasing that goes
@@ -219,6 +294,10 @@ def _extract_quarter(text: str):
     """(quarter, year) for an explicit quarter, else (None, None)."""
     m = _QUARTER_YEAR_RE.search(text or "")
     if not m:
+        for mm in _QUARTER_BY_MONTHS_RE.finditer(text or ""):
+            q = _QUARTER_OF_MONTHS.get((_MONTHS[mm.group(1).lower()], _MONTHS[mm.group(2).lower()]))
+            if q and mm.group(3):
+                return q, int(mm.group(3))
         return None, None
     if m.group(1):
         return int(m.group(1)), int(m.group(2))
@@ -293,16 +372,75 @@ _SINCE_DATE_RE = re.compile(
     r"(?:19|20)\d\d\b", re.IGNORECASE)
 
 
+_MONTH_NAMES_RE = (r"january|february|march|april|may|june|july|august|september|october|november|december|"
+                   r"jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec")
+# A change counted in points is a change, never the level: "rose 0.1
+# percentage point to 4.2%" claims 4.2%, and "rose 2 points" claims no level.
+_POINT_CHANGE_RE = re.compile(
+    r"(?<![\d.,$])\d[\d,]*(?:\.\d+)?\s*-?\s*(?:percentage[- ]points?|pp\b|basis[- ]points?|points?\b)|"
+    r"\b(?:a|one|two|three|four|five|six|seven|eight|nine|half a|a tenth of a|a few tenths of a)\s+"
+    r"(?:percentage[- ])?point\b", re.IGNORECASE)
+_CHANGE_VERBS = (r"rose|risen|rises|fell|fallen|falls|dropped|drops|climbed|climbs|jumped|jumps|declined|declines|"
+                 r"increased|increases|decreased|decreases|grew|grows|gained|gains|slipped|slips|dipped|dips|soared|"
+                 r"surged|plunged|tumbled|ticked\s+(?:up|down)|edged\s+(?:up|down)|inched\s+(?:up|down)|"
+                 r"went\s+(?:up|down)|shot\s+up|(?:is|was|were|are)\s+(?:up|down)")
+_CHANGE_HEDGES = (r"(?:by\s+)?(?:(?:about|nearly|roughly|around|almost|just|only|more than|less than|over|under)\s+|"
+                  r"(?:a|an)\s+(?:[a-z-]+\s+){0,2})*")
+_NUMBER_WITH_UNIT = (r"[$]?\d[\d,]*(?:\.\d+)?\s*(?:trillion|billion|million|thousand|k\b)?\s*"
+                     r"(?:%|percent\b|cents?\b|dollars?\b|jobs?\b|people\b)?")
+# "increased by 339,000 to 4.8 million": the first figure is how much it
+# moved, the second is where it stands. For a level, the second is the claim.
+_CHANGE_THEN_LEVEL_RE = re.compile(
+    rf"\b(?:{_CHANGE_VERBS})\s+{_CHANGE_HEDGES}({_NUMBER_WITH_UNIT})(?=[^.;]{{0,40}}?\bto\s+"
+    rf"(?:(?:a|an)\s+(?:[a-z-]+\s+){{0,2}}|just\s+|about\s+|nearly\s+|roughly\s+)?[$]?\d)", re.IGNORECASE)
+# "The unemployment rate rose 0.3%": how much a rate moved, with no level given.
+_CHANGE_ONLY_RE = re.compile(
+    rf"\b(?:{_CHANGE_VERBS})\s+{_CHANGE_HEDGES}(\d[\d,]*(?:\.\d+)?)\s*(?:%|percent\b)", re.IGNORECASE)
+# "up 3.1% from October 2025": the date is what the change is measured from,
+# not the period the figure is for.
+_BASE_PERIOD_RE = re.compile(
+    rf"\b(?:from|compared\s+(?:with|to)|versus|vs\.?|than\s+in|than)\s+(?:(?:{_MONTH_NAMES_RE})\.?\s+)?"
+    r"((?:19|20)\d\d)\b(?!\s*(?:to|through|-|\u2013)\s*(?:19|20)\d\d)", re.IGNORECASE)
+# A change over one month, where the series is the change over twelve.
+_ONE_MONTH_CHANGE_RE = re.compile(
+    r"\bmonth[- ](?:over|to)[- ]month\b|\bover the month\b|\bfrom (?:the )?(?:previous|prior|preceding) month\b"
+    r"|\b(?:from|than) (?:the )?month before\b|\bon a monthly basis\b"
+    r"|\b(?:monthly|one-month)\s+(?:gain|increase|rise|change|jump|decline|drop|basis|rate)\b"
+    rf"|\bfrom\s+(?:{_MONTH_NAMES_RE})\b(?!\.?\s*,?\s*(?:19|20)\d\d)", re.IGNORECASE)
+
+
+def _is_a_change(spec: MetricSpec) -> bool:
+    """Whether the series itself is a change (growth, inflation, jobs added)
+    rather than a level (a rate, a price, a count)."""
+    return (spec.metric in _SIGNED_CHANGE_METRICS or spec.bls_kind in ("cpi_yoy", "change")
+            or "growth" in spec.metric or "inflation" in spec.metric)
+
+
 def income_band(text: str) -> str:
     """The phrase that makes a claim about HUD income limits or an income band, or ""."""
     m = _INCOME_BAND_RE.search(text or "")
     return m.group(0).strip() if m else ""
 
 
-def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[int] = None) -> str:
+def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[int] = None,
+                       claimed: Optional[Quantity] = None) -> str:
     """Why the matched series cannot answer this claim, or "" if it can."""
     if spec is None or not text:
         return ""
+    # "Up 3.1% from October 2025": the one date in the claim is the date the
+    # change is counted from. Read as the period, it checks the wrong month.
+    base = _BASE_PERIOD_RE.search(text)
+    if base and _extract_years(text) == [int(base.group(1))]:
+        return ("the claim compares with an earlier date; the period its figure is for is not stated")
+    if spec.bls_kind == "cpi_yoy" and _ONE_MONTH_CHANGE_RE.search(text):
+        return "the claim is about the change over one month; the series is the change over 12 months"
+    # "The unemployment rate rose 0.3%" says how far a rate moved. Checked as
+    # the rate itself, it would be held against 4%.
+    if spec.family == _units.PERCENT and not _is_a_change(spec) and claimed is not None:
+        number = re.search(r"\d[\d,]*(?:\.\d+)?", claimed.raw or "")
+        for m in _CHANGE_ONLY_RE.finditer(text):
+            if number and m.group(1) == number.group(0):
+                return "the claim says how much the rate changed, not what it was"
     band = income_band(text) if spec.metric in _INCOME_METRICS else ""
     if band:
         return (f"the claim is about an income band or HUD's area median income (\u201c{band}\u201d), "
@@ -319,7 +457,7 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
         if not covered:
             return f"the claim is about a subgroup (\u201c{m.group(0).strip()}\u201d), not the total the series measures"
     quarterly_ok = spec.metric in _QUARTERLY_METRICS and quarter is not None
-    if _QUARTER_RE.search(text) and not quarterly_ok:
+    if (_QUARTER_RE.search(text) or named_quarter(text)[0] is not None) and not quarterly_ok:
         return "the claim is about a quarter or an annualised rate; only annual and monthly figures are wired up"
     if _PER_CAPITA_RE.search(text):
         return "the claim is a per-capita figure; the series is a total"
@@ -431,7 +569,8 @@ def _current_year() -> int:
 
 _RECORD_SINCE_RE = re.compile(
     r"\b(?:highest|lowest|biggest|largest|smallest|worst|best|fastest|slowest|most|least)\b"
-    r"[^.;]{0,40}\bsince\s+$", re.I)
+    r"[^.;]{0,40}\b(?:since|going back to|dating back to|dating to)\s+(?:late\s+|early\s+|mid-?\s*)?"
+    r"(?:(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+)?$", re.I)
 
 
 def _extract_years(text: str) -> List[int]:
@@ -658,10 +797,17 @@ def parse_claim(text: str) -> ParsedClaim:
         aside = (f"The claim also says it was {superlative.group(0).strip().rstrip(',.')}; "
                  f"this check covers the figure only.")
     value_text = _SPAN_RE.sub(" ", _SUPERLATIVE_RE.sub(" ", value_text))
+    # "rose 0.1 percentage point to 4.2%": the points are the move, not the level.
+    value_text = _POINT_CHANGE_RE.sub(" ", value_text)
     # "Q2" must not be read as the number 2.
     value_text = _QUARTER_TOKEN_RE.sub(" ", value_text)
     claimed = parse_quantity(value_text)
     spec = _select_variant(raw, _choose_metric(raw, claimed))
+    # "rose 0.3% to 4.2%", "increased by 339,000 to 4.8 million": for a level,
+    # the figure after "to" is the claim; the one before it is how far it moved.
+    if spec is not None and not _is_a_change(spec) and _CHANGE_THEN_LEVEL_RE.search(value_text):
+        value_text = _CHANGE_THEN_LEVEL_RE.sub(lambda m: m.group(0).replace(m.group(1), " "), value_text)
+        claimed = parse_quantity(value_text)
     # "The economy added 3 million jobs": the change in payrolls, not the level.
     jobs = _JOBS_CHANGE_RE.search(raw)
     if jobs and claimed is not None and claimed.family == "jobs" and (
@@ -671,6 +817,24 @@ def parse_claim(text: str) -> ParsedClaim:
             claimed = Quantity(magnitude=-abs(claimed.magnitude), family=claimed.family,
                                approximate=claimed.approximate, raw=claimed.raw,
                                precision=claimed.precision)
+    # "Nonfarm payroll employment rose by 165,000": the same change, in the
+    # words the jobs report itself uses.
+    payrolls = _PAYROLLS_CHANGE_RE.search(raw)
+    if payrolls and claimed is not None and claimed.family in ("jobs", "unknown") and (
+            spec is None or spec.metric in ("nonfarm_employment", "jobs_added")) \
+            and not _PRIVATE_PAYROLLS_RE.search(raw):
+        spec = BY_METRIC.get("jobs_added")
+        if payrolls.group(1).lower() in _PAYROLLS_FELL:
+            claimed = Quantity(magnitude=-abs(claimed.magnitude), family=claimed.family,
+                               approximate=claimed.approximate, raw=claimed.raw,
+                               precision=claimed.precision)
+    # "The number of people working part time" is not the population.
+    if spec is not None and spec.metric == "population" and _PEOPLE_COUNT_RE.search(raw) \
+            and not _POPULATION_WORD_RE.search(raw):
+        spec = None
+    # "34.4 hours" is not a value of whatever measure the sentence also names.
+    if spec is not None and _in_a_foreign_unit(raw, claimed):
+        spec = None
     # "Prices rose 3.4% over the year": prices in general, so CPI inflation.
     # Only at the start, so "egg prices rose" never becomes overall inflation.
     if spec is None and claimed is not None and claimed.family == "percent" \
@@ -702,6 +866,8 @@ def parse_claim(text: str) -> ParsedClaim:
 
     if quarter is not None and quarter_year:
         year, basis = quarter_year, "calendar"
+        if _QUARTER_BY_MONTHS_RE.search(raw):
+            month = None        # "July through September" names the quarter, not September
 
     fiscal_assumed = False
     if spec is not None and spec.fiscal_year_default and basis == "calendar" and year:
@@ -729,7 +895,7 @@ def parse_claim(text: str) -> ParsedClaim:
         all_values=all_values,
         has_unresolved_period=has_unresolved,
         unparsed_reason=reason,
-        structured_blocker=structured_blocker(raw, spec, quarter),
+        structured_blocker=structured_blocker(raw, spec, quarter, claimed),
         quarter=quarter,
         fiscal_year_assumed=fiscal_assumed,
     )

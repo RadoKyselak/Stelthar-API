@@ -491,8 +491,11 @@
       if (page) {
         // A page checked by its address: say which page, and link it.
         const from = el("p", "mv-page");
+        // Its own date, when it gives one: a month it names without a year
+        // was read against that day.
+        const dated = shortDate(page.published);
         from.append(document.createTextNode("On "), link(page.url, page.title || page.host),
-          document.createTextNode(page.title ? ` (${page.host})` : ""));
+          document.createTextNode((page.title ? ` (${page.host})` : "") + (dated ? `, dated ${dated}` : "")));
         head.appendChild(from);
       }
       const unsettled = (check && check.unsettled) || 0;
@@ -525,7 +528,10 @@
           el("span", "mv-claim-s", oneLine(d)));
         const body = el("div", "mv-claim-b");
         if (e.claim && e.span && e.claim !== e.span) {
-          body.appendChild(el("p", "mv-note", `Checked as: \u201c${e.claim}\u201d`));
+          // What was written in, and where it came from: nothing is settled out of sight.
+          const added = (e.inherited || []).filter(Boolean).join("; ");
+          body.appendChild(el("p", "mv-note", `Checked as: \u201c${e.claim}\u201d`
+            + (added ? ` Filled in: ${added}.` : "")));
         }
         body.appendChild(render(e.result, opts));
         if (e.deeper && typeof opts.onDeeper === "function") {
