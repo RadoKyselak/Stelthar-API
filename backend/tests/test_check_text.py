@@ -248,6 +248,51 @@ class TestRouting:
         assert out["count"] == 1 and engine[0][1] is True
 
 
+class TestPages:
+    """A page is text nobody picked sentence by sentence."""
+
+    async def test_only_claims_that_ended_in_a_verdict_are_listed(self):
+        async def fake(claim, allow_grounding=True, client_ip=None):
+            if "4.2%" in claim:
+                return answer(claim, NO_VERDICT, NO_SERIES, tier="none")
+            return answer(claim)
+        with patch.object(ct, "verify", fake):
+            out = await ct.check_text("Unemployment was 3.6% in 2023.\nUnemployment was 4.2% in 2024.", mode="page")
+        assert [c["span"] for c in out["claims"]] == ["Unemployment was 3.6% in 2023"]
+        assert out["count"] == 1 and out["unsettled"] == 1 and out["claims"][0]["index"] == 0
+
+    async def test_a_passage_someone_pasted_lists_everything(self, engine):
+        out = await ct.check_text("Unemployment was 3.6% in 2023. "
+                                  "About 2 million people attended the parade last weekend.")
+        assert out["count"] == 2 and out["unsettled"] == 0
+
+    @pytest.mark.parametrize("text", [
+        "GDP fell 3.7% following the 1973 oil crisis.",                           # a year that names an event
+        "The economy grew by an average of 3.8% from 1946 to 1973.",              # a span of years
+        "The child poverty rate was 13.7% in 2023.",                              # a subgroup the series lacks
+        "Unemployment peaked at 10% after the 2008 financial crisis.",
+    ])
+    def test_statistics_one_figure_cannot_settle_are_not_checked_on_a_page(self, text):
+        assert claims_of(text, kinds=(STATISTIC, RECORD), strict=True) == []
+        assert claims_of(text) != []                                             # still listed in a pasted passage
+
+    def test_a_page_does_not_say_when_it_was_written(self):
+        """So "is" has no date: only a claim that states its period is checked."""
+        assert claims_of("Unemployment is 3.5%, the lowest in decades.", kinds=(STATISTIC, RECORD), strict=True) == []
+        assert claims_of("Inflation below 5% is in green.", kinds=(STATISTIC, RECORD), strict=True) == []
+        assert claims_of("Unemployment is 3.5%.") == ["Unemployment is 3.5%"]      # typed today, it means today
+
+    def test_two_points_are_one_claim_a_page_can_settle(self):
+        text = "The unemployment rate fell from 5.2% in 2021 to 3.6% in 2023."
+        assert claims_of(text, kinds=(STATISTIC, RECORD), strict=True) == [text.rstrip(".")]
+
+    def test_a_dependent_clause_is_never_cut_loose(self):
+        text = ("It was the worst downturn since the Great Recession, when GDP fell 4.3% in 2009, "
+                "and unemployment reached 10% in 2009.")
+        got = claims_of(text)
+        assert not any(c.startswith("when ") for c in got)
+
+
 class TestDeeper:
     @pytest.mark.parametrize("reason,expected", [
         (NO_SERIES, True),

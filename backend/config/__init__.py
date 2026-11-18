@@ -184,6 +184,10 @@ CHECK_CONCURRENCY = _env_int("CHECK_CONCURRENCY", 4, 1, 8)
 CHECK_PER_MINUTE = _env_int("CHECK_PER_MINUTE", 6, 1, 1000)
 CHECK_PER_DAY = _env_int("CHECK_PER_DAY", 60, 1, 100000)
 
+# Checking a page by its address ({"url": ...} to /v2/check): this server
+# downloads a page a visitor named. "off" refuses every address.
+CHECK_LINKS = (os.getenv("CHECK_LINKS") or "on").strip().lower() not in ("0", "off", "false", "no")
+
 # POST /mcp: the checks as tools for an assistant (Model Context Protocol).
 # Answers from agency data only. "off" takes the endpoint away (404).
 MCP_ENABLED = (os.getenv("MCP_ENABLED") or "on").strip().lower() not in ("0", "off", "false", "no")

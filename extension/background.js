@@ -102,7 +102,8 @@ async function postJSON(url, body, what) {
     } catch (e) {
       // keep statusText
     }
-    const err = new Error(`${what} failed (${resp.status}): ${detail}`);
+    // A 400 carries a sentence written for the person (why a page could not be read).
+    const err = new Error(resp.status === 400 && detail ? detail : `${what} failed (${resp.status}): ${detail}`);
     err.status = resp.status;
     throw err;
   }
@@ -116,11 +117,14 @@ async function checkText(text, { bypassCache = false } = {}) {
     const cached = await getCachedResult(text);
     if (cached) return { ...cached, _cached: true };
   }
+  // A lone web address is a page to fetch and check, not a claim.
+  const link = /^https?:\/\/\S+$/i.test(text.trim());
   let check;
   try {
-    check = await postJSON(CHECK_URL, { text }, "The check");
+    check = await postJSON(CHECK_URL, link ? { url: text.trim() } : { text }, "The check");
   } catch (e) {
     if (e.status !== 404 && e.status !== 405) throw e;
+    if (link) throw new Error("Checking a page by its link isn't available right now. Highlight the text on the page instead.");
     // No /v2/check on this server: one claim, the way versions before 2.2 asked.
     const result = await postJSON(LEGACY_URL, { claim: text.slice(0, 1000) }, "The check");
     check = { claims: [{ index: 0, span: text, claim: text, deeper: false, result }], count: 1, truncated: false };

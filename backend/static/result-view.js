@@ -95,6 +95,7 @@
 
 /* A passage: how its claims fell, then each claim, opened on request. */
 .mv-tally-h { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
+.mv-page { margin: 4px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .mv-tally-l { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 0; padding: 0; list-style: none; }
 .mv-tally-l li { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--tone); }
 .mv-tally-l li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -449,6 +450,9 @@
   /** What a claim's answer rests on, in one line. */
   function oneLine(d) {
     if (d.revision && d.revision.text) return d.revision.text;
+    // With no verdict, the reason is the answer; a figure beside it would read as one.
+    const key = (d.verdict && d.verdict.key) || "no-verdict";
+    if ((key === "no-verdict" || key === "unavailable") && d.reason && d.reason.why) return d.reason.why;
     const comps = (d.comparisons || []).filter((c) => c.official);
     if (comps.length === 1) {
       const c = comps[0];
@@ -468,7 +472,8 @@
   function renderPassage(check, opts) {
     opts = opts || {};
     const entries = ((check && check.claims) || []).map((e) => Object.assign({}, e));
-    if (entries.length === 1) return render(entries[0].result, opts);
+    // One claim someone typed is shown as its own card; a page keeps its list.
+    if (entries.length === 1 && !(check && check.page)) return render(entries[0].result, opts);
     const root = el("div", "mv");
     root.setAttribute("role", "region");
     const open = new Set();
@@ -481,9 +486,20 @@
       });
       const head = el("div", "mv-tally");
       const n = entries.length;
-      head.appendChild(el("p", "mv-tally-h", n ? `${n} claims checked` : "Nothing to check here"));
-      if (!n) head.appendChild(el("p", "mv-alert-b",
-        "No sentence here states a figure that official data covers."));
+      const page = check && check.page;
+      head.appendChild(el("p", "mv-tally-h", n ? `${n} claim${n === 1 ? "" : "s"} checked` : "Nothing to check here"));
+      if (page) {
+        // A page checked by its address: say which page, and link it.
+        const from = el("p", "mv-page");
+        from.append(document.createTextNode("On "), link(page.url, page.title || page.host),
+          document.createTextNode(page.title ? ` (${page.host})` : ""));
+        head.appendChild(from);
+      }
+      const unsettled = (check && check.unsettled) || 0;
+      if (!n) head.appendChild(el("p", "mv-alert-b", page
+        ? (unsettled ? "Nothing on that page could be settled from official data."
+          : "No sentence on that page states a figure that official data covers.")
+        : "No sentence here states a figure that official data covers."));
       const ul = el("ul", "mv-tally-l");
       ul.setAttribute("aria-label", "How the claims fell");
       TALLY_ORDER.filter((k) => counts[k]).forEach((k) => {
@@ -540,8 +556,12 @@
 
       const parts = [head];
       if (n) parts.push(list);
-      if (check && check.truncated) parts.push(el("p", "mv-note",
-        `Only the first ${n} claims were checked. Highlight less text to check the rest.`));
+      if (unsettled) parts.push(el("p", "mv-note",
+        `${unsettled} more sentence${unsettled === 1 ? "" : "s"} with figures could not be settled from official data.`
+        + " Highlight one and check it on its own to search further."));
+      if (check && check.truncated) parts.push(el("p", "mv-note", page
+        ? `The page holds more. Only the first ${n} claims were checked.`
+        : `Only the first ${n} claims were checked. Highlight less text to check the rest.`));
       root.replaceChildren(...parts);
     };
     draw();
@@ -648,6 +668,12 @@
     "The federal deficit was $1.8 trillion in 2024",
   ];
 
+  // A lone web address: the page it names is fetched and checked.
+  function isLink(text) {
+    const s = String(text || "").trim();
+    return /^https?:\/\/\S+$/i.test(s) && !!safeUrl(s);
+  }
+
   global.MiradorView = { css: CSS, render, renderPassage, renderLookup, loading, error, safeUrl, copyText,
-    verdictKey, intentOf, examples: EXAMPLES };
+    verdictKey, intentOf, isLink, examples: EXAMPLES };
 })(typeof window !== "undefined" ? window : this);

@@ -10,9 +10,10 @@ request is one JSON-RPC message and each answer one JSON body. There is no
 session, no stream and nothing kept between calls, which is what a serverless
 function can honestly offer.
 
-Three tools, all free:
+Four tools, all free:
 
   check_text    every claim in a passage, each on its own
+  check_page    the same, for a public web page given its address
   check_claim   one claim
   find_figure   one official figure, with its citation
 
@@ -32,9 +33,11 @@ from fastapi.responses import JSONResponse, Response
 
 import config
 from config import logger
+from services.check_link import check_link
 from services.check_text import check_text
 from services.lookup import lookup, to_response_dict as lookup_to_dict
 from utils.request_limits import client_ip, retry_after
+from utils.safe_fetch import FetchFailed, FetchRefused
 from utils.validation import InputValidator, ValidationError
 
 router = APIRouter()
@@ -46,7 +49,7 @@ SERVER_INFO = {"name": "project-mirador", "title": "Project Mirador", "version":
 INSTRUCTIONS = (
     "Project Mirador checks claims against official U.S. government data (BLS, BEA, Census, Treasury, "
     "Congress.gov, FBI, CDC, FDA, FTC, HUD, USDA; World Bank for other countries) and returns the agency's "
-    "figure with its source. Use check_text for a passage, check_claim for one statement, find_figure to "
+    "figure with its source. Use check_text for a passage, check_page for a web page, check_claim for one statement, find_figure to "
     "look a number up. Quote the figure, its period and its source as returned; when there is no verdict, "
     "say so rather than guessing."
 )
@@ -63,6 +66,20 @@ TOOLS: List[Dict[str, Any]] = [
             "type": "object",
             "properties": {"text": {"type": "string", "description": "The passage to check."}},
             "required": ["text"],
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+    },
+    {
+        "name": "check_page",
+        "title": "Check the claims on a web page",
+        "description": ("Fetch a public web page (a press release, a transcript, an article) by its address "
+                        "and check the claims on it that official U.S. government data can settle. Returns a "
+                        "verdict per claim with the official figure and source. Some sites refuse automated "
+                        "readers; the answer then says so."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"url": {"type": "string", "description": "The page's address (http or https)."}},
+            "required": ["url"],
         },
         "annotations": {"readOnlyHint": True, "openWorldHint": True},
     },
@@ -178,6 +195,33 @@ async def _check_text(arguments: Dict[str, Any], request: Request) -> Dict[str, 
             "structured": {"claims": claims, "tally": tally, "truncated": got["truncated"]}}
 
 
+async def _check_page(arguments: Dict[str, Any], request: Request) -> Dict[str, Any]:
+    url = arguments.get("url")
+    if not isinstance(url, str) or not url.strip() or len(url) > 2000:
+        raise ToolError("\u201curl\u201d must be a web address.")
+    if not config.CHECK_LINKS:
+        raise ToolError("Checking a page by its address is switched off. Send its text to check_text instead.")
+    await _limited("check", request)
+    try:
+        got = await check_link(url, client_ip=client_ip(request))
+    except (FetchRefused, FetchFailed) as e:
+        raise ToolError(str(e))
+    claims = [_brief(e["result"]) | ({"as_written": e["span"]} if e["span"] != e["claim"] else {})
+              for e in got["claims"]]
+    page = got["page"]
+    name = page.get("title") or page["host"]
+    head = (f"{len(claims)} claim{'s' if len(claims) != 1 else ''} on \u201c{name}\u201d ({page['host']}) could be "
+            f"checked against official data." if claims else
+            f"No sentence on \u201c{name}\u201d ({page['host']}) states a figure that official data covers.")
+    if got.get("unsettled"):
+        head += f" {got['unsettled']} more with figures could not be settled from official data."
+    if got["truncated"]:
+        head += " The page holds more; only the first were checked."
+    return {"text": "\n\n".join([head] + [_lines(c) for c in claims]),
+            "structured": {"page": page, "claims": claims, "tally": {k: v for k, v in got["tally"].items() if v},
+                           "truncated": got["truncated"]}}
+
+
 async def _check_claim(arguments: Dict[str, Any], request: Request) -> Dict[str, Any]:
     claim = _text_arg(arguments, "claim", 1000)
     await _limited("verify", request)
@@ -214,7 +258,8 @@ async def _find_figure(arguments: Dict[str, Any], request: Request) -> Dict[str,
     return {"text": text, "structured": out}
 
 
-_HANDLERS = {"check_text": _check_text, "check_claim": _check_claim, "find_figure": _find_figure}
+_HANDLERS = {"check_text": _check_text, "check_page": _check_page, "check_claim": _check_claim,
+             "find_figure": _find_figure}
 
 
 # ---------------------------------------------------------------- protocol

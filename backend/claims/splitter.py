@@ -107,6 +107,9 @@ def _has_figure(text: str) -> bool:
     return False
 
 
+# A clause that opens with one of these depends on another clause for its meaning.
+_SUBORDINATE = re.compile(r"(?:when|which|who|whose|where|as|after|before|since|because|although|though|if|"
+                          r"that|unless|until|once|whereby)\b", re.I)
 _YEARLIKE = re.compile(r"^(?:1\d{3}|20\d{2}|2100)$")
 _SCALE = re.compile(r"\b(?:hundred|thousand|million|billion|trillion|bn|tn|mn)\b|\dk\b", re.I)
 
@@ -207,6 +210,10 @@ def _split_sentence(text: str, a: int, b: int) -> List[ClaimSpan]:
     sentence = text[a:b]
     parts = _clauses(sentence, a)
     own = [(s, e) for s, e in parts if _is_own_claim(text[s:e])]
+    # "..., when GDP fell 3.7% following the oil crisis" hangs on the rest of
+    # its sentence: cut loose, it would be checked as a claim nobody made.
+    if any(_SUBORDINATE.match(text[s:e]) for s, e in own):
+        own = []
     if len(own) < 2:
         kind = _kind(sentence)
         return [ClaimSpan(sentence, sentence, a, b, kind)] if kind else []
@@ -241,15 +248,39 @@ def _split_sentence(text: str, a: int, b: int) -> List[ClaimSpan]:
     return spans
 
 
+def _one_figure_one_period(claim: str) -> bool:
+    """Whether a statistic is the kind one official figure settles: one value
+    for one period (or the two points of "from X in A to Y in B"), with no
+    qualifier the series cannot honour and no period named only by an event.
+    Anything else the engine would decline, which on a page is only noise."""
+    parsed = parse_claim(claim)
+    if parsed.structured_blocker or parsed.has_unresolved_period:
+        return False
+    # A page does not say when it was written: "unemployment is 3.5%" in a
+    # story from 2019 is not a claim about this month. Only a stated period
+    # can be checked.
+    if parsed.year is None:
+        return False
+    if parsed.is_trend_claim:
+        return len(parsed.all_years or []) == 2 and len(parsed.all_values or []) == 2
+    return True
+
+
 def split_claims(text: str, max_claims: int = 12,
-                 kinds: Tuple[str, ...] = (STATISTIC, RECORD, OTHER)) -> Tuple[List[ClaimSpan], bool]:
+                 kinds: Tuple[str, ...] = (STATISTIC, RECORD, OTHER),
+                 strict: bool = False) -> Tuple[List[ClaimSpan], bool]:
     """The checkable claims in `text`, in order, and whether more were found
-    than `max_claims` allows. `kinds` narrows what is kept: a page scan keeps
-    only what the free data can settle."""
+    than `max_claims` allows. `kinds` narrows what is kept. `strict` (a page
+    nobody picked the sentences of) also drops statistics that one official
+    figure cannot settle, so the few checks a request gets go to claims that
+    can end in a verdict."""
     text = text or ""
     found: List[ClaimSpan] = []
     for a, b in _sentences(text):
         for span in _split_sentence(text, a, b):
-            if span.kind in kinds:
-                found.append(span)
+            if span.kind not in kinds:
+                continue
+            if strict and span.kind == STATISTIC and not _one_figure_one_period(span.claim):
+                continue
+            found.append(span)
     return found[:max_claims], len(found) > max_claims

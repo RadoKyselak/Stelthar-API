@@ -88,9 +88,9 @@ class TestHandshake:
 
 
 class TestTools:
-    def test_the_list_names_three_tools_with_schemas(self, test_client):
+    def test_the_list_names_the_tools_with_schemas(self, test_client):
         tools = rpc(test_client, "tools/list").json()["result"]["tools"]
-        assert [t["name"] for t in tools] == ["check_text", "check_claim", "find_figure"]
+        assert [t["name"] for t in tools] == ["check_text", "check_page", "check_claim", "find_figure"]
         for t in tools:
             assert t["inputSchema"]["type"] == "object" and t["inputSchema"]["required"]
             assert t["description"] and t["annotations"]["readOnlyHint"] is True
@@ -139,6 +139,38 @@ class TestTools:
             got = call(test_client, "find_figure", {"query": "happiness index"})
         assert got["isError"] is False and got["structuredContent"]["found"] is False
         assert "Try: unemployment rate 2023." in got["content"][0]["text"]
+
+
+class TestCheckPage:
+    def page(self, claims=1, truncated=False):
+        from claims.verdict import HIGH, SUPPORTED
+        from services.verify_v2 import VerificationV2, to_response_dict
+        v = VerificationV2(claim="Unemployment was 3.6% in 2023", verdict=SUPPORTED, confidence=HIGH,
+                           headline="Claim says 3.6%. BLS reports 3.6% for 2023.", tier="structured")
+        entry = {"span": v.claim, "claim": v.claim, "result": to_response_dict(v)}
+        return {"claims": [entry] * claims, "tally": {"supported": claims}, "truncated": truncated,
+                "page": {"url": "https://example.gov/release", "host": "example.gov", "title": "A release",
+                         "paragraphs": 9}}
+
+    def test_answers_for_the_page(self, test_client):
+        fake = AsyncMock(return_value=self.page())
+        with patch.object(mcp, "check_link", fake):
+            got = call(test_client, "check_page", {"url": "https://example.gov/release"})
+        assert got["isError"] is False
+        assert got["content"][0]["text"].startswith("1 claim on “A release” (example.gov) could be checked")
+        assert got["structuredContent"]["page"]["host"] == "example.gov"
+
+    def test_a_page_that_cannot_be_read_says_why(self, test_client):
+        from utils.safe_fetch import FetchFailed
+        with patch.object(mcp, "check_link", AsyncMock(side_effect=FetchFailed("That site does not let its "
+                                                                                 "pages be read this way."))):
+            got = call(test_client, "check_page", {"url": "https://example.com/story"})
+        assert got["isError"] is True and "does not let its pages be read" in got["content"][0]["text"]
+
+    def test_switched_off(self, test_client, monkeypatch):
+        monkeypatch.setattr(config, "CHECK_LINKS", False)
+        got = call(test_client, "check_page", {"url": "https://example.gov/release"})
+        assert got["isError"] is True and "switched off" in got["content"][0]["text"]
 
 
 class TestNeverPaid:

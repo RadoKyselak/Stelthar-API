@@ -87,4 +87,5 @@ class TestWhatThePagesPromise:
 
     def test_the_home_page_examples_are_claims_not_lookups(self, test_client):
         app = (STATIC / "app.js").read_text()
-        assert "V.examples.concat" in app and 'postJSON("/v2/check", { text })' in app
+        assert "V.examples.concat" in app
+        assert 'postJSON("/v2/check", V.isLink(text) ? { url: text } : { text })' in app
