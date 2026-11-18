@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Mirador benchmarks: how it scores against other fact checkers and AI</title>
+  <meta name="description" content="Project Mirador's results on published fact-checking benchmarks, beside the scores of other systems and AI models.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Project Mirador">
+  <meta property="og:url" content="https://stelthar-api.vercel.app/benchmarks">
+  <meta property="og:title" content="Project Mirador benchmarks">
+  <meta property="og:description" content="Project Mirador's results on published fact-checking benchmarks, beside other systems and AI models.">
+  <meta property="og:image" content="https://stelthar-api.vercel.app/static/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/static/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <main class="doc">
+    <p class="doc-back"><a href="/">&larr; Check a claim</a></p>
+    <h1>Benchmarks</h1>
+    <p class="doc-meta">Tested November 18, 2026, with Haiku, the AI model the live site uses.</p>
+
+    <h2>Real fact-checked claims</h2>
+    <p class="bench-lede">QuanTemp: 2,495 number claims rated by PolitiFact, Snopes and other fact-checkers.
+      Each must be rated True, False or Half-true. Score out of 100; higher is better.</p>
+    <ol class="bench">
+      <li><span class="bench-name">Best published system</span><meter min="0" max="100" value="58.32"></meter><span class="bench-score">58.3</span></li>
+      <li><span class="bench-name">Published baseline</span><meter min="0" max="100" value="52.48"></meter><span class="bench-score">52.5</span></li>
+      <li class="bench-us"><span class="bench-name">Project Mirador</span><meter min="0" max="100" value="50.71"></meter><span class="bench-score">50.7</span></li>
+      <li><span class="bench-name">GPT-3.5, with examples</span><meter min="0" max="100" value="47.00"></meter><span class="bench-score">47.0</span></li>
+      <li><span class="bench-name">GPT-4, with examples</span><meter min="0" max="100" value="36.50"></meter><span class="bench-score">36.5</span></li>
+      <li><span class="bench-name">GPT-3.5, no examples</span><meter min="0" max="100" value="33.87"></meter><span class="bench-score">33.9</span></li>
+      <li><span class="bench-name">Answering &ldquo;False&rdquo; every time</span><meter min="0" max="100" value="24.21"></meter><span class="bench-score">24.2</span></li>
+    </ol>
+    <p class="bench-note">Mirador: 300 random claims, so &plusmn;6. Fact-checkers&rsquo; own write-ups were removed
+      from its evidence. Others: as published by the benchmark&rsquo;s authors (Venktesh et al., SIGIR 2024). The
+      test makes every claim get a rating; on the live site, Mirador says &ldquo;Can&rsquo;t verify&rdquo; instead of guessing.</p>
+
+    <h2>Official U.S. figures</h2>
+    <p class="bench-lede">EconWebArena: 75 questions asking for a published U.S. statistic.</p>
+    <div class="bench-big">
+      <p><strong>36 of 37</strong><span>answered correctly</span></p>
+      <p><strong>37 of 75</strong><span>answered</span></p>
+      <p><strong>1</strong><span>wrong</span></p>
+    </div>
+    <p class="bench-note">Correct means the agency&rsquo;s figure today: 9 answers differ from the benchmark only because
+      the agency has revised the number since, and 3 of the benchmark&rsquo;s answers were wrong. (Liu &amp; Quan, 2025.)</p>
+
+    <h2>Mirador&rsquo;s own tests</h2>
+    <div class="bench-big">
+      <p><strong>28 of 28</strong><span>claims built from agency figures</span></p>
+      <p><strong>32 of 34</strong><span>real sentences from news and releases</span></p>
+    </div>
+
+    <h2>Other fact checkers</h2>
+    <p>Facticity.ai and other AI fact checkers have not published results on these tests, and Facticity needs an
+      account to run, so they are not shown. Its own claimed accuracy (92% to 98%) is on its own sets of claims.</p>
+
+    <p class="bench-note">How each test is run: <a href="https://github.com/RadoKyselak/Stelthar-API/tree/main/backend/eval">the code</a>.
+      How a claim is checked: <a href="/methodology">the method</a>.</p>
+  </main>
+  <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/benchmarks">Benchmarks</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
+</body>
+</html>

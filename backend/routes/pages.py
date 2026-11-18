@@ -8,7 +8,8 @@ from fastapi.responses import HTMLResponse
 router = APIRouter()
 
 _STATIC = pathlib.Path(__file__).resolve().parent.parent / "static"
-PAGES = {"methodology": "methodology.html", "developers": "developers.html"}
+PAGES = {"methodology": "methodology.html", "developers": "developers.html",
+         "benchmarks": "benchmarks.html"}
 
 
 def _page(name: str):

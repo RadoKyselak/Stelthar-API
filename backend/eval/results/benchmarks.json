@@ -1,0 +1,34 @@
+{
+  "updated": "2026-11-18",
+  "model": "claude-haiku-5-5",
+  "quantemp": {
+    "name": "QuanTemp",
+    "citation": "Venktesh V. et al., SIGIR 2024, arXiv:2403.17169",
+    "metric": "macro-F1",
+    "claims_in_test": 2495,
+    "mirador": {"score": 50.71, "low": 44.6, "high": 56.9, "claims": 300,
+                "how": "300 random test claims, the benchmark's own search evidence, fact-checkers' write-ups removed; every claim rated, judged by Haiku"},
+    "others": [
+      {"name": "Best published system (FinQA-RoBERTa, fine-tuned, with claim decomposition)", "score": 58.32},
+      {"name": "Published baseline (RoBERTa-MNLI, fine-tuned)", "score": 52.48},
+      {"name": "GPT-3.5, with examples", "score": 47.00},
+      {"name": "GPT-4, with examples", "score": 36.50},
+      {"name": "GPT-3.5, no examples", "score": 33.87},
+      {"name": "Answering “False” every time", "score": 24.21}
+    ]
+  },
+  "econwebarena": {
+    "name": "EconWebArena",
+    "citation": "Liu & Quan, 2025, arXiv:2506.08136",
+    "questions": 75,
+    "answered": 37,
+    "correct": 36,
+    "wrong": 1,
+    "revised_since": 9,
+    "benchmark_errors": 3
+  },
+  "own": [
+    {"name": "Claims built from agency figures", "right": 28, "of": 28, "where": "live site"},
+    {"name": "Real sentences from news, releases and encyclopedias", "right": 32, "of": 34, "where": "test build"}
+  ]
+}
