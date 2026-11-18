@@ -57,6 +57,7 @@ _AGENCY_NAMES = {
     "WORLD BANK": "World Bank",
     "FBI": "Federal Bureau of Investigation",
     "CDC": "Centers for Disease Control and Prevention",
+    "EIA": "U.S. Energy Information Administration",
 }
 
 # How an agency is referred to mid-sentence, where the full legal name would
@@ -73,6 +74,7 @@ _AGENCY_SHORT = {
     "FDA": "FDA",
     "FTC": "FTC",
     "WORLD BANK": "World Bank",
+    "EIA": "EIA",
     "FBI": "FBI",
     "CDC": "CDC",
 }

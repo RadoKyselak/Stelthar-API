@@ -83,6 +83,7 @@ async def call(path: str, tool: str, raw: str) -> str:
         return json.dumps({"error": "input is not JSON"})
     s = finder._Session(data["claim"])
     s.fred_seen = {k: Candidate(**v) for k, v in data["fred_seen"].items()}
+    s.eia_seen = {k: Candidate(**v) for k, v in data.get("eia_seen", {}).items()}
     fn = finder._RUN.get(tool)
     if fn is None:
         out: Any = {"error": "unknown tool"}
@@ -102,9 +103,11 @@ async def call(path: str, tool: str, raw: str) -> str:
     for item in (out if isinstance(out, list) else [out]):
         if isinstance(item, dict) and item.get("id") in renamed:
             item["id"] = renamed[item["id"]]
-    for k, c in s.fred_seen.items():
-        data["fred_seen"][k] = {"provider": c.provider, "id": c.id, "title": c.title, "units": c.units,
-                                "frequency": c.frequency, "detail": c.detail, "meta": c.meta}
+    for name, seen in (("fred_seen", s.fred_seen), ("eia_seen", s.eia_seen)):
+        for k, c in seen.items():
+            data.setdefault(name, {})[k] = {"provider": c.provider, "id": c.id, "title": c.title,
+                                            "units": c.units, "frequency": c.frequency,
+                                            "detail": c.detail, "meta": c.meta}
     text = json.dumps(out, ensure_ascii=False)[:finder._RESULT_CHARS]
     data["log"].append({"tool": tool, "input": inp, "result": text})
     _save(path, data)
