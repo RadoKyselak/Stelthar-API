@@ -225,6 +225,30 @@ class TestFirstPrint:
         got = await derived.first_print_match(p, assess(p, [dp]))
         assert got is not None and got.revision["first"] == "-13,000" and got.revision["current"] == "+14,000"
 
+    async def test_gdp_in_dollars_as_it_stood_when_the_sentence_was_written(self, monkeypatch):
+        """An article written in 2012 says GDP was about $15 trillion in 2011.
+        BEA has since restated 2011 as $15.6 trillion."""
+        monkeypatch.setattr(derived, "_rows", series({("GDPA", "any"): [(date(2011, 1, 1), 15094.0)]}))
+        p = parse_claim("U.S. GDP was $15.1 trillion in 2011.")
+        dp = Datapoint(quantity=Quantity(15.6e12, "usd"), metric="gdp",
+                       label="Gross domestic product (current dollars)", observed=Period(2011, ANNUAL),
+                       geography=Geography.national(), source="BEA", source_url="x")
+        v = assess(p, [dp])
+        assert v.verdict in (CONTRADICTED, MOSTLY_ACCURATE)
+        got = await derived.first_print_match(p, v)
+        assert got is not None and got.verdict == SUPPORTED
+        assert got.revision["first"] == "$15.09 trillion" and got.revision["current"] == "$15.60 trillion"
+
+    async def test_a_hedge_does_not_make_any_old_figure_a_match(self, monkeypatch):
+        monkeypatch.setattr(derived, "_rows", series({("GDPA", "any"): [(date(2019, 1, 1), 21430.0)]}))
+        p = parse_claim("U.S. GDP was about $20 trillion in 2019.")
+        dp = Datapoint(quantity=Quantity(21.54e12, "usd"), metric="gdp",
+                       label="Gross domestic product (current dollars)", observed=Period(2019, ANNUAL),
+                       geography=Geography.national(), source="BEA", source_url="x")
+        v = assess(p, [dp])
+        if v.verdict in (CONTRADICTED, MOSTLY_ACCURATE):
+            assert await derived.first_print_match(p, v) is None
+
     async def test_a_later_estimate_counts_too(self, monkeypatch):
         """GDP's second estimate comes a month after the first. A story written
         then quotes it, and neither the first print nor today's figure matches."""

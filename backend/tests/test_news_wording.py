@@ -296,3 +296,13 @@ class TestWhatASentenceDoesNotSay:
     ])
     def test_a_place_is_still_a_place(self, claim, place):
         assert parse_claim(claim).geography.name == place
+
+
+def test_an_estimate_made_before_the_year_was_over_is_not_the_years_figure():
+    got = parse_claim("U.S. GDP was an estimated $15.6 trillion for 2012 based on activity during the first two quarters")
+    assert got.metric is None or "a target, a forecast or an expectation" in got.structured_blocker
+
+
+def test_an_estimate_an_agency_published_is_still_a_figure():
+    got = parse_claim("An estimated 8.2% of people were uninsured in 2024")
+    assert got.metric.metric == "uninsured_rate" and got.structured_blocker == ""

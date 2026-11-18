@@ -27,6 +27,9 @@ to take it back out.
 | 18 | A shared check's link preview shows a picture that says its verdict (five fixed images, nothing drawn per request) | `routes/share.py`, `static/og-*.png` | see `git log` |
 | 19 | Declined, where each was given a verdict on something it does not say: a target or a forecast ("the 2% inflation target"), how far a level moved ("added $1 trillion to the national debt"), GDP as a denominator ("debt to GDP rose to 99%"), a share of a change, another measure (natural rate, Supplemental Poverty Measure), more subgroups, a U.S. territory or another country's state read as the nation, a newspaper or university read as its state | `claims/parser.py`, `claims/geography.py` | see `git log` |
 | 20 | On a page: a sentence that names no place, after text about another country or a state, is listed only if the official figure agrees; sentences about what would, could or is proposed to happen are skipped | `claims/splitter.py` | see `git log` |
+| 21 | A claim that states a figure is no longer answered as a claim about direction ("private payrolls rose by 150,000" was Supported because total payrolls rose) | `services/derived.py` | see `git log` |
+| 22 | `make eval-news`: 34 real sentences from releases, wire stories and encyclopedia articles, 13 of which must be declined; two known gaps are kept as misses | `eval/news_claims.jsonl`, `eval/remote.py` | see `git log` |
+| 23 | A year's GDP in dollars is held to the figure published at the time before it is called wrong (2011 was $15.09 trillion when written, $15.60 trillion today); a mid-year estimate of a year is not that year's figure | `services/derived.py`, `claims/parser.py` | see `git log` |
 
 Nothing that existed was removed. `/verify`, `/v2/verify` and `/v2/lookup` answer as before, so every
 installed extension keeps working.
@@ -84,7 +87,7 @@ The extension is separate from the server:
 
 ## Verified
 
-- 1,610 tests pass (`make test`); 1,154 before this branch.
+- 1,621 tests pass (`make test`); 1,154 before this branch.
 - By hand, against live agency data, on a local server without agency keys: the passage check, the
   revision label, the shared page and its link preview tags, the home page, both new pages, and a full
   `/mcp` exchange (initialize, tools/list, tools/call).
@@ -96,6 +99,10 @@ The extension is separate from the server:
   "inflation hit 9.1% in 2022" answered from live data with no model call; the two sentences that must not
   get a verdict did not.
 - The first live test run against production: 28 of 28, recorded in `backend/eval/results/2026-11-17.json`.
+- On the preview build of 17 November 2026, free data only, no model call: the first test set, 28 of 28;
+  the news set, 32 of 34, the two misses being the two rows marked as known gaps (the Census Bureau's
+  CPS ASEC poverty and coverage rates, which are not wired). Neither set has been run on production
+  since these changes: run `make eval-live` and `make eval-news` after the merge.
 - Changes #19 and #20 against ten encyclopedia articles on the U.S. economy, the same way: 24 sentences
   that would have been given a wrong or unfounded verdict are each held by a test.
 - Changes #14 and #15 against 20 real, dated wire stories and five agency releases, read live. Every

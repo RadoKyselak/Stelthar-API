@@ -430,7 +430,9 @@ _MOVED_BY_RE = re.compile(
 # had expected 90,000": a figure that was aimed at or foreseen, not published.
 _NOT_A_PUBLISHED_FIGURE_RE = re.compile(
     r"\btarget(?:s|ed)?\b|\bgoal\b|\bforecast(?:s|ed|ing)?\b|\bproject(?:ed|s|ion|ions)\b|"
-    r"\bpredict(?:ed|s|ion|ions)\b|\bexpect(?:ed|s|ing|ation|ations)?\b|\bon track to\b", re.IGNORECASE)
+    r"\bpredict(?:ed|s|ion|ions)\b|\bexpect(?:ed|s|ing|ation|ations)?\b|\bon track to\b|"
+    # "an estimated $15.6 trillion for 2012 based on activity during the first two quarters"
+    r"\bestimated?\b.{0,60}?\bbased on\b", re.IGNORECASE)
 # GDP as what something else is measured against: "debt to GDP rose to 99%".
 _AGAINST_GDP_RE = re.compile(
     r"\bto[- ](?:the\s+)?(?:u\.?s\.?\s+)?gdp\b|\b(?:%|percent|share|percentage|proportion|fraction)\s+of\s+"

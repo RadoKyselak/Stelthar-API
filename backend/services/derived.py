@@ -66,6 +66,10 @@ GDP = Series("A191RL1Q225SBEA", "Q", PERCENT, "Real gross domestic product, perc
              "percent change at a seasonally adjusted annual rate")
 GDP_ANNUAL = Series("A191RL1A225NBEA", "A", PERCENT, "Real gross domestic product, percent change",
                     _BEA, "percent change from the preceding year")
+# GDP in dollars. Its level is restated back through the decades whenever BEA
+# changes what counts as output (research spending was added in 2013), so a
+# sentence written at the time is off by hundreds of billions today.
+GDP_DOLLARS = Series("GDPA", "A", USD, "Gross domestic product", _BEA, "billions of dollars")
 
 
 def fred_series(sid: str, title: str = "", units: str = "") -> Series:
@@ -604,6 +608,7 @@ _FIRST_PRINT = {
     # reports, often by more than the count itself. A story written on the day
     # quotes the first one.
     "jobs_added": {"M": PAYEMS},
+    "gdp": {"A": GDP_DOLLARS},
 }
 
 
@@ -615,6 +620,8 @@ async def _as_published(metric: str, s: Series, obs: date, vd: date) -> Optional
     hit = [v for d, v in rows if d == obs]
     if not hit:
         return None
+    if metric == "gdp":
+        return hit[0] * 1e9                                   # the series is in billions
     if metric != "jobs_added":
         return hit[0]
     prev = date(obs.year - (obs.month == 1), (obs.month - 2) % 12 + 1, 1)
@@ -660,10 +667,19 @@ async def first_print_match(parsed, v: Verdict) -> Optional[Verdict]:
     now = dp.quantity.magnitude
     claimed = parsed.claimed_value.magnitude
     tol = parsed.claimed_value.tolerance() or (500.0 if jobs else 0.05)
+    if spec.metric == "gdp":
+        # A level in the trillions is quoted to a tenth of a trillion at best.
+        # Never more than 2% of it: a hedge ("about $20 trillion") does not make a
+        # figure a trillion off a match for an old release.
+        tol = min(max(tol, 0.005 * abs(now)), 0.02 * abs(now))
     today = datetime.now(timezone.utc).date()
 
+    dollars = dp.quantity.family == USD
+
     def shown(x: float) -> str:
-        return f"{x:+,.0f}" if jobs else f"{x:g}%"
+        if jobs:
+            return f"{x:+,.0f}"
+        return humanize(x, USD) if dollars else f"{x:g}%"
 
     for later in _LATER_RELEASES:
         vd = first[1] + timedelta(days=later)
