@@ -23,6 +23,8 @@ to take it back out.
 | 14 | News wording read as written: the jobs report's and the GDP release's own sentences, a quarter named by its months, "rose 0.1 point to 4.2%" (the level is 4.2%). Six misreadings fixed: how far a rate moved taken for the rate, a date a change is counted from taken for its period, a one-month change taken for a 12-month one, "the number of people working part time" taken for the population, a wire dateline taken for a place, "its lowest going back to 2022" taken for the year | `claims/parser.py`, `claims/geography.py`, `claims/metrics.py` | see `git log` |
 | 15 | A page's own date dates what it names without a year ("in October", "last month", "the third quarter"); pages on sites whose layout hid the story are now read; "READ MORE" lines are not; a figure must sit near its measure; a figure stated twice is checked once | `claims/article.py`, `claims/splitter.py`, `services/check_text.py`, `services/check_link.py` | see `git log` |
 | 16 | A month's jobs count is held to the report that first gave it, and to the two after it, before it is called wrong; GDP's second and third estimates count the same way. A story of 2 October 2026 saying 29,000 jobs were added in September was "Contradicted" by the revised 60,000 | `services/derived.py` | see `git log` |
+| 17 | "92% had health insurance coverage" is the insured share, which Census publishes; it was read as the uninsured rate and marked Contradicted against 8.2% | `claims/metrics.py` | see `git log` |
+| 18 | A shared check's link preview shows a picture that says its verdict (five fixed images, nothing drawn per request) | `routes/share.py`, `static/og-*.png` | see `git log` |
 
 Nothing that existed was removed. `/verify`, `/v2/verify` and `/v2/lookup` answer as before, so every
 installed extension keeps working.
@@ -80,7 +82,7 @@ The extension is separate from the server:
 
 ## Verified
 
-- 1,547 tests pass (`make test`); 1,154 before this branch.
+- 1,566 tests pass (`make test`); 1,154 before this branch.
 - By hand, against live agency data, on a local server without agency keys: the passage check, the
   revision label, the shared page and its link preview tags, the home page, both new pages, and a full
   `/mcp` exchange (initialize, tools/list, tools/call).
@@ -112,8 +114,6 @@ The extension is separate from the server:
 - **In-page highlighting** ("scan this page"). Decided against: it needs the `activeTab` and `scripting`
   permissions, and the extension deliberately has neither (`tests/test_extension_permissions.py`).
   Highlighting an article and right-clicking, or pasting its link, gives the same answers.
-- **A picture of the verdict in link previews.** A shared check's preview carries the verdict in its title
-  and text, with the site's standard image.
 - **Spanish.** The engine reads English only.
 - **Terms of use, a custom domain, one brand name.** Decisions for the owner.
 

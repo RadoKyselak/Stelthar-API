@@ -163,6 +163,12 @@ _STATIC_TYPES = {
     "logo.png": "image/png",
     "favicon.png": "image/png",
     "og.png": "image/png",
+    # The picture in a shared check's link preview: one per verdict (routes/share.py).
+    "og-supported.png": "image/png",
+    "og-mostly-accurate.png": "image/png",
+    "og-contradicted.png": "image/png",
+    "og-misleading.png": "image/png",
+    "og-published.png": "image/png",
 }
 
 # Link-preview, search and assistant crawlers don't ask for text/html, but

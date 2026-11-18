@@ -98,6 +98,46 @@ class TestSharedCheck:
         assert codes == [200, 429] and len(calls) == 1
 
 
+class TestPreviewPicture:
+    @pytest.mark.parametrize("verdict, picture", [
+        (SUPPORTED, "og-supported.png"), ("Contradicted", "og-contradicted.png"),
+        ("Mostly accurate", "og-mostly-accurate.png"), ("Misleading", "og-misleading.png"),
+    ])
+    def test_the_picture_says_the_verdict(self, test_client, verdict, picture):
+        fake, _ = engine(verdict)
+        r = get(test_client, "Unemployment was 3.6% in 2023", fake)
+        assert f'property="og:image" content="https://stelthar-api.vercel.app/static/{picture}"' in r.text
+        assert f'name="twitter:image" content="https://stelthar-api.vercel.app/static/{picture}"' in r.text
+        assert "og.png" not in r.text
+
+    def test_a_figure_since_revised_has_its_own_picture(self, test_client):
+        async def fake(claim, allow_grounding=True, client_ip=None):
+            return VerificationV2(claim=claim, verdict=SUPPORTED, headline="h", tier="structured", confidence=HIGH,
+                                  revision={"first": "2.5%", "current": "2.9%", "period": "2023",
+                                            "archive": "2024-01-31", "measure": "Real GDP growth"})
+        r = get(test_client, "Real GDP grew 2.5% in 2023", fake)
+        assert "/static/og-published.png" in r.text
+        assert 'property="og:image:alt" content="Accurate when published: checked against' in r.text
+
+    def test_an_unsettled_claim_keeps_the_sites_own_picture(self, test_client):
+        fake, _ = engine(NO_VERDICT)
+        r = get(test_client, "The moon is made of cheese", fake)
+        assert 'property="og:image" content="https://stelthar-api.vercel.app/static/og.png"' in r.text
+
+    def test_every_picture_is_a_file_that_is_served_at_the_size_previews_expect(self, test_client):
+        import struct
+        for name in share.PREVIEW_IMAGES.values():
+            r = test_client.get(f"/static/{name}")
+            assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+            assert r.content[:8] == b"\x89PNG\r\n\x1a\n"
+            assert struct.unpack(">II", r.content[16:24]) == (1200, 630)
+
+    def test_every_verdict_a_shared_check_can_show_has_a_picture(self):
+        from services import presentation
+        keys = {key for key, _ in presentation._VERDICTS.values()} - {"no-verdict"}
+        assert keys <= set(share.PREVIEW_IMAGES)
+
+
 class TestTemplate:
     def test_every_hook_in_the_home_page_is_still_there(self):
         """page() raises if index.html loses a tag it rewrites; this is the

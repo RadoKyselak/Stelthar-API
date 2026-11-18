@@ -19,6 +19,11 @@ safe:
 
 The page is the home page with its head and one data block replaced (see
 `page`), so there is one layout to keep.
+
+The picture in the preview says the verdict too. It is one of five fixed
+images, chosen by the verdict just reached: nothing is drawn per request, so
+a preview costs no more than a file, and the claim's own words stay in the
+preview's title, where the app that shows it sets them as text.
 """
 import json
 import pathlib
@@ -38,6 +43,15 @@ from utils.request_limits import client_ip, limit
 from utils.validation import InputValidator, ValidationError
 
 router = APIRouter()
+
+# Verdict key -> the picture for its link preview (backend/static, 1200x630).
+PREVIEW_IMAGES = {
+    "supported": "og-supported.png",
+    "mostly-accurate": "og-mostly-accurate.png",
+    "contradicted": "og-contradicted.png",
+    "misleading": "og-misleading.png",
+    "published": "og-published.png",       # matches a figure since revised
+}
 
 _INDEX = pathlib.Path(__file__).resolve().parent.parent / "static" / "index.html"
 MAX_CLAIM = 600
@@ -72,11 +86,21 @@ def page(claim: str, result: Optional[Dict[str, Any]]) -> str:
     if "<title>" not in html:
         raise LookupError("index.html has no <title>")
     html = re.sub(r"<title>[^<]*</title>", f"<title>{escape(title)} · Project Mirador</title>", html, count=1)
-    for attr, name, content in (
+    tags = [
         ("name", "description", about),
         ("property", "og:title", title), ("property", "og:description", about), ("property", "og:url", url),
         ("name", "twitter:title", title), ("name", "twitter:description", about),
-    ):
+    ]
+    if result is not None:
+        d = result["display"]
+        picture = PREVIEW_IMAGES.get("published" if d.get("revision") else d["verdict"]["key"])
+        if picture:
+            import config
+            address = f"{config.PUBLIC_BASE_URL}/static/{picture}"
+            tags += [("property", "og:image", address), ("name", "twitter:image", address),
+                     ("property", "og:image:alt",
+                      f"{d['verdict']['label']}: checked against official U.S. government data")]
+    for attr, name, content in tags:
         html = _set_meta(html, attr, name, content)
     # Any claim can be put in this address: keep such pages out of search results.
     html = html.replace("</title>", '</title>\n  <meta name="robots" content="noindex">', 1)
