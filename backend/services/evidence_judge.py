@@ -22,6 +22,15 @@ the trade, and how their ratings fall by kind of claim in the training split
 of the benchmark (QuanTemp's train file: a politician's quoted statement is
 rated True 29%, Conflicting 36%, False 34%; a photo, video or viral post
 8%, 17%, 76%). Nothing in them comes from the claims a run is scored on.
+
+Measured on QuanTemp (macro-F1, 300 held-out test claims, the published
+systems' evidence, the same frozen INSTRUCTIONS; 18 Nov 2026):
+
+    Haiku-class judge     50.71
+    Sonnet-class judge    61.32   (+10.6 on the same claims; 95% +3.4 to +17.6)
+    best published        58.32   (FinQA-RoBERTa with ClaimDecomp, no leaked evidence)
+
+The judges were agents reading the instructions, not the production API.
 """
 import json
 import re
