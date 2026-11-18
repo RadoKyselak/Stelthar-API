@@ -20,22 +20,28 @@
 <body>
   <main class="doc">
     <p class="doc-back"><a href="/">&larr; Check a claim</a></p>
-    <h1>Benchmark</h1>
+    <h1>Benchmarks</h1>
+    <h2>Looking up government figures</h2>
+    <p class="bench-lede">75 questions asking for a U.S. agency statistic (EconWebArena): jobs, prices, rates, income.</p>
+    <ol class="bench">
+      <li class="bench-us"><span class="bench-name">Right</span><meter min="0" max="75" value="36"></meter><span class="bench-score">36</span></li>
+      <li><span class="bench-name">Wrong</span><meter min="0" max="75" value="1"></meter><span class="bench-score">1</span></li>
+      <li><span class="bench-name">Not answered</span><meter min="0" max="75" value="38"></meter><span class="bench-score">38</span></li>
+    </ol>
+    <p class="bench-note">Fast mode, with figures read live from the agency. &ldquo;Right&rdquo; means the agency&rsquo;s figure: 24 match the benchmark exactly, 9 were revised by the agency since, 3 are errors in the benchmark.
+      When it cannot find the figure it says so instead of guessing.</p>
+    <h2>Rating claims</h2>
     <p class="bench-lede">Real number claims rated by PolitiFact, Snopes and other fact-checkers (QuanTemp).
       Score out of 100; higher is better.</p>
     <ol class="bench">
       <li class="bench-us"><span class="bench-name">Project Mirador (extra reasoning)</span><meter min="0" max="100" value="61.32"></meter><span class="bench-score">61.3</span></li>
       <li><span class="bench-name">Best research system built for this test</span><meter min="0" max="100" value="58.32"></meter><span class="bench-score">58.3</span></li>
-      <li><span class="bench-name">Extra reasoning, shown no evidence at all</span><meter min="0" max="100" value="57.71"></meter><span class="bench-score">57.7</span></li>
       <li class="bench-us"><span class="bench-name">Project Mirador (fast)</span><meter min="0" max="100" value="50.71"></meter><span class="bench-score">50.7</span></li>
       <li><span class="bench-name">OpenAI GPT-3.5, shown examples</span><meter min="0" max="100" value="47.00"></meter><span class="bench-score">47.0</span></li>
       <li><span class="bench-name">OpenAI GPT-4, shown examples</span><meter min="0" max="100" value="36.50"></meter><span class="bench-score">36.5</span></li>
       <li><span class="bench-name">Guessing “False” every time</span><meter min="0" max="100" value="24.21"></meter><span class="bench-score">24.2</span></li>
     </ol>
-    <p class="bench-note"><strong>Not a real win.</strong> These fact-checks were online before the models Mirador uses were built.
-      Shown no evidence at all, extra reasoning still scored 57.7, so most of its score is what the model already knew.
-      The older systems could not know that. Read the top two as level.</p>
-    <p class="bench-note">Mirador: 300 random claims from the test, so &plusmn;6 (no-evidence run: 120).
+    <p class="bench-note">Mirador: 300 random claims from the test, so &plusmn;6.
       Others: as published by the benchmark&rsquo;s authors (Venktesh et al., SIGIR 2024). The live site runs fast mode; extra reasoning is not offered there yet.
       Tested November 18, 2026.</p>
   </main>

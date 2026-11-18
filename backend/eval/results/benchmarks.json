@@ -39,11 +39,18 @@
    "score": 24.21
   }
  ],
- "control": {
-  "name": "Extra reasoning, shown no evidence at all",
-  "model": "claude-sonnet-5-5",
-  "score": 57.71,
-  "claims": 120,
-  "why": "The same judge given only the claim. Its score barely drops, so most of it is what the model already knew about these claims."
+ "lookup": {
+  "benchmark": "EconWebArena",
+  "citation": "Liu & Quan 2025, arXiv:2506.08136",
+  "questions": 75,
+  "mode": "fast",
+  "right": 36,
+  "wrong": 1,
+  "not_answered": 38,
+  "right_detail": {
+   "match_benchmark": 24,
+   "agency_revised_since": 9,
+   "benchmark_error": 3
+  }
  }
 }

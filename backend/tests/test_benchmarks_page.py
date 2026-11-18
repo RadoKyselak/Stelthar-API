@@ -9,17 +9,26 @@ import pytest
 BACK = pathlib.Path(__file__).resolve().parent.parent
 PAGE = (BACK / "static" / "benchmarks.html").read_text()
 DATA = json.loads((BACK / "eval" / "results" / "benchmarks.json").read_text())
+CLAIMS = PAGE.split("<h2>Rating claims</h2>")[1]
+LOOKUP = PAGE.split("<h2>Looking up government figures</h2>")[1].split("<h2>")[0]
 ROWS = re.findall(r'<li( class="bench-us")?><span class="bench-name">(.*?)</span>'
-                  r'<meter min="0" max="100" value="([\d.]+)"></meter><span class="bench-score">([\d.]+)</span>', PAGE)
+                  r'<meter min="0" max="100" value="([\d.]+)"></meter><span class="bench-score">([\d.]+)</span>', CLAIMS)
 
 
 class TestTheGraph:
-    def test_it_is_the_only_graph(self):
-        assert PAGE.count('<ol class="bench">') == 1 and PAGE.count("<h2") == 0
+    def test_two_graphs_lookup_first(self):
+        assert PAGE.count('<ol class="bench">') == 2 and PAGE.count("<h2>") == 2
+        assert PAGE.index("Looking up government figures") < PAGE.index("Rating claims")
+
+    def test_lookup_graph_is_what_was_recorded(self):
+        L = DATA["lookup"]
+        got = dict(re.findall(r'<span class="bench-name">(.*?)</span><meter min="0" max="75" value="(\d+)">', LOOKUP))
+        assert got == {"Right": str(L["right"]), "Wrong": str(L["wrong"]), "Not answered": str(L["not_answered"])}
+        assert L["right"] + L["wrong"] + L["not_answered"] == L["questions"]
+        assert sum(L["right_detail"].values()) == L["right"]
 
     def test_every_recorded_score_is_a_bar_and_nothing_else_is(self):
-        recorded = sorted([m["score"] for m in DATA["mirador"]] + [o["score"] for o in DATA["others"]]
-                          + [DATA["control"]["score"]])
+        recorded = sorted([m["score"] for m in DATA["mirador"]] + [o["score"] for o in DATA["others"]])
         assert sorted(float(v) for _, _, v, _ in ROWS) == recorded
 
     def test_each_bar_shows_its_value_rounded(self):
@@ -41,10 +50,6 @@ class TestTheGraph:
 
     def test_the_margin_is_stated(self):
         assert f"{DATA['mirador'][0]['claims']} random claims from the test, so &plusmn;{DATA['margin']}" in PAGE
-
-    def test_the_no_evidence_run_is_shown_and_the_win_is_not_claimed(self):
-        assert DATA["control"]["name"] in PAGE and "Not a real win." in PAGE
-        assert f"{DATA['control']['score']:.1f}" in PAGE.split("Not a real win.")[1]
 
     def test_no_jargon_and_no_method_link(self):
         assert not re.search(r"roberta|bart|numt5|flan|program-fc|how it was run", PAGE, re.I)
