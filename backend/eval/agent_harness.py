@@ -67,7 +67,8 @@ def brief() -> str:
     tools = [{"name": t["name"], "description": t["description"], "input": t["input_schema"]["properties"],
               "required": t["input_schema"].get("required", [])} for t in finder._tools()]
     return json.dumps({"instructions": system, "task": finder._TASK["check"], "tools": tools,
-                       "max_tool_calls": MAX_CALLS}, indent=1, ensure_ascii=False)
+                       "max_tool_calls": MAX_CALLS,
+                       }, indent=1, ensure_ascii=False)
 
 
 async def call(path: str, tool: str, raw: str) -> str:
@@ -110,7 +111,8 @@ async def call(path: str, tool: str, raw: str) -> str:
     return text
 
 
-async def answer(path: str, figure: str, exact: bool, place: str, why: str) -> Dict[str, Any]:
+async def answer(path: str, figure: str, exact: bool, place: str, why: str, claim_figure: str = "",
+                 comparator: str = "", operation: str = "value", second: str = "") -> Dict[str, Any]:
     from claims.parser import parse_claim
     from evidence.datasets import finder
     from services import dataset_tier
@@ -120,6 +122,8 @@ async def answer(path: str, figure: str, exact: bool, place: str, why: str) -> D
     said = date.fromisoformat(data["said_on"]) if data.get("said_on") else None
     out: Dict[str, Any] = {"id": data.get("id"), "claim": text, "said_on": data.get("said_on"),
                            "figure": figure, "exact": exact, "place": place, "why": why[:200],
+                           "claim_figure": claim_figure, "comparator": comparator, "operation": operation,
+                           "second": second,
                            "tool_calls": len(data["log"]), "verdict": "No verdict", "reason": "", "official": None}
     plan = data["plans"].get(figure.strip().upper())
     if plan is None:
@@ -138,13 +142,19 @@ async def answer(path: str, figure: str, exact: bool, place: str, why: str) -> D
                 # written in when the day it was said gives one.
                 dated = as_said(text, said)
                 parsed = parse_claim(dated[0] if dated else text)
-                if parsed.claimed_value is None or parsed.is_trend_claim or parsed.has_unresolved_period:
-                    out["reason"] = "the service reads no single figure in the claim to compare"
+                reading = finder._reading({"claim_figure": claim_figure, "comparator": comparator,
+                                           "operation": operation})
+                other_plan = data["plans"].get(second.strip().upper()) if second else None
+                other = await finder.replay(other_plan, text) if other_plan else None
+                if reading["operation"] != "value" and other is None:
+                    out["reason"] = "an operation with no second figure"
                 else:
-                    found = finder.Found(dp, exact, why)
+                    found = finder.Found(dp, exact, why, second=other if reading["operation"] != "value" else None,
+                                         **reading)
                     result = dataset_tier.judge_found(text, parsed, found, time.monotonic())
                     if result is None:
-                        out["reason"] = "the figure was not accepted (not exact, wrong place or period, or no verdict)"
+                        out["reason"] = ("the figure was not accepted (not exact, the claim's figure not read, "
+                                         "figures that cannot be combined, wrong place or period, or no verdict)")
                     else:
                         r = to_response_dict(result)
                         out["verdict"], out["reason"] = r["verdict"], r.get("reason") or ""
@@ -169,6 +179,9 @@ def main() -> int:
     a.add_argument("session"); a.add_argument("figure")
     a.add_argument("--exact", choices=["true", "false"], default="false")
     a.add_argument("--place", default="United States"); a.add_argument("--why", default="")
+    a.add_argument("--claim-figure", default=""); a.add_argument("--second", default="")
+    a.add_argument("--comparator", choices=["equals", "greater than", "less than"], default="equals")
+    a.add_argument("--operation", default="value")
     args = ap.parse_args()
     if args.cmd == "keys":
         # Which sources this machine can reach. Names only, never a value.
@@ -184,7 +197,8 @@ def main() -> int:
     elif args.cmd == "call":
         print(asyncio.run(call(args.session, args.tool, args.input)))
     else:
-        print(json.dumps(asyncio.run(answer(args.session, args.figure, args.exact == "true", args.place, args.why)),
+        print(json.dumps(asyncio.run(answer(args.session, args.figure, args.exact == "true", args.place, args.why,
+                                            args.claim_figure, args.comparator, args.operation, args.second)),
                          indent=1, ensure_ascii=False))
     return 0
 
