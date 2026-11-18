@@ -123,3 +123,69 @@ class TestTheAnswerTool:
     def test_an_unknown_operation_or_comparator_is_dropped(self):
         got = _reading({"operation": "multiply", "comparator": "roughly", "claim_figure": "  $30,000  "})
         assert got == {"operation": "value", "comparator": "", "claim_figure": "$30,000"}
+
+
+class TestAFredSeriesForOnePlace:
+    """FRED records every series as national. Three state jobless-claims
+    answers and three Cushing oil prices, each exactly right, were refused as
+    "a national figure for a local question"."""
+
+    def fred(self, title):
+        dp = point(15718, "unknown", title, 2025, 2, metric="fred:X")
+        dp.extra["titled_place"] = title
+        return dp
+
+    @pytest.mark.parametrize("title, place", [
+        ("Initial Claims in Texas", "Texas"),
+        ("Initial Claims in California", "California"),
+        ("Crude Oil Prices: West Texas Intermediate (WTI) - Cushing, Oklahoma", "Cushing, OK"),
+    ])
+    def test_a_series_titled_for_the_place_is_that_places(self, title, place):
+        from evidence.datasets.finder import local_question_national_figure
+        assert local_question_national_figure(self.fred(title), place) is False
+
+    @pytest.mark.parametrize("title, place", [
+        ("Initial Claims", "Texas"), ("Unemployment Rate", "Austin, TX"),
+        ("Initial Claims in California", "Texas"),
+    ])
+    def test_a_national_or_another_places_series_is_still_refused(self, title, place):
+        from evidence.datasets.finder import local_question_national_figure
+        assert local_question_national_figure(self.fred(title), place) is True
+
+    def test_a_national_question_is_never_a_local_one(self):
+        from evidence.datasets.finder import local_question_national_figure
+        assert local_question_national_figure(self.fred("M2"), "United States") is False
+
+
+class TestAFredPeriod:
+    async def fetch(self, monkeypatch, frequency, **when):
+        from evidence.datasets import Candidate, fred
+        asked = {}
+
+        async def get(path, params):
+            if path == "series/observations":
+                asked.update(params)
+                return {"observations": [{"date": params.get("observation_end", "2025-03-10"), "value": "4.22"}]}
+            return {}
+
+        async def straight(kind, key, ttl, load):
+            return await load()
+        monkeypatch.setattr(fred, "_get", get)
+        monkeypatch.setattr(fred, "cached", straight)
+        c = Candidate(provider="fred", id="X", title="A series", units="Percent", frequency=frequency, detail="", meta={})
+        return await fred.fetch(c, when.get("year"), when.get("month"), "value",
+                                day=when.get("day"), quarter=when.get("quarter")), asked
+
+    async def test_one_day_of_a_daily_series_is_that_days_observation(self, monkeypatch):
+        dp, asked = await self.fetch(monkeypatch, "daily", year=2025, month=3, day=10)
+        assert asked["observation_end"] == "2025-03-10" and "aggregation_method" not in asked
+        assert dp.observed.record_date == "2025-03-10"
+
+    async def test_a_quarter_of_a_monthly_series_is_freds_quarterly_average(self, monkeypatch):
+        dp, asked = await self.fetch(monkeypatch, "monthly", year=2025, quarter=1)
+        assert asked["frequency"] == "q" and asked["observation_start"] == "2025-01-01"
+        assert dp.observed.quarter == 1 and dp.observed.basis == "quarterly average"
+
+    async def test_a_quarter_of_a_quarterly_series_is_read_as_published(self, monkeypatch):
+        dp, asked = await self.fetch(monkeypatch, "quarterly", year=2025, quarter=2)
+        assert "frequency" not in asked and asked["observation_start"] == "2025-04-01"
