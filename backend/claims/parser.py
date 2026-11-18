@@ -702,7 +702,7 @@ def _choose_metric(text: str, claimed: Optional[Quantity]) -> Optional[MetricSpe
 # and it was checked against the U.S. population. Only for these measures: a
 # subject in "Biden has added 15 million jobs" is a person, not a place.
 _PLACE_MEASURES = frozenset(("population", "median_household_income", "median_home_value",
-                             "median_gross_rent", "poverty_rate", "uninsured_rate",
+                             "median_gross_rent", "poverty_rate", "uninsured_rate", "insured_rate",
                              "bachelors_or_higher"))
 _NOT_SUBJECT_PLACE = frozenset("""
 it this that there here he she they we i you our my his her their its census

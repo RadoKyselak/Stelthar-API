@@ -54,6 +54,7 @@ _OTHER_MEASURE = {
     "poverty_rate": "an official poverty rate from the CPS ASEC, a different survey",
     "median_household_income": "a CPS ASEC estimate, a different survey",
     "uninsured_rate": "a CPS ASEC uninsured rate, a different survey",
+    "insured_rate": "a CPS ASEC coverage rate, a different survey",
 }
 
 def _moe_var(variable: str) -> Optional[str]:

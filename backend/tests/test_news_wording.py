@@ -165,3 +165,37 @@ class TestWhatRealStoriesShowed:
     def test_a_pair_of_months_is_not_a_place(self):
         got = parse_claim("The economy expanded at a 3.4% annual rate in the July-September quarter of 2026")
         assert got.geography is None
+
+
+class TestTheOtherSideOfAFigure:
+    """The Census Bureau's own release says "92.0% of the U.S. population had
+    health insurance coverage". Read as the uninsured rate, it was held
+    against 8.2% and marked Contradicted. Census publishes both shares."""
+
+    @pytest.mark.parametrize("claim", [
+        "Meanwhile, 92.0% of the U.S. population had health insurance coverage for all or part of 2024",
+        "About 92% of Texans have health insurance",
+        "Health insurance coverage reached 92% in 2023",
+        "92% of Americans were covered by health insurance in 2023",
+    ])
+    def test_people_with_coverage(self, claim):
+        got = parse_claim(claim)
+        assert got.metric.metric == "insured_rate" and got.metric.census_variable == "S2701_C03_001E"
+
+    @pytest.mark.parametrize("claim", [
+        "The uninsured rate was 8.2% in 2024",
+        "8% of Americans don't have health insurance",
+        "8% of Americans do not have health insurance",
+        "17% of Texans lack health insurance",
+        "8.2% of people were without health insurance coverage in 2024",
+        "8% of people had no health insurance coverage in 2024",
+    ])
+    def test_people_without_it(self, claim):
+        assert parse_claim(claim).metric.metric == "uninsured_rate"
+
+    def test_the_two_surveys_differ_by_tenths_not_by_points(self):
+        """A claim within a point of the figure may be quoting the other
+        survey; one that is five points off is not."""
+        from claims.metrics import BY_METRIC
+        spec = BY_METRIC["insured_rate"]
+        assert spec.alternate_measure and spec.alternate_band <= 0.02
