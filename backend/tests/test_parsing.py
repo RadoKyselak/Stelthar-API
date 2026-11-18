@@ -113,3 +113,65 @@ class TestApplyMultiplier:
     def test_invalid_multiplier(self):
         """Test with invalid multiplier."""
         assert _apply_multiplier(100, "invalid") == 100
+
+
+class TestYearsThatNameEvents:
+    """"GDP fell 3.7% following the 1973 oil crisis" is not about calendar 1973."""
+
+    @pytest.mark.parametrize("text", [
+        "GDP fell 3.7% following the 1973 oil crisis",
+        "Unemployment peaked at 10% after the 2008 financial crisis",
+        "The 2017 tax cuts added $1.9 trillion to the deficit",
+        "Following 2020, unemployment fell to 3.5%",
+    ])
+    def test_the_period_is_left_unresolved(self, text):
+        from claims.parser import parse_claim
+        p = parse_claim(text)
+        assert p.year is None and p.has_unresolved_period is True
+
+    @pytest.mark.parametrize("text,year", [
+        ("Unemployment was 9.3% in 2009 after the 2008 financial crisis", 2009),
+        ("Unemployment was 3.6% in 2023", 2023),
+        ("The unemployment rate hit 14.8% in April 2020 during the pandemic", 2020),
+    ])
+    def test_a_period_stated_plainly_still_counts(self, text, year):
+        from claims.parser import parse_claim
+        p = parse_claim(text)
+        assert p.year == year and p.has_unresolved_period is False
+
+
+class TestQualifiersTheSeriesCannotHonour:
+    @pytest.mark.parametrize("text,word", [
+        ("The unemployment rate of young African Americans was 28.2% in May 2013", "young"),
+        ("Manufacturing added 12,000 jobs in May 2024", "one industry"),
+        ("Professional and business services has added 269,000 jobs since October 2025", "one industry"),
+        ("The economy has added 15 million jobs since January 2021", "since a date"),
+    ])
+    def test_the_claim_is_declined_not_misread(self, text, word):
+        from claims.parser import parse_claim
+        assert word in parse_claim(text).structured_blocker
+
+    @pytest.mark.parametrize("text", [
+        "The economy added 3 million jobs in 2023",
+        "The unemployment rate for Black workers was 5.3% in 2023",
+    ])
+    def test_what_the_series_does_measure_is_untouched(self, text):
+        from claims.parser import parse_claim
+        assert parse_claim(text).structured_blocker == ""
+
+
+class TestAMonthWithoutItsYear:
+    def test_with_no_year_the_period_is_unresolved(self):
+        from claims.parser import parse_claim
+        p = parse_claim("The unemployment rate rose to 4.6% in November")
+        assert p.year is None and p.month is None and p.has_unresolved_period is True
+
+    def test_with_one_year_elsewhere_it_is_that_years_month(self):
+        from claims.parser import parse_claim
+        p = parse_claim("In 2025, the unemployment rate rose to 4.6% in November")
+        assert (p.year, p.month) == (2025, 11)
+
+    def test_may_the_verb_is_not_a_month(self):
+        from claims.parser import parse_claim
+        p = parse_claim("The unemployment rate may rise to 5% in 2027")
+        assert p.month is None

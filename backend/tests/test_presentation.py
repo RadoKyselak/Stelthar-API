@@ -291,3 +291,37 @@ class TestReadingAndSharing:
         from services.verify_v2 import VerificationV2
         d = build_display(VerificationV2(claim="x" * 700, verdict="No verdict", confidence="Low", headline="h"))
         assert d["reading"] == [] and d["share_url"] == ""      # too long to carry in a link
+
+
+Y2021 = [6.4, 6.2, 6.1, 6.1, 5.8, 5.9, 5.4, 5.1, 4.7, 4.5, 4.1, 3.9]      # averages 5.35
+# The year's average is read from the unadjusted series, a month from the adjusted one.
+US = {"LNS14000000": {2021: Y2021}, "LNU04000000": {2021: Y2021}}
+
+
+@pytest.mark.asyncio
+class TestReachedInTheYear:
+    """A figure a claim says was hit, reached or fallen to during a year is a
+    month's figure, not the year's average."""
+
+    async def test_fell_to_is_the_month_it_got_there(self):
+        v = await structured("The unemployment rate fell to 3.9% in 2021", US)
+        assert v.verdict == "Supported" and v.confidence == "Medium" and v.model_calls == 0
+        assert "December 2021" in v.headline and "average was" in v.headline
+        assert v.evidence[0]["period_label"] == "December 2021"
+        assert any("not the 2021 average" in c for c in v.caveats)
+
+    async def test_hit_finds_the_month_wherever_it_is(self):
+        v = await structured("Unemployment hit 6.4% in 2021", US)
+        assert v.verdict == "Supported" and v.evidence[0]["period_label"] == "January 2021"
+
+    async def test_a_level_never_reached_is_still_contradicted(self):
+        v = await structured("Unemployment hit 9% in 2021", US)
+        assert v.verdict == "Contradicted"
+
+    async def test_a_plain_statement_about_the_year_is_held_to_the_year(self):
+        v = await structured("Unemployment was 3.9% in 2021", US)
+        assert v.verdict == "Contradicted" and "December" not in v.headline
+
+    async def test_a_claim_that_matches_the_average_never_looks_at_months(self):
+        v = await structured("Unemployment fell to 5.4% in 2021", US)
+        assert v.verdict in ("Supported", "Mostly accurate") and v.evidence[0]["period_label"] == "2021"

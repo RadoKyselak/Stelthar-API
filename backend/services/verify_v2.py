@@ -665,6 +665,53 @@ async def _cps_income(parsed: ParsedClaim) -> Optional[Verdict]:
     return assess(parsed, [dp]) if dp is not None else None
 
 
+# Verbs that say a figure was arrived at, not averaged.
+_REACHED_RE = re.compile(
+    r"\b(?:hit|hits|hitting|reached|reaches|reaching|peaked|peaking|topped|"
+    r"(?:rose|risen|climbed|jumped|surged|soared|spiked|shot up|fell|fallen|dropped|declined|dipped|sank|slid|"
+    r"plunged|tumbled|eased|slowed|cooled|falling|rising|dropping|climbing)\s+to|"
+    r"bottomed(?: out)?|as (?:high|low) as|a (?:high|low|peak) of)\b", re.IGNORECASE)
+_MONTH_NAMES = ("January", "February", "March", "April", "May", "June", "July", "August", "September",
+                "October", "November", "December")
+
+
+async def _reached_in_year(parsed: ParsedClaim, base: Verdict) -> Optional[Verdict]:
+    """A claim that a monthly figure "hit", "reached" or "fell to" a level in a
+    year, which the year's average does not match.
+
+    "Unemployment fell to 3.9% in 2021" is true (December) though 2021
+    averaged 5.3%; "inflation hit 9.1% in 2022" is true (June) though the
+    year's rate was 8.0%. Held to the average, both came back Contradicted.
+    So each month of that year is read, newest first, and if one matches the
+    claim, that month is the answer, with the year's average stated beside it.
+    """
+    spec = parsed.metric
+    if (spec is None or spec.source != "BLS" or spec.bls_kind not in ("rate", "cpi_yoy", "price")
+            or parsed.year is None or parsed.month is not None or parsed.quarter is not None
+            or parsed.claimed_value is None or parsed.is_trend_claim or not base.evidence
+            or not _REACHED_RE.search(parsed.text)):
+        return None
+    average = base.evidence[0].display_value()
+    for month in range(12, 0, -1):
+        in_month = replace(parsed, month=month)
+        try:
+            got = await fetch_structured(in_month)
+        except SourceUnavailable:
+            return None
+        if not got:
+            continue                      # not published yet
+        v = assess(in_month, got)
+        if v.verdict == SUPPORTED:
+            when = f"{_MONTH_NAMES[month - 1]} {parsed.year}"
+            return replace(
+                v, confidence=MEDIUM,
+                headline=(f"{v.headline.rstrip('.')}. The claim says it reached that level in {parsed.year}; "
+                          f"the {parsed.year} average was {average}."),
+                caveats=list(v.caveats) + [f"Read as the level reached in {when}, not the {parsed.year} "
+                                           f"average ({average})."])
+    return None
+
+
 async def _with_record(text: str, parsed: ParsedClaim, v: Verdict):
     """A figure that also claims a record ("3.4%, the lowest since 1969"): the
     record is checked too, against every month in its window."""
@@ -836,6 +883,11 @@ async def _verify_one(claim: str, allow_grounding: bool = True,
                 first = await derived.first_print_match(parsed, base)
                 if first is not None:
                     base = first
+            if base.verdict in (MOSTLY_ACCURATE, CONTRADICTED):
+                # "Fell to 3.9% in 2021": a level reached that year, not its average.
+                reached = await _reached_in_year(parsed, base)
+                if reached is not None:
+                    base = reached
             if _alternate_measure_applies(parsed, base):
                 alt = await _cps_income(parsed)
                 if alt is not None and alt.verdict in (SUPPORTED, MOSTLY_ACCURATE):
