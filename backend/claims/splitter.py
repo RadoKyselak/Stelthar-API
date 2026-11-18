@@ -33,6 +33,7 @@ from typing import List, Optional, Tuple
 from claims.parser import (
     _MONTH_YEAR_RE, _PRESENT_TENSE_RE, _extract_fiscal_year, _extract_years, parse_claim,
 )
+from evidence.units import PERCENT, UNKNOWN, USD, parse_quantity
 
 STATISTIC = "statistic"   # names a series the free data covers
 RECORD = "record"         # a bill, an FDA or FTC action, a crime or health figure
@@ -106,13 +107,57 @@ def _has_figure(text: str) -> bool:
     return False
 
 
-def _kind(text: str) -> Optional[str]:
-    """What sort of claim a sentence is, or None when there is nothing to check."""
+# A clause that opens with one of these depends on another clause for its meaning.
+_SUBORDINATE = re.compile(r"(?:when|which|who|whose|where|as|after|before|since|because|although|though|if|"
+                          r"that|unless|until|once|whereby)\b", re.I)
+_YEARLIKE = re.compile(r"^(?:1\d{3}|20\d{2}|2100)$")
+_SCALE = re.compile(r"\b(?:hundred|thousand|million|billion|trillion|bn|tn|mn)\b|\dk\b", re.I)
+
+
+def _states_a_value(parsed, text: str) -> bool:
+    """Whether the figure the parser took from a sentence is really a value of
+    the measure it names.
+
+    A person who types one claim means its number. A sentence picked out of an
+    article may not: "the Panic of 1837 brought unprecedented unemployment"
+    names a measure and holds a number, and checking it as "unemployment was
+    1,837%" would stamp a verdict on something nobody said. So a sentence
+    counts only when its figure is written as that measure is written: a
+    percent sign for a rate, a dollar sign or a scale word for money, and
+    never a bare year or an ordinal ("10th-highest").
+    """
+    value, spec = parsed.claimed_value, parsed.metric
+    if value is None or spec is None:
+        return False
+    raw = (value.raw or "").strip()
+    number = re.search(r"\d[\d,]*(?:\.\d+)?", raw)
+    if not number:
+        return False
+    digits = number.group(0)
+    written = parse_quantity(raw)
+    unit = written.family if written is not None else UNKNOWN
+    if re.search(rf"(?<![\d.,$]){re.escape(digits)}(?:st|nd|rd|th)\b", text, re.I):
+        return False                                    # an ordinal, not a value
+    if unit == UNKNOWN and _YEARLIKE.match(digits) and not _SCALE.search(raw):
+        return False                                    # a year
+    if spec.family == PERCENT:
+        return unit == PERCENT
+    if spec.family == USD:
+        return unit == USD or bool(_SCALE.search(raw))
+    return unit in (UNKNOWN, spec.family)
+
+
+def _is_statistic(text: str) -> bool:
     try:
         parsed = parse_claim(text)
     except Exception:  # noqa: BLE001 — the parser never raises; stay safe if it ever does
-        parsed = None
-    if parsed is not None and parsed.metric is not None and parsed.claimed_value is not None:
+        return False
+    return _states_a_value(parsed, text)
+
+
+def _kind(text: str) -> Optional[str]:
+    """What sort of claim a sentence is, or None when there is nothing to check."""
+    if _is_statistic(text):
         return STATISTIC
     from services import derived, regulatory
     if derived.reads_as_computed(text):
@@ -137,8 +182,7 @@ def _clauses(text: str, base: int) -> List[Tuple[int, int]]:
 
 
 def _is_own_claim(clause: str) -> bool:
-    parsed = parse_claim(clause)
-    return parsed.metric is not None and parsed.claimed_value is not None
+    return _is_statistic(clause)
 
 
 def _shared_period(sentence: str) -> str:
@@ -166,6 +210,10 @@ def _split_sentence(text: str, a: int, b: int) -> List[ClaimSpan]:
     sentence = text[a:b]
     parts = _clauses(sentence, a)
     own = [(s, e) for s, e in parts if _is_own_claim(text[s:e])]
+    # "..., when GDP fell 3.7% following the oil crisis" hangs on the rest of
+    # its sentence: cut loose, it would be checked as a claim nobody made.
+    if any(_SUBORDINATE.match(text[s:e]) for s, e in own):
+        own = []
     if len(own) < 2:
         kind = _kind(sentence)
         return [ClaimSpan(sentence, sentence, a, b, kind)] if kind else []
@@ -200,15 +248,39 @@ def _split_sentence(text: str, a: int, b: int) -> List[ClaimSpan]:
     return spans
 
 
+def _one_figure_one_period(claim: str) -> bool:
+    """Whether a statistic is the kind one official figure settles: one value
+    for one period (or the two points of "from X in A to Y in B"), with no
+    qualifier the series cannot honour and no period named only by an event.
+    Anything else the engine would decline, which on a page is only noise."""
+    parsed = parse_claim(claim)
+    if parsed.structured_blocker or parsed.has_unresolved_period:
+        return False
+    # A page does not say when it was written: "unemployment is 3.5%" in a
+    # story from 2019 is not a claim about this month. Only a stated period
+    # can be checked.
+    if parsed.year is None:
+        return False
+    if parsed.is_trend_claim:
+        return len(parsed.all_years or []) == 2 and len(parsed.all_values or []) == 2
+    return True
+
+
 def split_claims(text: str, max_claims: int = 12,
-                 kinds: Tuple[str, ...] = (STATISTIC, RECORD, OTHER)) -> Tuple[List[ClaimSpan], bool]:
+                 kinds: Tuple[str, ...] = (STATISTIC, RECORD, OTHER),
+                 strict: bool = False) -> Tuple[List[ClaimSpan], bool]:
     """The checkable claims in `text`, in order, and whether more were found
-    than `max_claims` allows. `kinds` narrows what is kept: a page scan keeps
-    only what the free data can settle."""
+    than `max_claims` allows. `kinds` narrows what is kept. `strict` (a page
+    nobody picked the sentences of) also drops statistics that one official
+    figure cannot settle, so the few checks a request gets go to claims that
+    can end in a verdict."""
     text = text or ""
     found: List[ClaimSpan] = []
     for a, b in _sentences(text):
         for span in _split_sentence(text, a, b):
-            if span.kind in kinds:
-                found.append(span)
+            if span.kind not in kinds:
+                continue
+            if strict and span.kind == STATISTIC and not _one_figure_one_period(span.claim):
+                continue
+            found.append(span)
     return found[:max_claims], len(found) > max_claims

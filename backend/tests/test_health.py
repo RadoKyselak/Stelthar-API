@@ -196,3 +196,114 @@ async def test_http_errors_raise_source_unavailable(monkeypatch):
                         lambda **kw: real_client(transport=httpx.MockTransport(lambda r: httpx.Response(503)), **kw))
     with pytest.raises(SourceUnavailable):
         await _REAL_GET("xkb8-kh2a", {"$where": "year='2022'"})
+
+
+# ---------------------------------------------------------------- COVID-19, firearms, homicides
+# Rows copied from data.cdc.gov on 2026-11-17.
+TABLES.update({
+    "r8kw-7aab": [
+        {"group": "By Year", "year": "2020", "state": "United States", "covid_19_deaths": "385676",
+         "total_deaths": "3390079"},
+        {"group": "By Year", "year": "2021", "state": "United States", "covid_19_deaths": "463267",
+         "total_deaths": "3471742"},
+        {"group": "By Year", "year": "2021", "state": "Texas", "covid_19_deaths": "48787", "total_deaths": "271496"},
+        {"group": "By Year", "year": "2024", "state": "United States", "covid_19_deaths": "47540",
+         "total_deaths": "3082195"},
+        {"group": "By Week", "year": "2021", "state": "United States", "covid_19_deaths": "25000"},
+    ],
+    "t6u2-f84c": [
+        {"geoid": "USA", "intent": "FA_Deaths", "period": "2022-01-01T00:00:00.000", "count": "48204",
+         "rate": "14.50000000000000", "type": "year"},
+        {"geoid": "USA", "intent": "FA_Deaths", "period": "2022-06-01T00:00:00.000", "count": "4300", "type": "month"},
+        {"geoid": "USA", "intent": "FA_Suicide", "period": "2021-01-01T00:00:00.000", "count": "26328", "type": "year"},
+        {"geoid": "USA", "intent": "FA_Homicide", "period": "2021-01-01T00:00:00.000", "count": "20958", "type": "year"},
+        {"geoid": "USA", "intent": "All_Homicide", "period": "2021-01-01T00:00:00.000", "count": "26031",
+         "type": "year"},
+    ],
+    "fpsi-y8tj": [
+        {"geoid": "48", "name": "Texas", "intent": "FA_Homicide", "period": "2022", "count_sup": "1826"},
+        {"geoid": "48", "name": "Texas", "intent": "FA_Deaths", "period": "TTM", "count_sup": "4104"},
+        {"geoid": "50", "name": "Vermont", "intent": "FA_Homicide", "period": "2022", "count_sup": "Suppressed"},
+    ],
+})
+MONTHLY.update({("2020", "covid_19_underlying_cause"): ("351829", "12"),
+                ("2021", "covid_19_underlying_cause"): ("417869", "12")})
+
+
+async def test_covid_deaths_on_the_certificate(soda):
+    v = await _check("COVID-19 killed more than 385,000 Americans in 2020.")
+    assert v.verdict == SUPPORTED and v.confidence == MEDIUM
+    assert "385,676 deaths with COVID-19 on the death certificate in the U.S. in 2020" in v.headline
+    assert any("351,829 with COVID-19 as the underlying cause" in c for c in v.caveats)
+    assert v.evidence[0].source_url == "https://data.cdc.gov/d/r8kw-7aab"
+
+
+async def test_covid_deaths_as_the_underlying_cause_also_count(soda):
+    """CDC's "leading causes of death" figure: an official count, though the lower of the two."""
+    v = await _check("About 350,000 Americans died of COVID in 2020.")
+    assert v.verdict == SUPPORTED and "351,829 deaths with COVID-19 as the underlying cause" in v.headline
+
+
+async def test_covid_deaths_that_match_neither_count(soda):
+    v = await _check("COVID killed 600,000 Americans in 2021.")
+    assert v.verdict == CONTRADICTED and "463,267" in v.headline and "the claim says 600,000" in v.headline
+
+
+async def test_covid_deaths_in_a_state(soda):
+    v = await _check("Texas lost 48,787 people to COVID-19 in 2021.")
+    assert v.verdict == SUPPORTED and "in Texas in 2021" in v.headline
+    assert "state='Texas'" in soda[0][1]["$where"] and v.evidence[0].geography.name == "Texas"
+
+
+async def test_covid_year_with_one_published_count(soda):
+    v = await _check("COVID-19 killed 47,540 Americans in 2024.")
+    assert v.verdict == SUPPORTED and not any("underlying" in c for c in v.caveats)
+
+
+async def test_firearm_deaths_count_every_kind(soda):
+    v = await _check("More than 48,000 Americans died from gun violence in 2022.")
+    assert v.verdict == SUPPORTED and v.confidence == MEDIUM
+    assert v.headline == "CDC (death certificates): there were 48,204 firearm deaths in the U.S. in 2022."
+    assert any("suicides, homicides, accidents" in c for c in v.caveats)
+    assert "intent='FA_Deaths'" in soda[0][1]["$where"] and "type='year'" in soda[0][1]["$where"]
+
+
+async def test_gun_suicides_and_gun_homicides_are_their_own_counts(soda):
+    v = await _check("There were 26,328 gun suicides in 2021.")
+    assert v.verdict == SUPPORTED and "firearm suicides" in v.headline
+    v = await _check("Guns were used in 21,000 homicides in 2021.")
+    assert v.verdict == SUPPORTED and "20,958 firearm homicides" in v.headline
+    v = await _check("About 30,000 people were murdered with guns in 2021.")
+    assert v.verdict == CONTRADICTED and "firearm homicides" in v.headline
+
+
+async def test_state_gun_homicides(soda):
+    v = await _check("Texas had 1,826 gun homicides in 2022.")
+    assert v.verdict == SUPPORTED and "1,826 firearm homicides in Texas in 2022" in v.headline
+    assert soda[0][0] == "fpsi-y8tj" and "period='2022'" in soda[0][1]["$where"]
+
+
+async def test_a_suppressed_state_count_is_not_an_answer(soda):
+    assert await _check("Vermont had 12 gun homicides in 2022.") is None
+
+
+async def test_homicides_are_the_death_certificate_count(soda):
+    v = await _check("There were 26,031 homicides in 2021.")
+    assert v.verdict == SUPPORTED and "26,031 homicides in the U.S. in 2021" in v.headline
+    assert any("FBI" in c for c in v.caveats)
+
+
+@pytest.mark.parametrize("claim", [
+    "There were 19,000 murders in 2021.",                       # the FBI's count: services/crime.py
+    "Mass shootings killed 700 people in 2022.",
+    "School shootings killed 40 children in 2022.",
+    "Police shot and killed 1,100 people in 2022.",
+    "The gun death rate was 14.5 per 100,000 in 2022.",
+    "Gun deaths among children rose to 4,700 in 2021.",
+    "Guns killed 48,000 Americans in 2018.",                    # before the series starts
+    "COVID killed 20,000 Americans in 2026.",                   # a year still running
+    "COVID hospitalized 2 million Americans in 2021.",
+    "There were 26,000 gun suicides and homicides in 2021.",
+])
+async def test_claims_the_new_checks_leave_alone(soda, claim):
+    assert await _check(claim) is None

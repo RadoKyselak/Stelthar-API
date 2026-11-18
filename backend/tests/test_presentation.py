@@ -291,3 +291,81 @@ class TestReadingAndSharing:
         from services.verify_v2 import VerificationV2
         d = build_display(VerificationV2(claim="x" * 700, verdict="No verdict", confidence="Low", headline="h"))
         assert d["reading"] == [] and d["share_url"] == ""      # too long to carry in a link
+
+
+Y2021 = [6.4, 6.2, 6.1, 6.1, 5.8, 5.9, 5.4, 5.1, 4.7, 4.5, 4.1, 3.9]      # averages 5.35
+# The year's average is read from the unadjusted series, a month from the adjusted one.
+US = {"LNS14000000": {2021: Y2021}, "LNU04000000": {2021: Y2021}}
+
+
+@pytest.mark.asyncio
+class TestReachedInTheYear:
+    """A figure a claim says was hit, reached or fallen to during a year is a
+    month's figure, not the year's average."""
+
+    async def test_fell_to_is_the_month_it_got_there(self):
+        v = await structured("The unemployment rate fell to 3.9% in 2021", US)
+        assert v.verdict == "Supported" and v.confidence == "Medium" and v.model_calls == 0
+        assert "December 2021" in v.headline and "average was" in v.headline
+        assert v.evidence[0]["period_label"] == "December 2021"
+        assert any("not the 2021 average" in c for c in v.caveats)
+
+    async def test_hit_finds_the_month_wherever_it_is(self):
+        v = await structured("Unemployment hit 6.4% in 2021", US)
+        assert v.verdict == "Supported" and v.evidence[0]["period_label"] == "January 2021"
+
+    async def test_a_level_never_reached_is_still_contradicted(self):
+        v = await structured("Unemployment hit 9% in 2021", US)
+        assert v.verdict == "Contradicted"
+
+    async def test_a_plain_statement_about_the_year_is_held_to_the_year(self):
+        v = await structured("Unemployment was 3.9% in 2021", US)
+        assert v.verdict == "Contradicted" and "December" not in v.headline
+
+    async def test_a_claim_that_matches_the_average_never_looks_at_months(self):
+        v = await structured("Unemployment fell to 5.4% in 2021", US)
+        assert v.verdict in ("Supported", "Mostly accurate") and v.evidence[0]["period_label"] == "2021"
+
+
+AHE = "CES0500000003"
+# Average hourly earnings, all private employees, by month (dollars).
+PAY = {AHE: {2022: [31.63, 31.63, 31.83, 31.94, 32.06, 32.18, 32.33, 32.43, 32.52, 32.66, 32.80, 32.92],
+             2023: [33.02, 33.13, 33.25, 33.40, 33.51, 33.66, 33.80, 33.89, 34.01, 34.11, 34.25, 34.36]}}
+
+
+@pytest.mark.asyncio
+class TestWageGrowth:
+    """"Wages are up X%" is the 12-month change in average hourly earnings."""
+
+    async def test_a_month(self):
+        v = await structured("Wage growth was 4.4% in December 2023", PAY)
+        assert v.verdict == "Supported" and v.model_calls == 0          # (34.36 - 32.92) / 32.92 = 4.37%
+        e = v.evidence[0]
+        assert e["series_id"] == AHE and e["period_label"] == "December 2023"
+        assert "seasonally adjusted" in e["period_basis"] and "not seasonally" not in e["period_basis"]
+        rows = v.points[0]["excerpt"]["rows"]
+        assert rows[0]["label"] == "Average hourly earnings, Dec 2022" and rows[2]["cited"] is True
+
+    async def test_a_wrong_figure(self):
+        v = await structured("Wages rose 9% in December 2023", PAY)
+        assert v.verdict == "Contradicted"
+
+    async def test_wages_are_never_checked_against_prices(self):
+        v = await structured("Wages grew 4.4% in December 2023, beating inflation", PAY)
+        assert v.evidence[0]["metric"] == "wage_growth"
+
+    async def test_a_year_is_also_the_twelve_months_to_december(self):
+        """Both are official: the change in the annual average (4.5% here) and
+        December on December (4.4%), which is the one the release headlines."""
+        avg = await structured("Wages rose 4.5% in 2023", PAY)
+        assert avg.verdict == "Supported" and avg.evidence[0]["period_label"] == "2023"
+        dec = await structured("Wages rose 4.4% in 2023", PAY)
+        assert dec.verdict == "Supported" and dec.confidence == "Medium"
+        assert dec.evidence[0]["period_label"] == "December 2023"
+        assert "12 months to December 2023" in dec.headline and "annual average was" in dec.headline
+        neither = await structured("Wages rose 6% in 2023", PAY)
+        assert neither.verdict == "Contradicted"
+
+    async def test_real_wages_are_left_alone(self):
+        v = await structured("Real wages rose 2% in 2022", PAY)
+        assert v.verdict == "No verdict"

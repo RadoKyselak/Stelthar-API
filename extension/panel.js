@@ -114,7 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
     autosize(); // after the button hides, so the height fits the wider field
     window.scrollTo(0, 0); // the answer appears at the top, even if a recent item far down was clicked
     // A passage is always checked; only something short can be a lookup.
-    const wants = t.length > MAX_FIND_LEN ? "check" : (intent || View.intentOf(t));
+    const wants = t.length > MAX_FIND_LEN || View.isLink(t) ? "check" : (intent || View.intentOf(t));
     if (wants === "check") {
       const fit = fitPassage(t);
       check(fit.text, false, fit.cut);

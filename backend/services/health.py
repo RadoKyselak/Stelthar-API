@@ -13,6 +13,17 @@ data.cdc.gov, not web pages.
                    national, final counts 1999-2017 and provisional
                    counts for full years from 2020
 
+  COVID-19         "COVID killed 385,000 Americans in 2020"
+                   national or a state, finished years from 2020; CDC's two
+                   counts (on the certificate, and as the underlying cause)
+  firearms         "More than 48,000 Americans died from guns in 2022"
+                   "There were 26,000 gun suicides in 2021"
+                   "Texas had 1,826 gun homicides in 2022"
+                   all firearm deaths, firearm homicides or firearm suicides,
+                   national or a state, finished years from 2019
+  homicides        "There were 26,031 homicides in 2021" (death certificates;
+                   "murders" are the FBI's count, services/crime.py)
+
 The check reads one figure for one year. Rates per 100,000, subgroups
 (age, race), trends and years NCHS has not put on data.cdc.gov (life
 expectancy after 2020 nationally) return None, so the claim goes to search.
@@ -76,13 +87,22 @@ _OTHER = re.compile(
     r"rose|rise[sn]?|rising|fell|falls?|falling|fallen|increase[ds]?|decrease[ds]?|drop(?:ped|s)?|"
     r"declin\w+|jump\w*|surg\w+|spik\w+|soar\w*|plung\w+|doubl\w+|tripl\w+|highest|lowest|record|"
     r"since|compared|grew|growth|first half|so far|months?|weeks?|daily|a day|every)\b|%", re.I)
+_COVID = re.compile(r"\bCOVID(?:[- ]?19)?\b|\bcoronavirus\b", re.I)
+_GUN = re.compile(r"\bgun violence\b|\bguns?\b|\bfirearms?\b|\bgunshots?\b|\bgunfire\b|\bshootings?\b|"
+                  r"\bshot(?: and killed| to death| dead)?\b", re.I)
+_HOMICIDE = re.compile(r"\bhomicides?\b", re.I)
+_MURDER = re.compile(r"\bmurders?\b|\bmurdered\b", re.I)
+_SUICIDE = re.compile(r"\bsuicides?\b", re.I)
+# Gun deaths the death-certificate totals do not single out.
+_NOT_ALL_GUN_DEATHS = re.compile(r"\bmass\b|\bschools?\b|\bpolice\b|\bofficers?\b|\baccident\w*\b|"
+                                 r"\bunintentional\b|\bdomestic\b", re.I)
 _MALE = re.compile(r"\b(men|males?|boys)\b", re.I)
 _FEMALE = re.compile(r"\b(women|females?|girls)\b", re.I)
 
 
 @dataclass
 class Read:
-    kind: str          # "life_expectancy" | "overdose" | "cause"
+    kind: str          # "life_expectancy" | "overdose" | "cause" | "covid" | "injury"
     year: int
     figure: str
     place: str         # "United States" or a state name
@@ -93,13 +113,15 @@ class Read:
     what: str = ""     # how the measure reads in a headline
     note: str = ""     # a caveat the measure carries
     cause: str = ""
+    intent: str = ""   # for "injury": a key of cdc.INTENTS
 
 
 def _place(parsed, text: str):
     from evidence.sources.fbi_crime import STATE_ABBR
     geo = getattr(parsed, "geography", None)
     if geo is None:
-        return ("United States", "US", None) if unnamed_place(text) else None
+        # "COVID" and a sentence-opening "Guns" are capitalised like place names; they are not.
+        return ("United States", "US", None) if unnamed_place(_GUN.sub(" ", _COVID.sub(" ", text))) else None
     if geo.level == "nation":
         return "United States", "US", None
     if geo.level == "state" and geo.fips in STATE_ABBR:
@@ -119,8 +141,17 @@ def read(text: str, parsed=None) -> Optional[Read]:
         else:
             return None
     causes = [c for c in _CAUSES if re.search(c[1], text, re.I)]
+    covid = bool(_COVID.search(text))
+    gun = bool(_GUN.search(text))
+    # "Homicides" with no "murder" is the death-certificate count; the FBI's
+    # murders are services/crime.py's. With a gun word, either is ours.
+    homicide = bool(_HOMICIDE.search(text)) or (gun and bool(_MURDER.search(text)))
+    injury = gun or (bool(_HOMICIDE.search(text)) and not _MURDER.search(text))
+    if gun:
+        causes = [c for c in causes if c[0] != "suicide"]     # a gun suicide is counted under firearms
     kinds = [k for k, on in (("life_expectancy", le), ("overdose", od or (bool(drugs) and _DEATH.search(text))),
-                             ("cause", bool(causes) or bool(_ALL_DEATHS.search(text)))) if on]
+                             ("cause", bool(causes) or bool(_ALL_DEATHS.search(text))),
+                             ("covid", covid), ("injury", injury)) if on]
     if len(kinds) != 1:
         return None
     kind = kinds[0]
@@ -141,9 +172,22 @@ def read(text: str, parsed=None) -> Optional[Read]:
         sex = "Male" if male else "Female" if female else "Total"
         scrub = _MALE.sub(" ", _FEMALE.sub(" ", scrub))
         scrub = re.sub(r"\bat birth\b", " ", scrub, flags=re.I)
+    intent = ""
+    if kind == "covid":
+        scrub = _COVID.sub(" ", re.sub(r"\bthe pandemic\b", " ", scrub, flags=re.I))
+    if kind == "injury":
+        if _NOT_ALL_GUN_DEATHS.search(text):
+            return None
+        suicide = bool(_SUICIDE.search(text))
+        if homicide and suicide:
+            return None
+        intent = (("firearm_homicide" if homicide else "firearm_suicide" if suicide else "firearm") if gun
+                  else "homicide")
+        scrub = _GUN.sub(" ", scrub)
     if _OTHER.search(scrub):
         return None
-    figs = figures(text)
+    # The "19" of "COVID-19" is part of a name, not a figure the claim states.
+    figs = figures(_COVID.sub(lambda m: " " * len(m.group(0)), text))
     if len(figs) != 1:
         return None
     fig = figs[0].group(0).strip()
@@ -155,8 +199,20 @@ def read(text: str, parsed=None) -> Optional[Read]:
         if not 40 <= v <= 100:
             return None
         return Read(kind=kind, year=year, figure=fig, place=place, state=state, geography=geo, sex=sex)
-    if not _DEATH.search(text):
+    # "26,031 homicides" counts deaths without a word for dying.
+    counted_by_name = kind == "injury" and (homicide or bool(_SUICIDE.search(text)))
+    if not _DEATH.search(text) and not counted_by_name:
         return None
+    if kind == "covid":
+        if year < 2020:
+            return None
+        return Read(kind=kind, year=year, figure=fig, place=place, state=state, geography=geo,
+                    what="deaths involving COVID-19")
+    if kind == "injury":
+        what = {"firearm": "firearm deaths", "firearm_homicide": "firearm homicides",
+                "firearm_suicide": "firearm suicides", "homicide": "homicides"}[intent]
+        return Read(kind=kind, year=year, figure=fig, place=place, state=state, geography=geo,
+                    intent=intent, what=what)
     if kind == "overdose":
         if drugs:
             _, indicator, what, note = drugs[0]
@@ -262,11 +318,91 @@ async def _cause(r: Read, text: str, parsed) -> Optional[Verdict]:
     return replace(v, headline=head, confidence=HIGH if final and not v.caveats else MEDIUM)
 
 
+_PROVISIONAL = ("CDC's counts for recent years are provisional and are revised as death certificates arrive, "
+                "so a figure within 1.5% counts as a match.")
+
+
+async def _covid(r: Read, text: str, parsed) -> Optional[Verdict]:
+    d = await cdc.covid_deaths(r.year, r.place)
+    if not d:
+        return None
+    where = "" if r.state == "US" else f", {r.place}"
+
+    def point(value: float, label: str, dataset: str, series: str, rows):
+        dp = fact("CDC", f"{label}{where}", f"{int(value):,}", cdc.page(dataset), year=r.year, magnitude=value,
+                  family=PERSONS, basis="National Vital Statistics System, provisional death counts",
+                  series_id=series, rows=rows, units="deaths")
+        dp.extra["margin_of_error"] = 0.015 * value
+        dp.extra["caveat"] = _PROVISIONAL
+        return _with_place(dp, r)
+
+    involving, underlying = d["involving"], d.get("underlying")
+    rows = [ex_row(f"Deaths with COVID-19 on the death certificate, {r.year}", f"{int(involving):,}", cited=True)]
+    if underlying:
+        rows.append(ex_row(f"Deaths with COVID-19 as the underlying cause, {r.year}", f"{int(underlying):,}"))
+    v = figure_check(parsed, r.figure, point(involving, "Deaths involving COVID-19", cdc.COVID,
+                                             f"{cdc.COVID}/{r.place}", rows), text, PERSONS)
+    if v is None:
+        return None
+    matched, shown = "with COVID-19 on the death certificate", int(involving)
+    if v.verdict != "Supported" and underlying:
+        # The claim may quote CDC's other count: COVID-19 as the underlying cause.
+        rows2 = [ex_row(f"Deaths with COVID-19 as the underlying cause, {r.year}", f"{int(underlying):,}", cited=True),
+                 ex_row(f"Deaths with COVID-19 on the death certificate, {r.year}", f"{int(involving):,}")]
+        v2 = figure_check(parsed, r.figure, point(underlying, "Deaths from COVID-19 (underlying cause)",
+                                                  cdc.MONTHLY_PROVISIONAL, f"{cdc.MONTHLY_PROVISIONAL}/covid_19",
+                                                  rows2), text, PERSONS)
+        if v2 is not None and v2.verdict == "Supported":
+            v, matched, shown = v2, "with COVID-19 as the underlying cause", int(underlying)
+    place = "the U.S." if r.state == "US" else r.place
+    head = (f"CDC National Center for Health Statistics (provisional counts): {shown:,} deaths "
+            f"{matched} in {place} in {r.year}")
+    head += "." if v.verdict == "Supported" else f"; the claim says {r.figure}."
+    caveats = list(v.caveats)
+    if underlying:
+        caveats.append(f"CDC publishes two counts for {r.year}: {int(involving):,} deaths with COVID-19 on the "
+                       f"death certificate, and {int(underlying):,} with COVID-19 as the underlying cause.")
+    return replace(v, headline=head, caveats=caveats, confidence=MEDIUM)
+
+
+_INJURY_NOTES = {
+    "firearm": "CDC counts every death by firearm: suicides, homicides, accidents and those of undetermined intent.",
+    "homicide": ("This is CDC's count from death certificates. The FBI's count of murders reported by police "
+                 "is a different, lower figure."),
+    "firearm_homicide": "This is CDC's count from death certificates, not the FBI's count of murders.",
+}
+
+
+async def _injury(r: Read, text: str, parsed) -> Optional[Verdict]:
+    d = await cdc.injury_deaths(r.year, r.intent, None if r.state == "US" else r.place)
+    if not d:
+        return None
+    value = float(d["deaths"])
+    shown = f"{int(value):,}"
+    where = "" if r.state == "US" else f", {r.place}"
+    dp = fact("CDC", f"{r.what.capitalize()}{where}", shown, cdc.page(d["dataset"]), year=r.year, magnitude=value,
+              family=PERSONS, basis="National Vital Statistics System death certificates (CDC, Mapping Injury, "
+                                    "Overdose, and Violence)",
+              series_id=f"{d['dataset']}/{cdc.INTENTS[r.intent]}",
+              rows=[ex_row(f"{r.what.capitalize()}{where}, {r.year}", shown, cited=True)], units="deaths")
+    dp.extra["margin_of_error"] = 0.015 * value
+    dp.extra["caveat"] = _PROVISIONAL
+    v = figure_check(parsed, r.figure, _with_place(dp, r), text, PERSONS)
+    if v is None:
+        return None
+    place = "the U.S." if r.state == "US" else r.place
+    head = f"CDC (death certificates): there were {shown} {r.what} in {place} in {r.year}"
+    head += "." if v.verdict == "Supported" else f"; the claim says {r.figure}."
+    note = _INJURY_NOTES.get(r.intent)
+    return replace(v, headline=head, caveats=list(v.caveats) + ([note] if note else []), confidence=MEDIUM)
+
+
 async def check(text: str, parsed) -> Optional[Verdict]:
     r = read(text, parsed)
     if r is None:
         return None
-    run = {"life_expectancy": _life_expectancy, "overdose": _overdose, "cause": _cause}[r.kind]
+    run = {"life_expectancy": _life_expectancy, "overdose": _overdose, "cause": _cause,
+           "covid": _covid, "injury": _injury}[r.kind]
     try:
         return await run(r, text, parsed)
     except SourceUnavailable as e:

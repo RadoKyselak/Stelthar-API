@@ -36,7 +36,17 @@ def run_panel(expr: str):
 
 class TestBackground:
     def test_a_check_goes_to_the_passage_endpoint(self):
-        assert "`${API}/v2/check`" in BG and "postJSON(CHECK_URL, { text }" in BG
+        assert "`${API}/v2/check`" in BG
+        assert "postJSON(CHECK_URL, link ? { url: text.trim() } : { text }" in BG
+
+    def test_a_pasted_link_is_sent_as_a_page_to_fetch(self):
+        check = BG[BG.index("async function checkText"):BG.index("const checkDeeper")]
+        assert "const link = /^https?:" in check
+        # An older server cannot fetch a page: say so, never check the address as if it were a claim.
+        assert check.index("if (link) throw new Error") < check.index("postJSON(LEGACY_URL")
+
+    def test_a_reason_written_for_the_person_is_shown_as_written(self):
+        assert "resp.status === 400 && detail ? detail" in BG
 
     def test_it_falls_back_when_the_server_has_no_passage_endpoint(self):
         """Rolling the feature back on the server must not break 2.2 clients."""
@@ -63,6 +73,17 @@ class TestBackground:
 
     def test_version(self):
         assert json.loads((EXT / "manifest.json").read_text())["version"] == "2.2.0"
+
+
+@node
+def test_which_text_is_a_link():
+    view = EXT / "result-view.js"
+    cases = ["https://example.gov/release", " http://example.gov/a?b=1 ", "See https://example.gov/release",
+             "Unemployment was 3.6% in 2023", "javascript:alert(1)", "https://example.gov/a https://example.gov/b"]
+    script = ("global.window = {};" f"require({json.dumps(str(view))});"
+              f"console.log(JSON.stringify({json.dumps(cases)}.map((c) => window.MiradorView.isLink(c))));")
+    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    assert json.loads(out.stdout) == [True, True, False, False, False, False]
 
 
 @node

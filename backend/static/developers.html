@@ -41,6 +41,9 @@
       <li><code>deeper</code>: true when agency data did not settle a claim and the full check might. Send that
         claim to <code>/v2/verify</code>.</li>
       <li><code>"mode": "page"</code> keeps only the claims agency data can settle.</li>
+      <li><code>{"url": "https://..."}</code> in place of <code>text</code> fetches that public page and checks
+        it as a page; the answer adds <code>page</code> (address, site, title). Sites that refuse automated
+        readers answer <code>400</code> with the reason. Video and social media pages are not read.</li>
     </ul>
     <p>One claim in the text gets the full check. Two or more are checked on agency data only.</p>
 
@@ -68,7 +71,8 @@
     <h2>For assistants</h2>
     <p><code>POST /mcp</code> speaks the Model Context Protocol (streamable HTTP), so an assistant that supports
       it can check claims and look up figures as tools. It offers <code>check_text</code>,
-      <code>check_claim</code> and <code>find_figure</code>, all answered from agency data only.</p>
+      <code>check_page</code>, <code>check_claim</code> and <code>find_figure</code>, all answered from agency
+      data only.</p>
 
     <h2>Limits and fair use</h2>
     <ul>

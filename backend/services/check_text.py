@@ -16,6 +16,12 @@ What it costs is decided here, and it is nothing:
     with `deeper` set, and the client offers the full check for that one claim
     on request. The person asks for the paid step; it never runs by itself.
 
+A page (`mode="page"`: a page scan, or a page fetched by its address) is text
+nobody picked sentence by sentence. It is held to a stricter standard: only
+statistics that one official figure can settle are checked, and only those
+that end in a verdict are listed. The rest are reported as a count
+(`unsettled`), not as rows of "Can't verify" about sentences nobody asked about.
+
 Nothing here reaches a verdict. Each claim's answer is the engine's own.
 """
 import asyncio
@@ -24,7 +30,7 @@ from typing import Any, Dict, List, Optional
 
 import config
 from claims import splitter
-from claims.verdict import NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE
+from claims.verdict import LOW, NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE
 from config import logger
 from services.verify_v2 import VerificationV2, to_response_dict, verify
 
@@ -80,7 +86,7 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
         kinds = (splitter.STATISTIC, splitter.RECORD) if page else (
             splitter.STATISTIC, splitter.RECORD, splitter.OTHER)
         try:
-            spans, truncated = splitter.split_claims(text, config.CHECK_MAX_CLAIMS, kinds)
+            spans, truncated = splitter.split_claims(text, config.CHECK_MAX_CLAIMS, kinds, strict=page)
         except Exception:  # noqa: BLE001 — a splitter bug must not take the check down
             logger.exception("Splitting failed for %r", text[:120])
             spans, truncated = [], False
@@ -104,14 +110,31 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
         gate = asyncio.Semaphore(config.CHECK_CONCURRENCY)
 
         async def one(span: splitter.ClaimSpan) -> VerificationV2:
+            if span.kind == splitter.OTHER:
+                # A figure, but no measure the free data covers was read from
+                # it with confidence. The engine is not asked: whatever it
+                # made of the sentence would be a guess with a verdict on it.
+                return VerificationV2(
+                    claim=span.claim, verdict=NO_VERDICT, confidence=LOW, reason=NO_SERIES,
+                    headline="None of the official data series we check covers this claim.")
             async with gate:
                 return await verify(span.claim, allow_grounding=False, client_ip=client_ip)
 
         results = await asyncio.gather(*(one(s) for s in spans))
         entries = [_entry(i, s, v, _could_go_deeper(v)) for i, (s, v) in enumerate(zip(spans, results))]
 
+    unsettled = 0
+    if page:
+        # Nobody chose these sentences, so one that ended without a verdict is
+        # not an answer to anything: it is counted, not listed.
+        settled = [e for e in entries
+                   if e["result"]["display"]["verdict"]["key"] not in ("no-verdict", "unavailable")]
+        unsettled = len(entries) - len(settled)
+        entries = [dict(e, index=i) for i, e in enumerate(settled)]
+
     return {
         "mode": PAGE if page else TEXT,
+        "unsettled": unsettled,
         "claims": entries,
         "count": len(entries),
         "tally": _tally(entries),

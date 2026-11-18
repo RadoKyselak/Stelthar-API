@@ -119,6 +119,7 @@ body:not(:has(#out:not(:empty))) .main { flex: none; padding-bottom: 0; }
 .out .mv-linkbtn { font: 500 14px var(--sans); color: var(--ink); text-decoration: underline;
   text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .out .mv-tally-h { font: 500 28px/1.2 var(--sans); letter-spacing: -.01em; }
+.out .mv-page { margin-top: 6px; font: 500 15px/1.5 var(--sans); color: var(--meta); }
 .out .mv-tally-l { margin-top: 12px; gap: 8px 22px; }
 .out .mv-tally-l li { font: 500 16px/1.4 var(--sans); }
 .out .mv-tally-l li::before, .out .mv-claim-v::before { width: 9px; height: 9px; }

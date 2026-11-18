@@ -77,6 +77,16 @@ class TestWhatThePagesPromise:
         assert set(derived._FIRST_PRINT) == {"unemployment_rate", "real_gdp_growth"}
         assert "the unemployment rate and for real GDP growth" in page("methodology.html")
 
+    def test_the_test_run_on_the_method_page_is_the_one_on_file(self):
+        """The score stated on the site, held to the committed results of that run."""
+        import json
+        run = json.loads((BACKEND / "eval" / "results" / "2026-11-17.json").read_text())
+        declined = sum(1 for o in run["outcomes"] if o["expected"] == "No verdict" and o["correct"])
+        assert run["degraded"] == 0 and run["model_calls"] == 0 and run["accuracy"] is not None
+        text = page("methodology.html")
+        assert (f"on November 17, 2026, checked {run['claims']} claims: {run['correct']} were answered "
+                f"correctly, {declined} of them by rightly declining, and no model was called") in text
+
     def test_the_home_page_names_as_many_sources_as_the_about_page_lists(self):
         """"...the Treasury and ten more": three named plus ten."""
         answer = re.search(r"<h3>Where do the answers come from\?</h3> <p>.*?not from web pages: (.*?)</p>",
@@ -87,4 +97,5 @@ class TestWhatThePagesPromise:
 
     def test_the_home_page_examples_are_claims_not_lookups(self, test_client):
         app = (STATIC / "app.js").read_text()
-        assert "V.examples.concat" in app and 'postJSON("/v2/check", { text })' in app
+        assert "V.examples.concat" in app
+        assert 'postJSON("/v2/check", V.isLink(text) ? { url: text } : { text })' in app

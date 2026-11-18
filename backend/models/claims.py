@@ -1,6 +1,6 @@
-from typing import Literal, List, Dict, Any
+from typing import Literal, List, Dict, Any, Optional
 from typing_extensions import TypedDict
-from pydantic import BaseModel, field_validator, Field, ConfigDict
+from pydantic import BaseModel, field_validator, Field, ConfigDict, model_validator
 
 ClaimType = Literal[
     "Economic",
@@ -46,21 +46,32 @@ class LookupRequest(BaseModel):
 
 
 class CheckRequest(BaseModel):
-    """Request body for /v2/check: a passage, every claim in it checked."""
+    """Request body for /v2/check: a passage, or the address of a page, every
+    claim in it checked. Exactly one of `text` and `url`."""
     # The cap in characters is config.CHECK_MAX_CHARS, applied in the validator
     # so it can be changed without a deploy; 12,000 is its ceiling.
-    text: str = Field(..., min_length=3, max_length=12000)
+    text: Optional[str] = Field(None, min_length=3, max_length=12000)
+    # A page to fetch and check instead (services/check_link.py).
+    url: Optional[str] = Field(None, min_length=8, max_length=2000)
     # "text": something a person pasted. "page": a page scan, which keeps only
-    # the claims free government data can settle.
+    # the claims free government data can settle. A `url` is always a page.
     mode: str = Field("text", pattern="^(text|page)$")
 
     @field_validator('text')
     @classmethod
     def sanitize_text(cls, v):
+        if v is None:
+            return v
         import config
         from utils.validation import InputValidator
 
         return InputValidator.sanitize_passage(v, config.CHECK_MAX_CHARS)
+
+    @model_validator(mode='after')
+    def one_of_text_or_url(self):
+        if (self.text is None) == (self.url is None):
+            raise ValueError("Send either text or url, not both.")
+        return self
 
 
 class VerifyRequest(BaseModel):

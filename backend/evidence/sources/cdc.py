@@ -16,8 +16,18 @@ key needed).
   9dzk-mvmi  Monthly Provisional Counts of Deaths by Select Causes, 2020-2023:
              year, month, jurisdiction_of_occurrence, one column per cause
 
+  r8kw-7aab  Provisional COVID-19 Death Counts by Week Ending Date and State:
+             group ("By Year"), year, state ("United States", "Texas"),
+             covid_19_deaths (deaths with COVID-19 on the death certificate)
+  t6u2-f84c  Mapping Injury, Overdose, and Violence - National: intent
+             ("FA_Deaths", "FA_Homicide", "FA_Suicide", "All_Homicide",
+             "All_Suicide"), type ("year"), period ("2022-01-01T00:00:00.000"),
+             count
+  fpsi-y8tj  the same by state: name ("Texas"), period ("2022"), count_sup
+
 Answers are cached for a week; NCHS revises provisional counts monthly.
 """
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -183,3 +193,75 @@ async def cause_deaths(year: int, cause: str) -> Optional[Dict[str, Any]]:
             return None  # a year still being published
         return {"deaths": v, "year": year, "cause": cause, "final": False, "dataset": MONTHLY_PROVISIONAL}
     return None
+
+
+def _year_is_over(year: int) -> bool:
+    """A count for a year still running is not that year's count."""
+    return year < datetime.now(timezone.utc).year
+
+
+# ------------------------------------------------------------------ COVID-19
+
+COVID = "r8kw-7aab"
+
+
+async def covid_deaths(year: int, place: str = "United States") -> Optional[Dict[str, Any]]:
+    """{involving, underlying?, year, dataset} for a finished year from 2020.
+
+    CDC publishes two official counts. `involving`: COVID-19 anywhere on the
+    death certificate (385,676 in 2020). `underlying`: COVID-19 as the cause
+    that started the chain (351,829 in 2020), which is the figure in "leading
+    causes of death". A claim may quote either, so both come back where the
+    second is on data.cdc.gov (the United States, 2020-2022)."""
+    if year < 2020 or not _year_is_over(year):
+        return None
+    rows = await _rows("cdc_covid", COVID, {
+        "$where": f"`group`={_q('By Year')} AND state={_q(place)} AND year={_q(year)}"})
+    involving = _num(rows[0].get("covid_19_deaths")) if rows else None
+    if involving is None:
+        return None
+    out: Dict[str, Any] = {"involving": involving, "year": year, "dataset": COVID}
+    if place == "United States":
+        more = await _rows("cdc_causes", MONTHLY_PROVISIONAL, {
+            "$select": "sum(covid_19_underlying_cause) AS deaths, count(*) AS months",
+            "$where": f"year={_q(year)} AND jurisdiction_of_occurrence={_q('United States')}"})
+        if more and _num(more[0].get("months")) == 12 and _num(more[0].get("deaths")):
+            out["underlying"] = _num(more[0].get("deaths"))
+    return out
+
+
+# ------------------------------------------------------------------ firearms, homicide, suicide
+
+INJURY_US = "t6u2-f84c"
+INJURY_STATE = "fpsi-y8tj"
+# what a claim counts: the dataset's name for it
+INTENTS = {
+    "firearm": "FA_Deaths",
+    "firearm_homicide": "FA_Homicide",
+    "firearm_suicide": "FA_Suicide",
+    "homicide": "All_Homicide",
+    "suicide": "All_Suicide",
+}
+
+
+async def injury_deaths(year: int, kind: str, state_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """{deaths, year, kind, dataset} from CDC's injury and violence counts
+    (death certificates), for the United States or one state, for a finished
+    year from 2019. None when the year or place is not published, or the
+    state's count is suppressed for being small."""
+    if year < 2019 or not _year_is_over(year):
+        return None
+    intent = INTENTS[kind]
+    if state_name:
+        rows = await _rows("cdc_injury", INJURY_STATE, {
+            "$where": f"name={_q(state_name)} AND intent={_q(intent)} AND period={_q(year)}"})
+        value = _num(rows[0].get("count_sup")) if rows else None
+        dataset = INJURY_STATE
+    else:
+        rows = await _rows("cdc_injury", INJURY_US, {
+            "$where": f"type={_q('year')} AND intent={_q(intent)} AND period={_q(f'{year}-01-01T00:00:00.000')}"})
+        value = _num(rows[0].get("count")) if rows else None
+        dataset = INJURY_US
+    if value is None:
+        return None
+    return {"deaths": value, "year": year, "kind": kind, "dataset": dataset}

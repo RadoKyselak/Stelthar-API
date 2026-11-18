@@ -52,6 +52,10 @@ _FY_RE = re.compile(r"\b(?:fy|fiscal\s+year)\s*(\d{4})\b|\bfy(\d{2})\b", re.IGNO
 _MONTH_YEAR_RE = re.compile(
     r"\b(" + "|".join(_MONTHS) + r")\s+(\d{4})\b", re.IGNORECASE
 )
+# A month name after a preposition, capitalised ("in May", never "may").
+_BARE_MONTH_RE = re.compile(
+    r"\b(?:in|during|for|by|through|of)\s+(January|February|March|April|May|June|July|August|September|"
+    r"October|November|December)\b(?!\s*,?\s*(?:of\s+)?\d{4})")
 # Bill designators and other numerals that look like years but are not.
 _NON_YEAR_CONTEXT_RE = re.compile(
     r"(?:h\.\s?r\.|h\.\s?res\.|s\.\s?res\.|s\.|bill|section|§|act of)\s*\d{0,4}$",
@@ -100,6 +104,28 @@ _RELATIVE_PERIOD_RE = re.compile(
 )
 
 
+# A year that names an event, not the period a figure is for: "GDP fell 3.7%
+# following the 1973 oil crisis" is not a claim about calendar 1973 (when GDP
+# grew 5.6%), and reading it as one stamps "Contradicted" on a true sentence.
+_EVENT_NOUNS = (r"crisis|crises|recession|crash|panic|pandemic|election|tax cuts?|stimulus|shutdown|war|attacks?|"
+                r"bailout|embargo|downturn|collapse|bubble|depression|act|law|reforms?|strike|hurricane|earthquake")
+_EVENT_YEAR_RE = re.compile(
+    rf"\bthe\s+((?:19|20)\d\d)(?:[-\u2013]\d{{2,4}})?\s+(?:[A-Za-z-]+\s+){{0,2}}(?:{_EVENT_NOUNS})\b"
+    r"|\b(?:following|in the wake of|in the aftermath of|as a result of)\s+(?:the\s+)?(?:[A-Za-z-]+\s+){0,3}?"
+    r"((?:19|20)\d\d)\b",
+    re.IGNORECASE)
+
+
+def _event_years(text: str) -> List[int]:
+    """Years used as the name of an event rather than as a period."""
+    out: List[int] = []
+    for m in _EVENT_YEAR_RE.finditer(text):
+        y = int(m.group(1) or m.group(2))
+        if y not in out:
+            out.append(y)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Qualifiers the structured series cannot honour.
 #
@@ -117,7 +143,8 @@ _SUBGROUP_RE = re.compile(
     r"\b(?:black|white(?!\s+house)|hispanic|latin[oax]s?|latine|asian|african[- ]americans?|"
     r"native americans?|american indians?|indigenous|pacific islanders?|multiracial|"
     r"women|men|female|male|mothers|fathers|single (?:mothers|parents|women|men)|"
-    r"children|child|kids|teens?|teenagers?|youth|young (?:people|adults|workers|men|women)|"
+    r"children|child|kids|teens?|teenagers?|teenage|youth|young(?:er)?|prime[- ]age|working[- ]age|"
+    r"college[- ](?:educated|graduates?)|graduates|dropouts|long[- ]term|full[- ]time|part[- ]time|"
     r"seniors|elderly|older (?:americans|adults|workers)|retirees|veterans|"
     r"immigrants?|foreign[- ]born|native[- ]born|non[- ]citizens?|"
     r"rural|urban|disabled|people with disabilities|households headed by|"
@@ -251,6 +278,19 @@ _INCOME_BAND_RE = re.compile(
     r"|\b\d{2,3}\s?(?:%|percent) of (?:the )?(?:area )?median\b",
     re.IGNORECASE)
 _INCOME_METRICS = ("median_household_income", "personal_income")
+_JOBS_METRICS = ("jobs_added", "nonfarm_employment")
+# The sectors the jobs report breaks employment into.
+_SECTOR_RE = re.compile(
+    r"\b(?:manufacturing|construction|health ?care|hospitals?|leisure and hospitality|hospitality|restaurants?|"
+    r"retail(?: trade)?|wholesale(?: trade)?|mining|logging|oil and gas|professional and business services|"
+    r"business services|financial activities|finance|information sector|tech(?:nology)? (?:sector|industry|jobs)|"
+    r"transportation and warehousing|warehousing|utilities|private education|education and health services|"
+    r"social assistance|government (?:employment|jobs|payrolls)|federal (?:government )?(?:employment|jobs|workers)|"
+    r"state government|local government|temporary help|factory|factories|auto(?:motive)? (?:industry|sector|jobs)|"
+    r"clean energy|energy (?:sector|industry|jobs)|coal)\b", re.IGNORECASE)
+_SINCE_DATE_RE = re.compile(
+    r"\bsince\s+(?:a\s+|the\s+|its\s+)?(?:[a-z-]+\s+){0,4}?(?:in\s+)?(?:(?:" + "|".join(_MONTHS) + r")\s+)?"
+    r"(?:19|20)\d\d\b", re.IGNORECASE)
 
 
 def income_band(text: str) -> str:
@@ -299,6 +339,20 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
                 continue  # "inflation in the Chicago area": a place, not a kind of price
             return (f"the claim is about one category of prices (\u201c{m.group(0).strip()}\u201d), "
                     f"not overall consumer inflation")
+    if spec.metric in _JOBS_METRICS:
+        m = _SECTOR_RE.search(text)
+        if m:
+            return (f"the claim is about one industry (\u201c{m.group(0).strip()}\u201d), not total "
+                    f"nonfarm employment")
+        if _SINCE_DATE_RE.search(text):
+            return "the claim counts a change since a date; the series gives one month or one year"
+    if spec.metric == "wage_growth":
+        if _REAL_DOLLARS_RE.search(text) or re.search(r"\breal\b|\bafter inflation\b|\bpurchasing power\b", text, re.I):
+            return "the claim is about wages after inflation; the series is in current dollars"
+        if _SINCE_DATE_RE.search(text):
+            return "the claim counts a change since a date; the series gives a 12-month change"
+        if re.search(r"\b(median|minimum|weekly|annual|salar(?:y|ies))\b", text, re.I):
+            return "the claim is about a different measure of pay; the series is average hourly earnings"
     if spec.family == _units.USD and _REAL_DOLLARS_RE.search(text):
         return "the claim is inflation-adjusted; the series is in current dollars"
     if spec.metric == "real_gdp_growth" and _NOMINAL_RE.search(text):
@@ -553,11 +607,26 @@ def parse_claim(text: str) -> ParsedClaim:
 
     fiscal_year = _extract_fiscal_year(raw)
     years = _extract_years(raw)
+    # A year that only names an event ("the 1973 oil crisis") dates nothing.
+    events = _event_years(raw)
+    dated_by_event = bool(events) and all(y in events for y in years)
+    years = [y for y in years if y not in events] if events else years
     present = False
     month = None
     mm = _MONTH_YEAR_RE.search(raw)
     if mm:
         month = _MONTHS.get(mm.group(1).lower())
+    # "rose to 4.6% in November": a month with no year beside it. With one
+    # year elsewhere in the claim it is that year's November; with none, the
+    # period cannot be pinned down (a news story means "this November").
+    dated_by_month = False
+    if mm is None:
+        bare = _BARE_MONTH_RE.search(raw)
+        if bare:
+            if len(years) == 1 and fiscal_year is None:
+                month = _MONTHS.get(bare.group(1).lower())
+            elif not years:
+                dated_by_month = True
 
     if fiscal_year is not None:
         year, basis = fiscal_year, "fiscal"
@@ -579,7 +648,8 @@ def parse_claim(text: str) -> ParsedClaim:
     # Age bounds that define a universe ("adults 25 and older", "ages 16+")
     # are not claimed values; left in, they made a one-number claim look like
     # a two-number trend claim.
-    value_text = _AGE_BOUND_RE.sub(" ", _strip_years_for_value(raw, years))
+    # An event's year is still a year, not a second figure.
+    value_text = _AGE_BOUND_RE.sub(" ", _strip_years_for_value(raw, years + events))
     # "30-year mortgage", "a 40-year high", "the lowest in 54 years" name spans,
     # not claimed values. A superlative is said to be unchecked, never ignored.
     superlative = _SUPERLATIVE_RE.search(value_text)
@@ -628,7 +698,7 @@ def parse_claim(text: str) -> ParsedClaim:
         geography = _subject_place(raw)
 
     all_values = _all_quantities(value_text)
-    has_unresolved = bool(_RELATIVE_PERIOD_RE.search(raw)) and year is None
+    has_unresolved = (bool(_RELATIVE_PERIOD_RE.search(raw)) or dated_by_event or dated_by_month) and year is None
 
     if quarter is not None and quarter_year:
         year, basis = quarter_year, "calendar"

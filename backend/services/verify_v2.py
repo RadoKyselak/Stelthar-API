@@ -30,7 +30,8 @@ from claims.metrics import MetricSpec
 from claims.parser import ParsedClaim, parse_claim
 from claims.verdict import (
     ALTERNATE_MEASURE, GEOGRAPHY_UNSUPPORTED, HIGH, LOW, MEDIUM, MISLEADING, MOSTLY_ACCURATE,
-    NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, Verdict, assess,
+    NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, UNSURE_READING, Verdict,
+    assess,
     _phrase_for,
 )
 import config
@@ -123,7 +124,8 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
                 if latest:
                     obs = latest[0].observed
                     got = await bls_source.fetch_latest_inflation(
-                        spec.metric, spec.label, spec.series_id, obs.year, obs.month)
+                        spec.metric, spec.label, spec.series_id, obs.year, obs.month,
+                        noun=spec.yoy_noun, adjustment=spec.yoy_adjustment)
                     if got:
                         return got
             elif spec.bls_kind == "rate":
@@ -139,7 +141,8 @@ async def fetch_structured(parsed: ParsedClaim) -> List[Datapoint]:
             year = datetime.now(timezone.utc).year - 1
         if spec.bls_kind == "cpi_yoy":
             return await bls_source.fetch_inflation(
-                spec.metric, spec.label, spec.series_id, year, month=parsed.month
+                spec.metric, spec.label, spec.series_id, year, month=parsed.month,
+                noun=spec.yoy_noun, adjustment=spec.yoy_adjustment,
             )
         if parsed.month is not None:
             return await bls_source.fetch_monthly(
@@ -664,6 +667,68 @@ async def _cps_income(parsed: ParsedClaim) -> Optional[Verdict]:
     return assess(parsed, [dp]) if dp is not None else None
 
 
+# Verbs that say a figure was arrived at, not averaged.
+_REACHED_RE = re.compile(
+    r"\b(?:hit|hits|hitting|reached|reaches|reaching|peaked|peaking|topped|"
+    r"(?:rose|risen|climbed|jumped|surged|soared|spiked|shot up|fell|fallen|dropped|declined|dipped|sank|slid|"
+    r"plunged|tumbled|eased|slowed|cooled|falling|rising|dropping|climbing)\s+to|"
+    r"bottomed(?: out)?|as (?:high|low) as|a (?:high|low|peak) of)\b", re.IGNORECASE)
+_MONTH_NAMES = ("January", "February", "March", "April", "May", "June", "July", "August", "September",
+                "October", "November", "December")
+
+
+async def _reached_in_year(parsed: ParsedClaim, base: Verdict) -> Optional[Verdict]:
+    """A claim that a monthly figure "hit", "reached" or "fell to" a level in a
+    year, which the year's average does not match.
+
+    "Unemployment fell to 3.9% in 2021" is true (December) though 2021
+    averaged 5.3%; "inflation hit 9.1% in 2022" is true (June) though the
+    year's rate was 8.0%. Held to the average, both came back Contradicted.
+    So each month of that year is read, newest first, and if one matches the
+    claim, that month is the answer, with the year's average stated beside it.
+    """
+    spec = parsed.metric
+    if (spec is None or spec.source != "BLS" or spec.bls_kind not in ("rate", "cpi_yoy", "price")
+            or parsed.year is None or parsed.month is not None or parsed.quarter is not None
+            or parsed.claimed_value is None or parsed.is_trend_claim or not base.evidence):
+        return None
+    reached = bool(_REACHED_RE.search(parsed.text))
+    # A 12-month change has two official readings for a year: the change in
+    # the annual average, and the 12 months to December, which is the one the
+    # December release headlines ("inflation was 3.4% in 2023"). A claim that
+    # misses the first is tried against the second before it is called wrong.
+    if reached:
+        months = range(12, 0, -1)
+    elif spec.bls_kind == "cpi_yoy":
+        months = (12,)
+    else:
+        return None
+    average = base.evidence[0].display_value()
+    for month in months:
+        in_month = replace(parsed, month=month)
+        try:
+            got = await fetch_structured(in_month)
+        except SourceUnavailable:
+            return None
+        if not got:
+            continue                      # not published yet
+        v = assess(in_month, got)
+        if v.verdict == SUPPORTED:
+            when = f"{_MONTH_NAMES[month - 1]} {parsed.year}"
+            if reached:
+                more = (f"The claim says it reached that level in {parsed.year}; the {parsed.year} average "
+                        f"was {average}.")
+                note = f"Read as the level reached in {when}, not the {parsed.year} average ({average})."
+            else:
+                more = (f"That is the change over the 12 months to December {parsed.year}; the change in the "
+                        f"{parsed.year} annual average was {average}.")
+                note = (f"Read as the 12 months to December {parsed.year}. The change in the annual average, "
+                        f"the other official figure for the year, was {average}.")
+            return replace(v, confidence=MEDIUM, headline=f"{v.headline.rstrip('.')}. {more}",
+                           caveats=list(v.caveats) + [note])
+    return None
+
+
 async def _with_record(text: str, parsed: ParsedClaim, v: Verdict):
     """A figure that also claims a record ("3.4%, the lowest since 1969"): the
     record is checked too, against every month in its window."""
@@ -835,20 +900,38 @@ async def _verify_one(claim: str, allow_grounding: bool = True,
                 first = await derived.first_print_match(parsed, base)
                 if first is not None:
                     base = first
+            if base.verdict in (MOSTLY_ACCURATE, CONTRADICTED):
+                # "Fell to 3.9% in 2021": a level reached that year, not its average.
+                reached = await _reached_in_year(parsed, base)
+                if reached is not None:
+                    base = reached
             if _alternate_measure_applies(parsed, base):
                 alt = await _cps_income(parsed)
                 if alt is not None and alt.verdict in (SUPPORTED, MOSTLY_ACCURATE):
                     base = alt
             base, parsed = await _with_record(parse_text, parsed, base)
-            if allow_grounding:
-                from services import interpret
-                if interpret.misread_suspected(parsed, base):
-                    # 720,000 people against the U.S. population: more likely
-                    # the claim was misread than wrong. Read it again.
+            from services import interpret
+            if interpret.misread_suspected(parsed, base):
+                # 720,000 people against the U.S. population: more likely
+                # the claim was misread than wrong.
+                if allow_grounding:
+                    # Read it again.
                     fixed = await _interpreted(text, parse_text, parsed, client_ip, started,
                                                note="rules' reading looked wrong (figures 20x apart)")
                     if fixed is not None:
                         return fixed
+                else:
+                    # Nothing here can read it again (a passage, a shared
+                    # link, a tool call: free data only). "Contradicted" on a
+                    # reading that is probably wrong is worse than no answer.
+                    return VerificationV2(
+                        claim=text, verdict=NO_VERDICT, confidence=LOW, reason=UNSURE_READING,
+                        headline=("The official figure found is very far from the claim's, which usually "
+                                  "means the claim is about a different measure or place."),
+                        evidence=[d.to_dict() for d in base.evidence], tier=TIER_STRUCTURED,
+                        elapsed_seconds=round(time.monotonic() - started, 2),
+                        parsed=_parsed_summary(parsed),
+                        notes=["rules' reading looked wrong (figures 20x apart); not re-read on free data"])
             verdict = _soften_for_alternate_measure(parsed, base)
             # A near miss that another official measure might explain is sent
             # to the search, but the search can only upgrade it (to Supported,

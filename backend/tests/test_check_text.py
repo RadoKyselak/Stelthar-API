@@ -109,6 +109,36 @@ class TestInheritedContext:
         assert got == ["Unemployment in Texas is 4%", "inflation is 3%"]
 
 
+class TestOnlyRealValues:
+    """A sentence picked out of an article names a measure and holds a number
+    far more often than it states that measure's value."""
+
+    @pytest.mark.parametrize("text", [
+        "The Panic of 1837 was followed by a five-year depression and unprecedented unemployment.",
+        "After 1700, the United States gained population rapidly.",
+        "The U.S. ranks 10th-highest in GDP per capita by purchasing power.",
+        "The unemployment office served 165,000 people last year.",         # a count, not a rate
+        "Median household income rose in 2,300 counties.",                  # not dollars
+    ])
+    def test_a_number_that_is_not_the_measures_value_is_not_a_statistic(self, text):
+        assert [s.kind for s in split_claims(text)[0]] in ([], [OTHER])
+
+    @pytest.mark.parametrize("text", [
+        "Unemployment was 3.6% in 2023.",
+        "The unemployment rate fell to 4.1 percent in October 2026.",
+        "The national debt passed $40 trillion in 2026.",
+        "The national debt passed 40 trillion in 2026.",                    # money by its scale word
+        "Texas has 31 million people.",
+    ])
+    def test_a_value_written_as_the_measure_is_written_is(self, text):
+        assert [s.kind for s in split_claims(text)[0]] == [STATISTIC]
+
+    def test_such_sentences_never_reach_a_page_scan(self):
+        text = ("The Panic of 1837 was followed by unprecedented unemployment. "
+                "Unemployment was 3.6% in 2023.")
+        assert claims_of(text, kinds=(STATISTIC, RECORD)) == ["Unemployment was 3.6% in 2023"]
+
+
 class TestKinds:
     def test_claims_with_no_figure_that_the_series_settle(self):
         spans, _ = split_claims("The economy shrank in the first quarter of 2022. "
@@ -168,9 +198,19 @@ class TestRouting:
     async def test_several_claims_use_free_data_only(self, engine):
         out = await ct.check_text("Unemployment was 3.6% in 2023. Inflation was 9.9% in 2022. "
                                   "About 2 million people attended the parade last weekend.")
-        assert [grounding for _, grounding in engine] == [False, False, False]
+        assert [grounding for _, grounding in engine] == [False, False]
         assert out["tally"]["supported"] == 1 and out["tally"]["contradicted"] == 1
         assert out["tally"]["no-verdict"] == 1 and out["model_calls"] == 0
+
+    async def test_a_bare_figure_is_listed_but_never_run_through_the_engine(self, engine):
+        """No measure was read from it with confidence; whatever the engine
+        made of it would be a guess with a verdict on it."""
+        out = await ct.check_text("Unemployment was 3.6% in 2023. "
+                                  "About 2 million people attended the parade last weekend.")
+        assert [claim for claim, _ in engine] == ["Unemployment was 3.6% in 2023"]
+        parade = out["claims"][1]
+        assert parade["kind"] == "other" and parade["deeper"] is True
+        assert parade["result"]["display"]["verdict"]["label"] == "Can't verify"
 
     async def test_an_unsettled_claim_offers_the_full_check(self, engine):
         out = await ct.check_text("Unemployment was 3.6% in 2023. "
@@ -206,6 +246,51 @@ class TestRouting:
         monkeypatch.setattr(splitter, "split_claims", boom)
         out = await ct.check_text("Unemployment was 3.6% in 2023. Inflation was 9.9% in 2022.")
         assert out["count"] == 1 and engine[0][1] is True
+
+
+class TestPages:
+    """A page is text nobody picked sentence by sentence."""
+
+    async def test_only_claims_that_ended_in_a_verdict_are_listed(self):
+        async def fake(claim, allow_grounding=True, client_ip=None):
+            if "4.2%" in claim:
+                return answer(claim, NO_VERDICT, NO_SERIES, tier="none")
+            return answer(claim)
+        with patch.object(ct, "verify", fake):
+            out = await ct.check_text("Unemployment was 3.6% in 2023.\nUnemployment was 4.2% in 2024.", mode="page")
+        assert [c["span"] for c in out["claims"]] == ["Unemployment was 3.6% in 2023"]
+        assert out["count"] == 1 and out["unsettled"] == 1 and out["claims"][0]["index"] == 0
+
+    async def test_a_passage_someone_pasted_lists_everything(self, engine):
+        out = await ct.check_text("Unemployment was 3.6% in 2023. "
+                                  "About 2 million people attended the parade last weekend.")
+        assert out["count"] == 2 and out["unsettled"] == 0
+
+    @pytest.mark.parametrize("text", [
+        "GDP fell 3.7% following the 1973 oil crisis.",                           # a year that names an event
+        "The economy grew by an average of 3.8% from 1946 to 1973.",              # a span of years
+        "The child poverty rate was 13.7% in 2023.",                              # a subgroup the series lacks
+        "Unemployment peaked at 10% after the 2008 financial crisis.",
+    ])
+    def test_statistics_one_figure_cannot_settle_are_not_checked_on_a_page(self, text):
+        assert claims_of(text, kinds=(STATISTIC, RECORD), strict=True) == []
+        assert claims_of(text) != []                                             # still listed in a pasted passage
+
+    def test_a_page_does_not_say_when_it_was_written(self):
+        """So "is" has no date: only a claim that states its period is checked."""
+        assert claims_of("Unemployment is 3.5%, the lowest in decades.", kinds=(STATISTIC, RECORD), strict=True) == []
+        assert claims_of("Inflation below 5% is in green.", kinds=(STATISTIC, RECORD), strict=True) == []
+        assert claims_of("Unemployment is 3.5%.") == ["Unemployment is 3.5%"]      # typed today, it means today
+
+    def test_two_points_are_one_claim_a_page_can_settle(self):
+        text = "The unemployment rate fell from 5.2% in 2021 to 3.6% in 2023."
+        assert claims_of(text, kinds=(STATISTIC, RECORD), strict=True) == [text.rstrip(".")]
+
+    def test_a_dependent_clause_is_never_cut_loose(self):
+        text = ("It was the worst downturn since the Great Recession, when GDP fell 4.3% in 2009, "
+                "and unemployment reached 10% in 2009.")
+        got = claims_of(text)
+        assert not any(c.startswith("when ") for c in got)
 
 
 class TestDeeper:

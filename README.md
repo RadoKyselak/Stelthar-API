@@ -197,11 +197,11 @@ https://stelthar-api.vercel.app
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /v2/check` | Check every claim in a passage (up to 8,000 characters). One claim gets the full check; two or more are checked on free official data only. What the site and extension 2.2 call. |
+| `POST /v2/check` | Check every claim in a passage (up to 8,000 characters), or on a public page given as `{"url": ...}`. One claim gets the full check; two or more, and any page, are checked on free official data only. What the site and extension 2.2 call. |
 | `POST /v2/verify` | Check one claim, with the full pipeline. |
 | `POST /v2/lookup` | "What is the official figure?" — value plus ready-to-paste citations. |
 | `GET /c?claim=...` | A claim's check as a page to send someone, with the verdict in the link preview. Free data only. |
-| `POST /mcp` | The checks as Model Context Protocol tools (`check_text`, `check_claim`, `find_figure`). Free data only. |
+| `POST /mcp` | The checks as Model Context Protocol tools (`check_text`, `check_page`, `check_claim`, `find_figure`). Free data only. |
 | `POST /verify` | One claim, v1-compatible response (what extensions before 2.2 call). |
 | `POST /v1/verify` | Legacy multi-pass planner, kept for comparison. Off unless `ENABLE_LEGACY_V1=true`. |
 | `GET /health` | Model in use, configured sources (details need `X-Health-Token`). |
