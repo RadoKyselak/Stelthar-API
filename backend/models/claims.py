@@ -56,6 +56,24 @@ class CheckRequest(BaseModel):
     # "text": something a person pasted. "page": a page scan, which keeps only
     # the claims free government data can settle. A `url` is always a page.
     mode: str = Field("text", pattern="^(text|page)$")
+    # The day the text was said or written (YYYY-MM-DD), if known. A claim in
+    # it that names no period is then held to the figure that was newest on
+    # that day, not today's.
+    said_on: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+    @field_validator('said_on')
+    @classmethod
+    def a_real_day_not_in_the_future(cls, v):
+        if v is None:
+            return v
+        from datetime import date, timedelta
+        try:
+            day = date.fromisoformat(v)
+        except ValueError:
+            raise ValueError("said_on is not a date")
+        if day.year < 1990 or day > date.today() + timedelta(days=1):
+            raise ValueError("said_on must be a day between 1990 and today")
+        return v
 
     @field_validator('text')
     @classmethod

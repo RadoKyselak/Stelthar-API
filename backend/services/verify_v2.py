@@ -30,7 +30,7 @@ from claims.metrics import MetricSpec
 from claims.parser import ParsedClaim, parse_claim
 from claims.verdict import (
     ALTERNATE_MEASURE, GEOGRAPHY_UNSUPPORTED, HIGH, LOW, MEDIUM, MISLEADING, MOSTLY_ACCURATE,
-    NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, UNSURE_READING, Verdict,
+    NO_SERIES, NO_VERDICT, NOT_EMPIRICAL, PERIOD_UNAVAILABLE, SUPPORTED, CONTRADICTED, UNSURE_READING, PERIOD_NOT_STATED, Verdict,
     assess,
     _phrase_for,
 )
@@ -790,12 +790,70 @@ def one_sentence(text: str) -> Tuple[str, bool]:
     return best, True
 
 
+# How long ago a claim must have been made before "is" stops meaning today.
+_STILL_NOW_DAYS = 45
+_SAID_MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September",
+                "October", "November", "December")
+
+
+def as_said(text: str, said_on) -> Optional[tuple]:
+    """(the claim with its period written in, that period in words) for a
+    claim that names no period and was made some time ago; None otherwise.
+
+    "The unemployment rate is 8.3%" said in February 2012 is a claim about the
+    figure that was newest then, January 2012's. Checked today with no date,
+    it is held against this month's and marked wrong. For a monthly series the
+    newest figure on a given day is the month before; for the rest, the year
+    before.
+    """
+    from datetime import date as _date
+    if said_on is None or (_date.today() - said_on).days <= _STILL_NOW_DAYS:
+        return None
+    p = parse_claim(text)
+    if p.metric is None or p.year is not None or p.quarter is not None or p.has_unresolved_period \
+            or p.structured_blocker or p.claimed_value is None:
+        return None
+    if p.metric.source in ("BLS", "FRED"):
+        month = said_on.month - 1 or 12
+        year = said_on.year if said_on.month > 1 else said_on.year - 1
+        period = f"{_SAID_MONTHS[month - 1]} {year}"
+    else:
+        period = str(said_on.year - 1)
+    return f"{text.rstrip(' .!?')} in {period}", period
+
+
 async def verify(claim: str, allow_grounding: bool = True,
-                 client_ip: Optional[str] = None) -> VerificationV2:
+                 client_ip: Optional[str] = None, said_on=None) -> VerificationV2:
     """Verify a claim. Never raises; every failure becomes a stated reason.
-    A paragraph is checked one sentence at a time: the most checkable one."""
+    A paragraph is checked one sentence at a time: the most checkable one.
+    `said_on` is the day the claim was made, when the caller knows it."""
     text, cut = one_sentence((claim or "").strip())
-    v = await _verify_one(text, allow_grounding, client_ip)
+    dated = as_said(text, said_on)
+    if dated is not None:
+        # Free data only: the period is this service's reading, not the
+        # claim's words, and a paid search on a reading is not worth its cost.
+        v = await _verify_one(dated[0], False, client_ip)
+        v.claim = text
+        said = f"{_SAID_MONTHS[said_on.month - 1]} {said_on.day}, {said_on.year}"
+        if v.verdict in (SUPPORTED, MOSTLY_ACCURATE):
+            v.caveats = [f"The claim names no period. It was read as {dated[1]}, the newest figure "
+                         f"when it was said ({said})."] + list(v.caveats)
+        elif v.verdict != NO_VERDICT:
+            # It does not match the figure of the time. The claim may be about
+            # another period, so this is not a finding that it is wrong.
+            v = VerificationV2(
+                claim=text, verdict=NO_VERDICT, confidence=LOW, reason=PERIOD_NOT_STATED,
+                headline=(f"The claim names no period. Read as {dated[1]}, the newest figure when it was "
+                          f"said ({said}), it does not match; it may be about another period."),
+                evidence=v.evidence, tier=v.tier, elapsed_seconds=v.elapsed_seconds, parsed=v.parsed,
+                notes=list(v.notes) + ["period taken from the date the claim was said"])
+    else:
+        v = await _verify_one(text, allow_grounding, client_ip)
+        if said_on is None and v.verdict != NO_VERDICT and v.tier in (TIER_STRUCTURED,):
+            p = parse_claim(text)
+            if p.metric is not None and p.year is None and p.quarter is None:
+                v.caveats = list(v.caveats) + ["The claim names no date, so it was held to the newest figure. "
+                                               "If it was said earlier, give the date it was said."]
     if cut:
         v.caveats = [f"Only one sentence of the highlighted text was checked: \u201c{text}\u201d"] + list(v.caveats)
     return v

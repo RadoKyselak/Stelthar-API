@@ -30,6 +30,8 @@ to take it back out.
 | 21 | A claim that states a figure is no longer answered as a claim about direction ("private payrolls rose by 150,000" was Supported because total payrolls rose) | `services/derived.py` | see `git log` |
 | 22 | `make eval-news`: 34 real sentences from releases, wire stories and encyclopedia articles, 13 of which must be declined; two known gaps are kept as misses | `eval/news_claims.jsonl`, `eval/remote.py` | see `git log` |
 | 23 | A year's GDP in dollars is held to the figure published at the time before it is called wrong (2011 was $15.09 trillion when written, $15.60 trillion today); a mid-year estimate of a year is not that year's figure | `services/derived.py`, `claims/parser.py` | see `git log` |
+| 24 | Declined in a typed claim too: what would, could or might happen, a conditional ("if"), a proposed figure ("raising the minimum wage to $10.10"), and an amount something was changed by ("reduced the uninsured by 10 percent") | `claims/parser.py` | see `git log` |
+| 25 | `said_on`: the day a claim was made. A claim with no period is then held to the figure that was newest that day; a mismatch gives no verdict. Without it, the answer says today's figure was assumed. On the site (a date box), in `/v2/check` and in the `check_claim` tool | `services/verify_v2.py`, `routes/check.py`, `static/` | see `git log` |
 
 Nothing that existed was removed. `/verify`, `/v2/verify` and `/v2/lookup` answer as before, so every
 installed extension keeps working.
@@ -87,7 +89,7 @@ The extension is separate from the server:
 
 ## Verified
 
-- 1,621 tests pass (`make test`); 1,154 before this branch.
+- 1,648 tests pass (`make test`); 1,154 before this branch.
 - By hand, against live agency data, on a local server without agency keys: the passage check, the
   revision label, the shared page and its link preview tags, the home page, both new pages, and a full
   `/mcp` exchange (initialize, tools/list, tools/call).
@@ -99,6 +101,10 @@ The extension is separate from the server:
   "inflation hit 9.1% in 2022" answered from live data with no model call; the two sentences that must not
   get a verdict did not.
 - The first live test run against production: 28 of 28, recorded in `backend/eval/results/2026-11-17.json`.
+- QuanTemp (SIGIR 2024), the 835 U.S. statistical claims of its test split, run on production on
+  17 November 2026 before changes #24 and #25: 20 read as checkable, 6 given a verdict, all 6 wrong
+  readings. Each kind is held by a test in `tests/test_said_on.py`. With #24 and #25, none of the six is
+  given a verdict. The data is licensed CC BY-NC and is not in the repository.
 - On the preview build of 17 November 2026, free data only, no model call: the first test set, 28 of 28;
   the news set, 32 of 34, the two misses being the two rows marked as known gaps (the Census Bureau's
   CPS ASEC poverty and coverage rates, which are not wired). Neither set has been run on production

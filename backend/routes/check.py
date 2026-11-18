@@ -31,6 +31,8 @@ async def check_endpoint(req: CheckRequest, request: Request) -> Dict[str, Any]:
       * `url` instead of `text` fetches that page and checks it as a page. The
         answer carries `page` (its address, site and title). An address that
         cannot be read answers 400 with the reason.
+      * `said_on` (YYYY-MM-DD) is the day the text was said. A claim in it
+        that names no period is held to the figure that was newest then.
       * `span` is the claim exactly as written; `claim` is what was checked,
         which adds a year or place the sentence stated once for several
         claims. `inherited` says what was added.
@@ -45,7 +47,10 @@ async def check_endpoint(req: CheckRequest, request: Request) -> Dict[str, Any]:
             # Both are for the person who asked: what was wrong, and what works.
             raise HTTPException(status_code=400, detail=str(e))
     else:
-        result = await check_text(req.text, mode=req.mode, client_ip=client_ip(request))
+        from datetime import date
+        said = date.fromisoformat(req.said_on) if req.said_on else None
+        result = await check_text(req.text, mode=req.mode, client_ip=client_ip(request), said_on=said)
+        result["said_on"] = req.said_on or ""
     logger.info(
         "passage check complete",
         extra={

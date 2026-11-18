@@ -86,7 +86,8 @@ _BEARS_THE_READING_OUT = frozenset({"supported", "mostly-accurate"})
 
 
 async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = None,
-                     free_only: bool = False, as_of: Optional[date] = None) -> Dict[str, Any]:
+                     free_only: bool = False, as_of: Optional[date] = None,
+                     said_on: Optional[date] = None) -> Dict[str, Any]:
     """Every claim in `text`, checked. Never raises. `free_only` keeps even a
     single claim on agency data: for callers that are not a person asking
     (an assistant's tool call), who must never spend a paid call. `as_of` is
@@ -94,6 +95,10 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
     started = time.monotonic()
     text = (text or "").strip()
     page = mode == PAGE
+    # The day the text was said or written, for claims in it that name no
+    # period. Passed only when given, so callers and fakes that predate it
+    # are called as before.
+    said = {"said_on": said_on} if said_on is not None else {}
     spans: List[splitter.ClaimSpan] = []
     truncated = False
     if config.MULTI_CLAIM:
@@ -113,12 +118,12 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
         # picks the sentence itself when the text is long, as it did before.
         whole = splitter.ClaimSpan(text, text, 0, len(text), spans[0].kind if spans else splitter.OTHER)
         if free_only:
-            v = await verify(text, allow_grounding=False, client_ip=client_ip)
+            v = await verify(text, allow_grounding=False, client_ip=client_ip, **said)
             entries = [_entry(0, whole, v, _could_go_deeper(v))]
         else:
             from evidence import fact_checks
             related = fact_checks.start(text)
-            v = await verify(text, client_ip=client_ip)
+            v = await verify(text, client_ip=client_ip, **said)
             v.fact_checks = await fact_checks.finish(related)
             entries = [_entry(0, whole, v, False)]
     else:
@@ -133,7 +138,7 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
                     claim=span.claim, verdict=NO_VERDICT, confidence=LOW, reason=NO_SERIES,
                     headline="None of the official data series we check covers this claim.")
             async with gate:
-                return await verify(span.claim, allow_grounding=False, client_ip=client_ip)
+                return await verify(span.claim, allow_grounding=False, client_ip=client_ip, **said)
 
         results = await asyncio.gather(*(one(s) for s in spans))
         entries = [_entry(i, s, v, _could_go_deeper(v)) for i, (s, v) in enumerate(zip(spans, results))]

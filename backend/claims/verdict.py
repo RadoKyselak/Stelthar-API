@@ -63,6 +63,9 @@ ALTERNATE_MEASURE = "agency_publishes_more_than_one_official_figure"
 # The official figure is so far from the claim's that the claim was probably
 # read as the wrong measure or place, and nothing was available to read it again.
 UNSURE_READING = "claim_could_not_be_read_with_confidence"
+# The claim names no period; read against the day it was said, it does not
+# match, and it may be about some other period.
+PERIOD_NOT_STATED = "claim_does_not_state_its_period"
 
 HIGH, MEDIUM, LOW = "High", "Medium", "Low"
 

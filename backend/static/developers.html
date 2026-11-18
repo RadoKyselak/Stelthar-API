@@ -41,6 +41,9 @@
       <li><code>deeper</code>: true when agency data did not settle a claim and the full check might. Send that
         claim to <code>/v2/verify</code>.</li>
       <li><code>"mode": "page"</code> keeps only the claims agency data can settle.</li>
+      <li><code>"said_on": "2012-02-08"</code> is the day the text was said. A claim that names no period
+        (&ldquo;unemployment is 8.3%&rdquo;) is then held to the figure that was newest that day. If it does not
+        match, there is no verdict: the claim may be about another period.</li>
       <li><code>{"url": "https://..."}</code> in place of <code>text</code> fetches that public page and checks
         it as a page; the answer adds <code>page</code> (address, site, title, and <code>published</code>, the
         day the page says it came out). A month named without a year is read against that day, and

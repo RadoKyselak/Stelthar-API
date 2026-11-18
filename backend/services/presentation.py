@@ -74,6 +74,10 @@ _REASONS = {
         "The official figure found is far from the claim's, so the claim may be about something else.",
         "Check this claim on its own, naming the measure and the place.",
     ),
+    V.PERIOD_NOT_STATED: (
+        "The claim does not say which period its figure is for.",
+        "Name the month or year in the claim.",
+    ),
     "no_source_found": (
         "No published source could be found to check this against.",
         "",

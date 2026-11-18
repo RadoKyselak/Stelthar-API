@@ -40,6 +40,11 @@ button, input { font-family: inherit; }
 #go:disabled { opacity: .35; cursor: default; }
 #go svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
+.said { margin: 14px 2px 0; font: 500 14px/1.5 var(--sans); color: rgba(255, 255, 255, .62);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.said label { color: rgba(255, 255, 255, .86); }
+.said input { font: inherit; color: #fff; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 8px; padding: 4px 8px; color-scheme: dark; }
 .hint { margin: 16px 2px 0; max-width: 34em; font: 500 15px/1.5 var(--sans); color: rgba(255, 255, 255, .62); }
 
 /* Below the band, until there is an answer: claims to try, how it works, why trust it. */
