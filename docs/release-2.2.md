@@ -20,6 +20,8 @@ to take it back out.
 | 11 | Check a page by its link: `{"url": ...}` to `/v2/check`, on the site, in the side panel and as the `check_page` tool | `utils/safe_fetch.py`, `claims/article.py`, `services/check_link.py` | `af2552c` |
 | 12 | CDC: deaths from COVID-19, firearms and homicide, national or by state | `services/health.py`, `evidence/sources/cdc.py` | `159b0f8` |
 | 13 | "Wages are up X%": the 12-month change in average hourly earnings | `claims/metrics.py` | `934b74c` |
+| 14 | News wording read as written: the jobs report's and the GDP release's own sentences, a quarter named by its months, "rose 0.1 point to 4.2%" (the level is 4.2%). Six misreadings fixed: how far a rate moved taken for the rate, a date a change is counted from taken for its period, a one-month change taken for a 12-month one, "the number of people working part time" taken for the population, a wire dateline taken for a place, "its lowest going back to 2022" taken for the year | `claims/parser.py`, `claims/geography.py`, `claims/metrics.py` | see `git log` |
+| 15 | A page's own date dates what it names without a year ("in October", "last month", "the third quarter"); pages on sites whose layout hid the story are now read; "READ MORE" lines are not; a figure must sit near its measure; a figure stated twice is checked once | `claims/article.py`, `claims/splitter.py`, `services/check_text.py`, `services/check_link.py` | see `git log` |
 
 Nothing that existed was removed. `/verify`, `/v2/verify` and `/v2/lookup` answer as before, so every
 installed extension keeps working.
@@ -77,7 +79,7 @@ The extension is separate from the server:
 
 ## Verified
 
-- 1,425 tests pass (`make test`); 1,154 before this branch.
+- 1,543 tests pass (`make test`); 1,154 before this branch.
 - By hand, against live agency data, on a local server without agency keys: the passage check, the
   revision label, the shared page and its link preview tags, the home page, both new pages, and a full
   `/mcp` exchange (initialize, tools/list, tools/call).
@@ -89,6 +91,9 @@ The extension is separate from the server:
   "inflation hit 9.1% in 2022" answered from live data with no model call; the two sentences that must not
   get a verdict did not.
 - The first live test run against production: 28 of 28, recorded in `backend/eval/results/2026-11-17.json`.
+- Changes #14 and #15 against 20 real, dated wire stories and five agency releases, read live. Every
+  sentence picked was read by eye; each misreading found became a fix with a test
+  (`tests/test_news_wording.py`, `tests/test_page_date.py`).
 
 ## Not verified, or not done
 
@@ -118,6 +123,13 @@ The extension is separate from the server:
 - The eval set's three other-country rows changed from "no verdict" to the World Bank's figures, because
   the engine has answered those since the World Bank adapter was added.
 - `README.md` is also modified on the `docs/readme-promo` branch; expect to merge the two by hand.
+- Change #14 alters answers for typed claims too, the same way: "the unemployment rate rose 0.3% in 2023",
+  "wages are up 3.1% from October 2025" and "wages rose 0.4% in October from September" now get "Can't
+  verify" (and the full search) where they were checked against the wrong figure. "Real GDP fell at an
+  annual rate of 0.6 percent" was read as a rise and is now read as a fall.
+- Change #15 only applies to a page fetched by its link, and only when the page states its date. To turn
+  it off without a deploy, `CHECK_LINKS=off` stops page checks altogether; to take it out, revert its
+  commit.
 - Changes #9 and #10 alter answers for typed claims too, always toward declining rather than guessing:
   a claim dated only by an event ("after the 2008 financial crisis"), a month with no year, an age group
   the series lacks, or one industry's jobs now gets "Can't verify" (and the full search) where it used to

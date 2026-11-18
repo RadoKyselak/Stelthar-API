@@ -13,6 +13,11 @@ Three things are decided in this file:
     measure is written (see claims/splitter.py), and never a model call.
   * Which addresses are fetched at all: utils/safe_fetch.py. Video and social
     sites are refused up front, since their pages hold no text to read.
+  * What a month without a year means. A page that says when it was published
+    lends that date: "in October" on a release of 6 November 2026 is October
+    2026 (claims/splitter.py). A page that does not say, or that has been
+    reworked long after it came out, lends nothing, and such sentences are
+    left alone as before.
   * What is said when it does not work. Many news sites refuse automated
     readers, and this service identifies itself honestly rather than pose as a
     browser. The answer then says so and names what does work: highlighting
@@ -73,7 +78,10 @@ async def check_link(url: str, client_ip: Optional[str] = None) -> Dict[str, Any
     if not found.blocks:
         raise FetchFailed(f"No readable text was found on that page. {_HINT}")
 
-    result = await check_text(found.text, mode=PAGE, client_ip=client_ip)
+    result = await check_text(found.text, mode=PAGE, client_ip=client_ip, as_of=found.published)
     result["page"] = {"url": page.url, "host": page.host, "title": found.title,
-                      "paragraphs": len(found.blocks)}
+                      "paragraphs": len(found.blocks),
+                      # The day the page says it came out, which is what "in
+                      # October" on it was read against. Empty when it does not say.
+                      "published": found.published.isoformat() if found.published else ""}
     return result

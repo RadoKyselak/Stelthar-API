@@ -19,6 +19,12 @@ the end of the clause ("... in 2023"), so the text that is checked is the text
 that is shown, and nothing is settled out of sight. `inherited` says what was
 added.
 
+A page that says when it was published lends one more thing: the year of a
+month it names without one. A news release of 6 November 2026 that says "in
+October" means October 2026. That reading is used only where it is safe (see
+`_page_period`), is written into the claim like the rest, and is held to more
+when the text nearby names some other year.
+
 What is left out, on purpose:
   * "in Texas 4.1% and in California 5.3%": the second half names no
     statistic of its own, so the sentence stays whole and the engine declines
@@ -28,10 +34,12 @@ What is left out, on purpose:
 """
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from typing import List, Optional, Tuple
 
 from claims.parser import (
-    _MONTH_YEAR_RE, _PRESENT_TENSE_RE, _extract_fiscal_year, _extract_years, parse_claim,
+    _BARE_MONTH_RE, _MONTH_YEAR_RE, _MONTHS, _PRESENT_TENSE_RE, _extract_fiscal_year, _extract_years,
+    named_quarter, parse_claim,
 )
 from evidence.units import PERCENT, UNKNOWN, USD, parse_quantity
 
@@ -70,6 +78,10 @@ class ClaimSpan:
     end: int
     kind: str             # STATISTIC | RECORD | OTHER
     inherited: List[str] = field(default_factory=list)
+    # The period came from the page's date, and the text around the sentence
+    # names another year: the sentence may be about that year instead. Such a
+    # claim is listed only when the official figure bears the reading out.
+    tentative: bool = False
 
 
 def _sentences(text: str) -> List[Tuple[int, int]]:
@@ -147,12 +159,42 @@ def _states_a_value(parsed, text: str) -> bool:
     return unit in (UNKNOWN, spec.family)
 
 
+_NEAR = 12      # words
+
+
+def _figure_sits_with_its_measure(parsed, text: str) -> bool:
+    """Whether the figure is written near the words that name its measure.
+
+    "When the central bank started raising rates to combat an outbreak of
+    inflation in March 2022, the average rate on a 1-year CD was stuck at a
+    miserly 0.15%" names inflation and holds a percentage, and the percentage
+    is the CD rate. Nothing in grammar a rule can read says so; distance does.
+    A measure and its own figure sit within a few words of each other.
+    """
+    spec, value = parsed.metric, parsed.claimed_value
+    low = text.lower()
+    number = re.search(r"\d[\d,]*(?:\.\d+)?", (value.raw or "")) if value is not None else None
+    if spec is None or number is None:
+        return True
+    named = [m.span() for phrase in spec.phrases
+             for m in re.finditer(rf"(?<![a-z]){re.escape(phrase)}(?![a-z])", low)]
+    if not named:
+        return True     # picked by a rule of its own, which reads the measure and the figure together
+    figures = [m.span() for m in re.finditer(rf"(?<![\d.,]){re.escape(number.group(0))}(?![\d])", low)]
+    for a, b in named:
+        for c, d in figures:
+            between = low[b:c] if b <= c else low[d:a]
+            if len(between.split()) <= _NEAR:
+                return True
+    return not figures
+
+
 def _is_statistic(text: str) -> bool:
     try:
         parsed = parse_claim(text)
     except Exception:  # noqa: BLE001 — the parser never raises; stay safe if it ever does
         return False
-    return _states_a_value(parsed, text)
+    return _states_a_value(parsed, text) and _figure_sits_with_its_measure(parsed, text)
 
 
 def _kind(text: str) -> Optional[str]:
@@ -206,8 +248,95 @@ def _shared_period(sentence: str) -> str:
     return f"in {years[0]}"
 
 
-def _split_sentence(text: str, a: int, b: int) -> List[ClaimSpan]:
+_LAST_MONTH = re.compile(r"\blast month\b", re.I)
+_LAST_YEAR = re.compile(r"\blast year\b", re.I)
+_QUARTER_WORD = re.compile(r"\b(?:quarter|quarterly|q[1-4])\b", re.I)
+
+
+def _long_date(when: date) -> str:
+    return f"{when.day} {_MONTH_NAMES[when.month - 1]} {when.year}"
+
+
+@dataclass(frozen=True)
+class PagePeriod:
+    """The period a sentence names without its year, dated by its page."""
+    year: int
+    month: Optional[int]
+    quarter: Optional[int]
+    words: str            # "October 2026", "Q3 2026", "2025"
+
+
+def _page_period(sentence: str, as_of: Optional[date]) -> Optional[PagePeriod]:
+    """The one period a sentence names without its year, read against the day
+    its page was published; None when it names none, or more than one, or the
+    reading would be a guess.
+
+      "in October", page of 6 November 2026               -> October 2026
+      "in December", page of 9 January 2026               -> December 2025
+      "last month", page of 6 November 2026               -> October 2026
+      "last year", page of 6 November 2026                -> 2025
+      "in the third quarter", page of 29 October 2026     -> Q3 2026
+      "from April through June", page of 30 July 2026     -> Q2 2026
+
+    Not read: the month or quarter the page itself came out in. An agency has
+    not yet published a period that is still running, so "in November" on a
+    page of 6 November is last year's November or a forecast, and which is
+    not said.
+    """
+    if as_of is None or _extract_years(sentence) or _extract_fiscal_year(sentence) is not None:
+        return None
+    last_month, last_year = bool(_LAST_MONTH.search(sentence)), bool(_LAST_YEAR.search(sentence))
+    quarter, _, where = named_quarter(sentence)
+    if quarter is not None:
+        # Months inside "July through September" are the quarter's, not a month of their own.
+        rest = sentence[:where[0]] + " " + sentence[where[1]:]
+        if last_month or last_year or _BARE_MONTH_RE.search(rest) or named_quarter(rest)[0] is not None:
+            return None
+        ends = quarter * 3
+        if ends >= as_of.month and ends - 2 <= as_of.month:
+            return None                                  # the quarter still running
+        year = as_of.year if ends < as_of.month else as_of.year - 1
+        return PagePeriod(year, None, quarter, f"Q{quarter} {year}")
+    if _QUARTER_WORD.search(sentence):
+        return None
+    months = {_MONTHS[m.lower()] for m in _BARE_MONTH_RE.findall(sentence)}
+    if len(months) + last_month + last_year != 1:
+        return None
+    if last_year:
+        return PagePeriod(as_of.year - 1, None, None, str(as_of.year - 1))
+    if last_month:
+        month = as_of.month - 1 or 12
+        year = as_of.year if as_of.month > 1 else as_of.year - 1
+    else:
+        month = next(iter(months))
+        if month == as_of.month:
+            return None
+        year = as_of.year if month < as_of.month else as_of.year - 1
+    return PagePeriod(year, month, None, f"{_MONTH_NAMES[month - 1]} {year}")
+
+
+def _dated_by_page(text: str, period: PagePeriod) -> str:
+    """`text` with the period's year written in where it was left out."""
+    if period.quarter is not None:
+        _, _, where = named_quarter(text)
+        if where is None:
+            return text
+        named = text[where[0]:where[1]]
+        joiner = " " if _MONTH_YEAR_RE.search(f"{named} {period.year}") and "quarter" not in named.lower() \
+            and "period" not in named.lower() else " of "
+        return f"{text[:where[1]]}{joiner}{period.year}{text[where[1]:]}"
+    if _LAST_YEAR.search(text):
+        return _LAST_YEAR.sub(f"in {period.year}", text)
+    if _LAST_MONTH.search(text):
+        return _LAST_MONTH.sub(f"in {period.words}", text)
+    return _BARE_MONTH_RE.sub(lambda m: f"{m.group(0)} {period.year}", text)
+
+
+def _split_sentence(text: str, a: int, b: int, as_of: Optional[date] = None) -> List[ClaimSpan]:
     sentence = text[a:b]
+    from_page = _page_period(sentence, as_of)
+    page_note = (f"period ({from_page.words}) from the page's date ({_long_date(as_of)})"
+                 if from_page else "")
     parts = _clauses(sentence, a)
     own = [(s, e) for s, e in parts if _is_own_claim(text[s:e])]
     # "..., when GDP fell 3.7% following the oil crisis" hangs on the rest of
@@ -216,13 +345,19 @@ def _split_sentence(text: str, a: int, b: int) -> List[ClaimSpan]:
         own = []
     if len(own) < 2:
         kind = _kind(sentence)
-        return [ClaimSpan(sentence, sentence, a, b, kind)] if kind else []
+        if not kind:
+            return []
+        if from_page and kind == STATISTIC:
+            return [ClaimSpan(_dated_by_page(sentence, from_page), sentence, a, b, kind, [page_note])]
+        return [ClaimSpan(sentence, sentence, a, b, kind)]
 
     # What the sentence says once for every clause in it.
-    period = _shared_period(sentence)
+    period = _shared_period(sentence) or (f"in {from_page.words}" if from_page else "")
     present = bool(_PRESENT_TENSE_RE.search(sentence)) and not _extract_years(sentence)
+    # (The country is what every national figure is for already, and "the U.S.
+    # Bureau of Labor Statistics reported" names an agency, not a place.)
     places = {g.name for g in (parse_claim(text[s:e]).geography for s, e in parts
-                               if (s, e) not in own) if g is not None}
+                               if (s, e) not in own) if g is not None and g.level != "nation"}
     place = next(iter(places)) if len(places) == 1 else ""
 
     spans: List[ClaimSpan] = []
@@ -237,8 +372,15 @@ def _split_sentence(text: str, a: int, b: int) -> List[ClaimSpan]:
         if parsed.geography is None and place:
             claim += f" in {place}"
             inherited.append(f"place ({place}) from the rest of the sentence")
-        if parsed.year is None and not parsed.present:
-            if period:
+        if from_page and _page_period(clause, as_of) == from_page:
+            # The clause names the month itself; only its year is missing.
+            claim = _dated_by_page(claim, from_page)
+            inherited.append(page_note)
+        elif parsed.year is None and not parsed.present:
+            if period and from_page:
+                claim += f" {period}"
+                inherited.append(page_note)
+            elif period:
                 claim += f" {period}"
                 inherited.append(f"period ({period[3:]}) from the rest of the sentence")
             elif present:
@@ -266,21 +408,68 @@ def _one_figure_one_period(claim: str) -> bool:
     return True
 
 
+def _what_it_says(claim: str) -> tuple:
+    """The measure, place, period and figure a statistic comes down to."""
+    p = parse_claim(claim)
+    place = p.geography.name if p.geography is not None and p.geography.level != "nation" else ""
+    return (p.metric.metric if p.metric else claim, place,
+            p.year, p.month, p.quarter, tuple(round(v.magnitude, 6) for v in (p.all_values or [])))
+
+
+def _firm_record(text: str) -> bool:
+    """Whether a sentence about a record (a bill, an agency action, a count of
+    crimes or deaths) says something a record can settle: it names the bill
+    or the agency, or it states a figure. "That is starting to lift the cost
+    of food" touches a topic and claims nothing that can be looked up."""
+    from services import regulatory
+    return regulatory.topic(text) in ("bill", "fda", "ftc") or _has_figure(text)
+
+
+def _names_another_year(text: str, a: int, b: int, years: Tuple[int, ...]) -> bool:
+    """Whether the paragraph a sentence sits in, or the two before it, names
+    a year other than `years`. A story that turned to 2022 two paragraphs up
+    and then says "peaked in June" does not mean this June."""
+    start = a
+    for _ in range(3):
+        start = text.rfind("\n", 0, max(start - 1, 0)) + 1
+        if start == 0:
+            break
+    end = text.find("\n", b)
+    around = text[start:end if end != -1 else len(text)]
+    return any(y not in years for y in _extract_years(around))
+
+
 def split_claims(text: str, max_claims: int = 12,
                  kinds: Tuple[str, ...] = (STATISTIC, RECORD, OTHER),
-                 strict: bool = False) -> Tuple[List[ClaimSpan], bool]:
+                 strict: bool = False, as_of: Optional[date] = None) -> Tuple[List[ClaimSpan], bool]:
     """The checkable claims in `text`, in order, and whether more were found
     than `max_claims` allows. `kinds` narrows what is kept. `strict` (a page
     nobody picked the sentences of) also drops statistics that one official
     figure cannot settle, so the few checks a request gets go to claims that
-    can end in a verdict."""
+    can end in a verdict. `as_of` is the day the text was published, when
+    that is known: it dates a month named without its year."""
     text = text or ""
     found: List[ClaimSpan] = []
+    said: set = set()
     for a, b in _sentences(text):
-        for span in _split_sentence(text, a, b):
+        for span in _split_sentence(text, a, b, as_of):
             if span.kind not in kinds:
                 continue
             if strict and span.kind == STATISTIC and not _one_figure_one_period(span.claim):
                 continue
+            if strict and span.kind == RECORD and not _firm_record(span.claim):
+                continue
+            if strict and span.kind == STATISTIC:
+                # A story states its main figure in the headline and again in
+                # its first line. One check answers both.
+                same = _what_it_says(span.claim)
+                if same in said:
+                    continue
+                said.add(same)
+            if as_of is not None and any("page's date" in note for note in span.inherited):
+                period = _page_period(text[a:b], as_of)
+                if period and _names_another_year(text, a, b, (period.year,)):
+                    span = ClaimSpan(span.claim, span.span, span.start, span.end, span.kind,
+                                     span.inherited, tentative=True)
             found.append(span)
     return found[:max_claims], len(found) > max_claims
