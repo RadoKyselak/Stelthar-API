@@ -25,6 +25,8 @@ to take it back out.
 | 16 | A month's jobs count is held to the report that first gave it, and to the two after it, before it is called wrong; GDP's second and third estimates count the same way. A story of 2 October 2026 saying 29,000 jobs were added in September was "Contradicted" by the revised 60,000 | `services/derived.py` | see `git log` |
 | 17 | "92% had health insurance coverage" is the insured share, which Census publishes; it was read as the uninsured rate and marked Contradicted against 8.2% | `claims/metrics.py` | see `git log` |
 | 18 | A shared check's link preview shows a picture that says its verdict (five fixed images, nothing drawn per request) | `routes/share.py`, `static/og-*.png` | see `git log` |
+| 19 | Declined, where each was given a verdict on something it does not say: a target or a forecast ("the 2% inflation target"), how far a level moved ("added $1 trillion to the national debt"), GDP as a denominator ("debt to GDP rose to 99%"), a share of a change, another measure (natural rate, Supplemental Poverty Measure), more subgroups, a U.S. territory or another country's state read as the nation, a newspaper or university read as its state | `claims/parser.py`, `claims/geography.py` | see `git log` |
+| 20 | On a page: a sentence that names no place, after text about another country or a state, is listed only if the official figure agrees; sentences about what would, could or is proposed to happen are skipped | `claims/splitter.py` | see `git log` |
 
 Nothing that existed was removed. `/verify`, `/v2/verify` and `/v2/lookup` answer as before, so every
 installed extension keeps working.
@@ -82,7 +84,7 @@ The extension is separate from the server:
 
 ## Verified
 
-- 1,566 tests pass (`make test`); 1,154 before this branch.
+- 1,610 tests pass (`make test`); 1,154 before this branch.
 - By hand, against live agency data, on a local server without agency keys: the passage check, the
   revision label, the shared page and its link preview tags, the home page, both new pages, and a full
   `/mcp` exchange (initialize, tools/list, tools/call).
@@ -94,6 +96,8 @@ The extension is separate from the server:
   "inflation hit 9.1% in 2022" answered from live data with no model call; the two sentences that must not
   get a verdict did not.
 - The first live test run against production: 28 of 28, recorded in `backend/eval/results/2026-11-17.json`.
+- Changes #19 and #20 against ten encyclopedia articles on the U.S. economy, the same way: 24 sentences
+  that would have been given a wrong or unfounded verdict are each held by a test.
 - Changes #14 and #15 against 20 real, dated wire stories and five agency releases, read live. Every
   sentence picked was read by eye; each misreading found became a fix with a test
   (`tests/test_news_wording.py`, `tests/test_page_date.py`).

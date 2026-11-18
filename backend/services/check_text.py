@@ -24,9 +24,10 @@ that end in a verdict are listed. The rest are reported as a count
 
 A page that says when it was published (`as_of`) dates the months it names
 without a year. Where the text around such a sentence names some other year,
-the reading is less sure, and the claim is listed only when the official
-figure agrees with it: a mismatch there may be the reading's fault, not the
-sentence's, so it is counted with the unsettled.
+or a sentence names no place and the text before it is about another country
+or a state, the reading is less sure, and the claim is listed only when the
+official figure agrees with it: a mismatch there may be the reading's fault,
+not the sentence's, so it is counted with the unsettled.
 
 Nothing here reaches a verdict. Each claim's answer is the engine's own.
 """

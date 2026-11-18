@@ -303,3 +303,46 @@ class TestWhatRealPagesShowed:
                 "The average workweek for all employees on private nonfarm payrolls remained at 34.4 hours in October.")
         spans, _ = splitter.split_claims(text, kinds=(splitter.STATISTIC, splitter.RECORD), strict=True, as_of=NOV_6)
         assert spans == []
+
+
+class TestASentenceWithNoPlaceInTextAboutAnotherPlace:
+    PERU = ("Peru's economy was among the hardest hit in Latin America.\n"
+            "In 2020, the economy contracted 13.4% with the sharpest declines in private consumption.")
+
+    def test_it_is_marked_unsure(self):
+        spans, _ = splitter.split_claims(self.PERU, kinds=(splitter.STATISTIC,), strict=True)
+        assert len(spans) == 1 and spans[0].tentative is True
+
+    def test_one_that_names_its_own_place_is_not(self):
+        text = "Peru's economy was among the hardest hit.\nIn 2020, the U.S. economy contracted 2.2%."
+        spans, _ = splitter.split_claims(text, kinds=(splitter.STATISTIC,), strict=True)
+        assert spans[0].tentative is False
+
+    def test_nor_is_one_in_text_about_no_other_place(self):
+        text = "The recession was short.\nIn 2020, the economy contracted 2.2%."
+        spans, _ = splitter.split_claims(text, kinds=(splitter.STATISTIC,), strict=True)
+        assert spans[0].tentative is False
+
+    async def test_read_as_the_united_states_and_wrong_it_is_not_listed(self):
+        async def fake(claim, allow_grounding=True, client_ip=None):
+            return answer(claim, CONTRADICTED)
+        with patch.object(ct, "verify", fake):
+            out = await ct.check_text(self.PERU, mode="page")
+        assert out["claims"] == [] and out["unsettled"] == 1
+
+
+class TestWhatMayHappenIsNotOnRecord:
+    @pytest.mark.parametrize("text", [
+        "About 6.3 million people could lose eligibility for SNAP by the 2029 fiscal year if the proposed change "
+        "takes effect, according to the U.S. Department of Agriculture.",
+        "The bill would raise the deficit by $3.4 trillion over a decade, the CBO said in 2025.",
+        "Unemployment should fall to 4.0% in 2027, the administration said.",
+    ])
+    def test_it_is_not_picked_from_a_page(self, text):
+        spans, _ = splitter.split_claims(text, kinds=(splitter.STATISTIC, splitter.RECORD), strict=True)
+        assert spans == []
+
+    def test_what_did_happen_still_is(self):
+        spans, _ = splitter.split_claims("The unemployment rate fell to 3.5% in September 2019.",
+                                         kinds=(splitter.STATISTIC, splitter.RECORD), strict=True)
+        assert len(spans) == 1
