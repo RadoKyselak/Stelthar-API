@@ -91,7 +91,11 @@ TOOLS: List[Dict[str, Any]] = [
                         "claim was read (measure, place, period), the source and a citation."),
         "inputSchema": {
             "type": "object",
-            "properties": {"claim": {"type": "string", "description": "One sentence stating a fact."}},
+            "properties": {
+                "claim": {"type": "string", "description": "One sentence stating a fact."},
+                "said_on": {"type": "string", "description": "The day the claim was made, YYYY-MM-DD, if known. "
+                            "A claim that names no period is then held to the figure that was newest that day."},
+            },
             "required": ["claim"],
         },
         "annotations": {"readOnlyHint": True, "openWorldHint": True},
@@ -225,7 +229,14 @@ async def _check_page(arguments: Dict[str, Any], request: Request) -> Dict[str, 
 async def _check_claim(arguments: Dict[str, Any], request: Request) -> Dict[str, Any]:
     claim = _text_arg(arguments, "claim", 1000)
     await _limited("verify", request)
-    got = await check_text(claim, client_ip=client_ip(request), free_only=True)
+    said = None
+    if arguments.get("said_on"):
+        from datetime import date
+        try:
+            said = date.fromisoformat(str(arguments["said_on"]))
+        except ValueError:
+            raise ToolError("said_on must be a date written YYYY-MM-DD.")
+    got = await check_text(claim, client_ip=client_ip(request), free_only=True, said_on=said)
     # A sentence that holds several claims is answered claim by claim.
     claims = [_brief(e["result"]) for e in got["claims"]]
     if len(claims) == 1:

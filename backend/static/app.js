@@ -77,7 +77,10 @@
     out.replaceChildren(V.loading());
     try {
       // One claim or a whole passage: each claim in it is answered on its own.
-      const result = await postJSON("/v2/check", V.isLink(text) ? { url: text } : { text });
+      // The day it was said, if given: "is 8%" then means the figure of that day.
+      const said = (document.getElementById("said") || {}).value || "";
+      const body = V.isLink(text) ? { url: text } : (said ? { text, said_on: said } : { text });
+      const result = await postJSON("/v2/check", body);
       if (mine !== ticket) return;
       out.replaceChildren(V.renderPassage(result, cardOptions));
       remember(text);
