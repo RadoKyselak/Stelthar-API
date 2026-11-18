@@ -306,6 +306,13 @@ async def verify_found(text: str, parsed: ParsedClaim, client_ip: Optional[str],
         return None
     found = await finder.find(text, "check", client_ip=client_ip,
                               figure=parsed.claimed_value.raw or "")
+    return judge_found(text, parsed, found, started)
+
+
+def judge_found(text: str, parsed: ParsedClaim, found, started: float):
+    """What the engine makes of a figure the finder chose: the same checks and
+    verdict rules whoever drove the tools (the model in production, a test
+    harness in eval/agent_harness.py). None when the figure cannot stand."""
     dp = found.datapoint
     if dp is None or not found.exact:
         return None
