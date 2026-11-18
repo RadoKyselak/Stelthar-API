@@ -79,3 +79,46 @@ class TestScoring:
     def test_the_date_politifact_puts_in_its_address(self):
         assert qj.said_on("https://www.politifact.com/factchecks/2012/feb/08/x/y/") == "2012-02-08"
         assert qj.said_on("https://www.snopes.com/fact-check/x/") == ""
+
+
+class TestDecomposed:
+    def q(self, kind, answer):
+        return {"q": "?", "kind": kind, "answer": answer}
+
+    @pytest.mark.parametrize("questions, lean, verdict", [
+        ([("core", "no"), ("framing", "yes")], "True", "False"),           # the figure is wrong
+        ([("core", "yes"), ("framing", "no")], "False", "Conflicting"),    # right figure, stretched
+        ([("core", "yes"), ("framing", "yes")], "False", "True"),
+        ([("core", "yes"), ("framing", "unclear")], "False", "Conflicting"),
+        ([("core", "yes"), ("framing", "unclear")], "True", "True"),
+        ([("core", "unclear"), ("framing", "unclear")], "Conflicting", "Conflicting"),   # the lean decides
+        ([("core", "unclear"), ("framing", "no")], "True", "Conflicting"),
+        ([("core", "unclear"), ("framing", "no")], "False", "False"),
+        ([], "Bogus", "False"),
+    ])
+    def test_the_verdict_is_worked_out_from_the_answers(self, questions, lean, verdict):
+        assert ej.decide([self.q(k, a) for k, a in questions], lean) == verdict
+
+    def test_a_reply_is_read_and_decided(self):
+        reply = json.dumps({"questions": [{"q": "Is the count 15 million?", "kind": "core", "answer": "yes"},
+                                          {"q": "Is it counted from the start of the term?", "kind": "framing",
+                                           "answer": "no", "why": "from the low point"}], "lean": "False"})
+        got = ej.read_decomposed(reply)
+        assert got["verdict"] == "Conflicting" and got["service_verdict"] == "Misleading" and len(got["questions"]) == 2
+
+    @pytest.mark.parametrize("reply", ["", "nothing", '{"questions": [{"kind": "core", "answer": "maybe"}]}'])
+    def test_an_unreadable_reply(self, reply):
+        assert ej.read_decomposed(reply) is None
+
+    def test_the_instructions_say_silence_is_unclear(self):
+        assert 'Silence in the evidence is "unclear", never "no"' in ej.DECOMPOSE_INSTRUCTIONS
+
+    def test_a_fresh_test_skips_the_claims_an_earlier_one_drew(self, tmp_path):
+        claims = [{"claim": f"Claim {i} says 5% of something", "label": "False", "url": ""} for i in range(20)]
+        ev = [{"docs": [f"snippet about claim {i} with enough words in it here"]} for i in range(20)]
+        (tmp_path / "c.json").write_text(json.dumps(claims)); (tmp_path / "e.json").write_text(json.dumps(ev))
+        qj.split(str(tmp_path / "c.json"), str(tmp_path / "e.json"), str(tmp_path / "a"), 3, 5)
+        qj.split(str(tmp_path / "c.json"), str(tmp_path / "e.json"), str(tmp_path / "b"), 3, 5, skip=5)
+        ids = lambda p: {json.loads(l)["id"] for l in open(p)}
+        assert ids(tmp_path / "a" / "dev.jsonl") == ids(tmp_path / "b" / "dev.jsonl")
+        assert not ids(tmp_path / "a" / "test.jsonl") & ids(tmp_path / "b" / "test.jsonl")
