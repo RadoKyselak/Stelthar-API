@@ -369,6 +369,12 @@ def _reading(points: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     return [c for c in out if c["value"]]
 
 
+def _is_a_figure(text: str) -> bool:
+    """A number with its unit and at most a few words ("7.3%", "$40.2
+    trillion", "about 1.4 million jobs"), as opposed to a sentence."""
+    return bool(text) and len(text) <= 32 and len(text.split()) <= 5 and any(ch.isdigit() for ch in text)
+
+
 def share_url(claim: str) -> str:
     """The page that shows this claim's check to someone else (routes/share.py)."""
     import config
@@ -415,11 +421,17 @@ def build_display(v) -> Dict[str, Any]:
     reported = getattr(v, "reported", None) or {}
     reported_value, reported_context = "", ""
     if v.tier == "grounded" and reported.get("value"):
-        reported_value = reported["value"]
-        reported_context = " · ".join(x for x in (reported.get("period"),
-                                                      reported.get("source_org")) if x)
-        # The figure is shown on its own; the summary is the explanation.
-        summary = reported.get("explanation") or summary
+        said = " ".join(str(reported["value"]).split())
+        if _is_a_figure(said):
+            reported_value = said
+            reported_context = " · ".join(x for x in (reported.get("period"),
+                                                          reported.get("source_org")) if x)
+        # The figure is shown on its own; the summary is the explanation. What
+        # the search found is sometimes a sentence, not a figure ("Democrats
+        # held the House majority in every Congress from the 84th through the
+        # 103rd"): that belongs in the explanation, not in the slot a number
+        # is drawn in, where it was set in headline type and cut off mid-word.
+        summary = reported.get("explanation") or (summary if reported_value else said) or summary
 
     reason = None
     if v.verdict == V.NO_VERDICT and v.reason:
