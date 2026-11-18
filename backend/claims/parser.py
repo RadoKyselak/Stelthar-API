@@ -433,6 +433,18 @@ _NOT_A_PUBLISHED_FIGURE_RE = re.compile(
     r"\bpredict(?:ed|s|ion|ions)\b|\bexpect(?:ed|s|ing|ation|ations)?\b|\bon track to\b|"
     # "an estimated $15.6 trillion for 2012 based on activity during the first two quarters"
     r"\bestimated?\b.{0,60}?\bbased on\b", re.IGNORECASE)
+# What would happen, or what someone wants to happen: "if participation were
+# the same, unemployment would be 11%", "raising the minimum wage to $10.10
+# would lift a million people out of poverty". Real fact-checked claims are
+# full of these, and each was held against today's figure.
+_HYPOTHETICAL_RE = re.compile(
+    r"\b(?:would|could|might)\b|\bif\b"
+    r"|\b(?:raising|increasing|lowering|cutting|boosting|hiking|reducing|expanding|to raise|to increase|to lower|"
+    r"to cut|to reduce)\s+(?:the\s+)?[a-z ,'-]{0,40}?\bto\s+(?:about\s+|at least\s+)?[$]?\d", re.IGNORECASE)
+# "Reduced the number of uninsured by 10 percent": an amount of change, however the verb is put.
+_BY_AN_AMOUNT_RE = re.compile(
+    r"\bby\s+(?:about\s+|nearly\s+|roughly\s+|almost\s+|more than\s+|over\s+|at least\s+)?[$]?(\d[\d,]*(?:\.\d+)?)",
+    re.IGNORECASE)
 # GDP as what something else is measured against: "debt to GDP rose to 99%".
 _AGAINST_GDP_RE = re.compile(
     r"\bto[- ](?:the\s+)?(?:u\.?s\.?\s+)?gdp\b|\b(?:%|percent|share|percentage|proportion|fraction)\s+of\s+"
@@ -475,6 +487,8 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
         return "the claim is about the change over one month; the series is the change over 12 months"
     if _NOT_A_PUBLISHED_FIGURE_RE.search(text):
         return "the claim is about a target, a forecast or an expectation, not a published figure"
+    if _HYPOTHETICAL_RE.search(text):
+        return "the claim is about what would happen or is proposed, not a published figure"
     if _BY_COMPARISON_RE.search(text):
         return "the claim names its period only by comparison (\u201cthis time in\u201d); the period is not stated"
     if spec.metric in ("gdp", "real_gdp_growth") and _AGAINST_GDP_RE.search(text):
@@ -484,6 +498,9 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
     if spec.metric == "poverty_rate" and _OTHER_POVERTY_RE.search(text):
         return "the claim is about a different measure of poverty than the official rate"
     number = re.search(r"\d[\d,]*(?:\.\d+)?", (claimed.raw or "")) if claimed is not None else None
+    if number and not _is_a_change(spec) and not _CHANGE_THEN_LEVEL_RE.search(text) \
+            and any(m.group(1) == number.group(0) for m in _BY_AN_AMOUNT_RE.finditer(text)):
+        return "the claim says how much the figure changed, not what it was"
     if number and not _is_a_change(spec):
         # "Added $1 trillion to the national debt" is not a claim that the debt is $1 trillion.
         for m in _MOVED_BY_RE.finditer(text):
