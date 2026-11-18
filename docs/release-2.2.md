@@ -16,7 +16,7 @@ to take it back out.
 | 7 | `POST /mcp`: the checks as tools for assistants | `routes/mcp.py` | `f703451` |
 | 8 | `make eval-live`: the eval set against the deployed service, free | `eval/remote.py` | `6229bf8` |
 | 9 | Text nobody typed as a claim is held to more: a figure must be written as its measure is written, a bare figure is not run through the engine, and a figure 20x off gets no verdict on free data | `claims/splitter.py`, `services/check_text.py`, `services/verify_v2.py` | `d319f35` |
-| 10 | Four misreadings fixed (a year that names an event, a month without its year, an age word dropped, one industry's jobs); "fell to X in a year" is checked month by month | `claims/parser.py`, `services/verify_v2.py` | `d7e517d` |
+| 10 | Four misreadings fixed (a year that names an event, a month without its year, an age word dropped, one industry's jobs); "fell to X in a year" is checked month by month; a year's 12-month change (inflation, wages) is also read as December on December | `claims/parser.py`, `services/verify_v2.py` | `d7e517d` |
 | 11 | Check a page by its link: `{"url": ...}` to `/v2/check`, on the site, in the side panel and as the `check_page` tool | `utils/safe_fetch.py`, `claims/article.py`, `services/check_link.py` | `af2552c` |
 | 12 | CDC: deaths from COVID-19, firearms and homicide, national or by state | `services/health.py`, `evidence/sources/cdc.py` | `159b0f8` |
 | 13 | "Wages are up X%": the 12-month change in average hourly earnings | `claims/metrics.py` | `934b74c` |
@@ -77,7 +77,7 @@ The extension is separate from the server:
 
 ## Verified
 
-- 1,422 tests pass (`make test`); 1,154 before this branch.
+- 1,425 tests pass (`make test`); 1,154 before this branch.
 - By hand, against live agency data, on a local server without agency keys: the passage check, the
   revision label, the shared page and its link preview tags, the home page, both new pages, and a full
   `/mcp` exchange (initialize, tools/list, tools/call).
@@ -85,6 +85,10 @@ The extension is separate from the server:
 - Link checks against real pages (a BLS news release, a Wikipedia article) and against addresses that must
   be refused (a cloud metadata address, localhost, a video site).
 - The new CDC checks against the live data.cdc.gov service: eight claims, all answered with no model call.
+- On the preview build, with the real agency keys: wage growth, the CDC checks, "fell to 3.9% in 2021" and
+  "inflation hit 9.1% in 2022" answered from live data with no model call; the two sentences that must not
+  get a verdict did not.
+- The first live test run against production: 28 of 28, recorded in `backend/eval/results/2026-11-17.json`.
 
 ## Not verified, or not done
 
@@ -102,8 +106,6 @@ The extension is separate from the server:
 - **In-page highlighting** ("scan this page"). Decided against: it needs the `activeTab` and `scripting`
   permissions, and the extension deliberately has neither (`tests/test_extension_permissions.py`).
   Highlighting an article and right-clicking, or pasting its link, gives the same answers.
-- **Wage growth against live BLS data.** Tested on captured-style monthly rows; the keyless BLS allowance
-  on the development machine was used up, so it has not been run live.
 - **A picture of the verdict in link previews.** A shared check's preview carries the verdict in its title
   and text, with the site's standard image.
 - **Spanish.** The engine reads English only.

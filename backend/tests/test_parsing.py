@@ -129,6 +129,12 @@ class TestYearsThatNameEvents:
         p = parse_claim(text)
         assert p.year is None and p.has_unresolved_period is True
 
+    def test_the_events_year_is_not_a_second_figure(self):
+        """Or the claim is declined as a comparison of two points, with the wrong advice."""
+        from claims.parser import parse_claim
+        p = parse_claim("GDP fell 3.7% following the 1973 oil crisis")
+        assert len(p.all_values) == 1 and p.is_trend_claim is False
+
     @pytest.mark.parametrize("text,year", [
         ("Unemployment was 9.3% in 2009 after the 2008 financial crisis", 2009),
         ("Unemployment was 3.6% in 2023", 2023),

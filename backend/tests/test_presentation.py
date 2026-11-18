@@ -354,6 +354,18 @@ class TestWageGrowth:
         v = await structured("Wages grew 4.4% in December 2023, beating inflation", PAY)
         assert v.evidence[0]["metric"] == "wage_growth"
 
+    async def test_a_year_is_also_the_twelve_months_to_december(self):
+        """Both are official: the change in the annual average (4.5% here) and
+        December on December (4.4%), which is the one the release headlines."""
+        avg = await structured("Wages rose 4.5% in 2023", PAY)
+        assert avg.verdict == "Supported" and avg.evidence[0]["period_label"] == "2023"
+        dec = await structured("Wages rose 4.4% in 2023", PAY)
+        assert dec.verdict == "Supported" and dec.confidence == "Medium"
+        assert dec.evidence[0]["period_label"] == "December 2023"
+        assert "12 months to December 2023" in dec.headline and "annual average was" in dec.headline
+        neither = await structured("Wages rose 6% in 2023", PAY)
+        assert neither.verdict == "Contradicted"
+
     async def test_real_wages_are_left_alone(self):
         v = await structured("Real wages rose 2% in 2022", PAY)
         assert v.verdict == "No verdict"

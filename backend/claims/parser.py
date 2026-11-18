@@ -648,7 +648,8 @@ def parse_claim(text: str) -> ParsedClaim:
     # Age bounds that define a universe ("adults 25 and older", "ages 16+")
     # are not claimed values; left in, they made a one-number claim look like
     # a two-number trend claim.
-    value_text = _AGE_BOUND_RE.sub(" ", _strip_years_for_value(raw, years))
+    # An event's year is still a year, not a second figure.
+    value_text = _AGE_BOUND_RE.sub(" ", _strip_years_for_value(raw, years + events))
     # "30-year mortgage", "a 40-year high", "the lowest in 54 years" name spans,
     # not claimed values. A superlative is said to be unchecked, never ignored.
     superlative = _SUPERLATIVE_RE.search(value_text)

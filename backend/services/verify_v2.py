@@ -690,11 +690,21 @@ async def _reached_in_year(parsed: ParsedClaim, base: Verdict) -> Optional[Verdi
     spec = parsed.metric
     if (spec is None or spec.source != "BLS" or spec.bls_kind not in ("rate", "cpi_yoy", "price")
             or parsed.year is None or parsed.month is not None or parsed.quarter is not None
-            or parsed.claimed_value is None or parsed.is_trend_claim or not base.evidence
-            or not _REACHED_RE.search(parsed.text)):
+            or parsed.claimed_value is None or parsed.is_trend_claim or not base.evidence):
+        return None
+    reached = bool(_REACHED_RE.search(parsed.text))
+    # A 12-month change has two official readings for a year: the change in
+    # the annual average, and the 12 months to December, which is the one the
+    # December release headlines ("inflation was 3.4% in 2023"). A claim that
+    # misses the first is tried against the second before it is called wrong.
+    if reached:
+        months = range(12, 0, -1)
+    elif spec.bls_kind == "cpi_yoy":
+        months = (12,)
+    else:
         return None
     average = base.evidence[0].display_value()
-    for month in range(12, 0, -1):
+    for month in months:
         in_month = replace(parsed, month=month)
         try:
             got = await fetch_structured(in_month)
@@ -705,12 +715,17 @@ async def _reached_in_year(parsed: ParsedClaim, base: Verdict) -> Optional[Verdi
         v = assess(in_month, got)
         if v.verdict == SUPPORTED:
             when = f"{_MONTH_NAMES[month - 1]} {parsed.year}"
-            return replace(
-                v, confidence=MEDIUM,
-                headline=(f"{v.headline.rstrip('.')}. The claim says it reached that level in {parsed.year}; "
-                          f"the {parsed.year} average was {average}."),
-                caveats=list(v.caveats) + [f"Read as the level reached in {when}, not the {parsed.year} "
-                                           f"average ({average})."])
+            if reached:
+                more = (f"The claim says it reached that level in {parsed.year}; the {parsed.year} average "
+                        f"was {average}.")
+                note = f"Read as the level reached in {when}, not the {parsed.year} average ({average})."
+            else:
+                more = (f"That is the change over the 12 months to December {parsed.year}; the change in the "
+                        f"{parsed.year} annual average was {average}.")
+                note = (f"Read as the 12 months to December {parsed.year}. The change in the annual average, "
+                        f"the other official figure for the year, was {average}.")
+            return replace(v, confidence=MEDIUM, headline=f"{v.headline.rstrip('.')}. {more}",
+                           caveats=list(v.caveats) + [note])
     return None
 
 
