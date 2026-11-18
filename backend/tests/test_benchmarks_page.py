@@ -9,16 +9,24 @@ import pytest
 BACK = pathlib.Path(__file__).resolve().parent.parent
 PAGE = (BACK / "static" / "benchmarks.html").read_text()
 DATA = json.loads((BACK / "eval" / "results" / "benchmarks.json").read_text())
-CLAIMS = PAGE.split("<h2>Rating claims</h2>")[1]
+CLAIMS = PAGE.split("<h2>Rating older claims</h2>")[1]
+RECENT = PAGE.split("<h2>Rating recent claims</h2>")[1].split("<h2>")[0]
 LOOKUP = PAGE.split("<h2>Looking up government figures</h2>")[1].split("<h2>")[0]
 ROWS = re.findall(r'<li( class="bench-us")?><span class="bench-name">(.*?)</span>'
                   r'<meter min="0" max="100" value="([\d.]+)"></meter><span class="bench-score">([\d.]+)</span>', CLAIMS)
 
 
 class TestTheGraph:
-    def test_two_graphs_lookup_first(self):
-        assert PAGE.count('<ol class="bench">') == 2 and PAGE.count("<h2>") == 2
-        assert PAGE.index("Looking up government figures") < PAGE.index("Rating claims")
+    def test_three_graphs_lookup_first(self):
+        assert PAGE.count('<ol class="bench">') == 3 and PAGE.count("<h2>") == 3
+        assert PAGE.index("Looking up government figures") < PAGE.index("Rating recent claims") < PAGE.index("Rating older claims")
+
+    def test_recent_graph_is_what_was_recorded_in_order(self):
+        rows = re.findall(r'<li( class="bench-us")?><span class="bench-name">(.*?)</span><meter min="0" max="100" '
+                          r'value="([\d.]+)"></meter><span class="bench-score">([\d.]+)</span>', RECENT)
+        assert [(bool(u), n, float(v)) for u, n, v, _ in rows] == [(r["mirador"], r["name"], r["score"]) for r in DATA["recent"]["rows"]]
+        assert [float(v) for _, _, v, _ in rows] == sorted((float(v) for _, _, v, _ in rows), reverse=True)
+        assert f"&plusmn;{DATA['recent']['margin']}" in RECENT
 
     def test_lookup_graph_is_what_was_recorded(self):
         L = DATA["lookup"]

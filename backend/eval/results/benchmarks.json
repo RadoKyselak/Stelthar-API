@@ -52,5 +52,42 @@
    "agency_revised_since": 9,
    "benchmark_error": 3
   }
+ },
+ "recent": {
+  "benchmark": "PolitiFact rulings published 1 Jul - 18 Nov 2026",
+  "claims": 110,
+  "margin": 12,
+  "metric": "macro-F1",
+  "rows": [
+   {
+    "name": "Project Mirador (extra reasoning)",
+    "score": 69.2,
+    "mirador": true,
+    "model": "claude-sonnet-5-5"
+   },
+   {
+    "name": "Project Mirador (fast)",
+    "score": 57.7,
+    "mirador": true,
+    "model": "claude-haiku-5-5"
+   },
+   {
+    "name": "The same AI on its own (fast)",
+    "score": 54.0,
+    "mirador": false,
+    "model": "claude-haiku-5-5"
+   },
+   {
+    "name": "The same AI on its own (extra reasoning)",
+    "score": 46.4,
+    "mirador": false,
+    "model": "claude-sonnet-5-5"
+   },
+   {
+    "name": "Guessing “False” every time",
+    "score": 21.1,
+    "mirador": false
+   }
+  ]
  }
 }
