@@ -1,24 +1,49 @@
 {
-  "updated": "2026-11-18",
-  "benchmark": "QuanTemp",
-  "citation": "Venktesh V. et al., SIGIR 2024, arXiv:2403.17169",
-  "metric": "macro-F1",
-  "claims_in_test": 2495,
-  "mirador": [
-    {"mode": "extra reasoning", "model": "claude-sonnet-5-5", "score": 61.32, "claims": 300, "live": false},
-    {"mode": "fast", "model": "claude-haiku-5-5", "score": 50.71, "claims": 300, "live": true}
-  ],
-  "margin": 6,
-  "others": [
-    {"name": "Best published system (fine-tuned FinQA-RoBERTa)", "score": 58.32},
-    {"name": "Fine-tuned RoBERTa", "score": 57.12},
-    {"name": "Fine-tuned BART", "score": 56.71},
-    {"name": "Program-FC", "score": 53.43},
-    {"name": "Fine-tuned NumT5", "score": 50.26},
-    {"name": "GPT-3.5, with examples", "score": 47.00},
-    {"name": "GPT-4, with examples", "score": 36.50},
-    {"name": "Flan-T5, with examples", "score": 36.52},
-    {"name": "GPT-3.5, no examples", "score": 33.87},
-    {"name": "Answering “False” every time", "score": 24.21}
-  ]
+ "updated": "2026-11-18",
+ "benchmark": "QuanTemp",
+ "citation": "Venktesh V. et al., SIGIR 2024, arXiv:2403.17169",
+ "metric": "macro-F1",
+ "claims_in_test": 2495,
+ "mirador": [
+  {
+   "mode": "extra reasoning",
+   "model": "claude-sonnet-5-5",
+   "score": 61.32,
+   "claims": 300,
+   "live": false
+  },
+  {
+   "mode": "fast",
+   "model": "claude-haiku-5-5",
+   "score": 50.71,
+   "claims": 300,
+   "live": true
+  }
+ ],
+ "margin": 6,
+ "others": [
+  {
+   "name": "Best research system built for this test",
+   "score": 58.32
+  },
+  {
+   "name": "OpenAI GPT-3.5, shown examples",
+   "score": 47.0
+  },
+  {
+   "name": "OpenAI GPT-4, shown examples",
+   "score": 36.5
+  },
+  {
+   "name": "Guessing “False” every time",
+   "score": 24.21
+  }
+ ],
+ "control": {
+  "name": "Extra reasoning, shown no evidence at all",
+  "model": "claude-sonnet-5-5",
+  "score": 57.71,
+  "claims": 120,
+  "why": "The same judge given only the claim. Its score barely drops, so most of it is what the model already knew about these claims."
+ }
 }

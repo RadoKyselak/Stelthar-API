@@ -18,7 +18,8 @@ class TestTheGraph:
         assert PAGE.count('<ol class="bench">') == 1 and PAGE.count("<h2") == 0
 
     def test_every_recorded_score_is_a_bar_and_nothing_else_is(self):
-        recorded = sorted([m["score"] for m in DATA["mirador"]] + [o["score"] for o in DATA["others"]])
+        recorded = sorted([m["score"] for m in DATA["mirador"]] + [o["score"] for o in DATA["others"]]
+                          + [DATA["control"]["score"]])
         assert sorted(float(v) for _, _, v, _ in ROWS) == recorded
 
     def test_each_bar_shows_its_value_rounded(self):
@@ -40,6 +41,13 @@ class TestTheGraph:
 
     def test_the_margin_is_stated(self):
         assert f"{DATA['mirador'][0]['claims']} random claims from the test, so &plusmn;{DATA['margin']}" in PAGE
+
+    def test_the_no_evidence_run_is_shown_and_the_win_is_not_claimed(self):
+        assert DATA["control"]["name"] in PAGE and "Not a real win." in PAGE
+        assert f"{DATA['control']['score']:.1f}" in PAGE.split("Not a real win.")[1]
+
+    def test_no_jargon_and_no_method_link(self):
+        assert not re.search(r"roberta|bart|numt5|flan|program-fc|how it was run", PAGE, re.I)
 
     def test_no_model_vendor_is_named_for_mirador(self):
         assert not re.search(r"claude|haiku|sonnet|anthropic", PAGE, re.I)

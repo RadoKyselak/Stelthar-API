@@ -25,21 +25,19 @@
       Score out of 100; higher is better.</p>
     <ol class="bench">
       <li class="bench-us"><span class="bench-name">Project Mirador (extra reasoning)</span><meter min="0" max="100" value="61.32"></meter><span class="bench-score">61.3</span></li>
-      <li><span class="bench-name">Best published system (fine-tuned FinQA-RoBERTa)</span><meter min="0" max="100" value="58.32"></meter><span class="bench-score">58.3</span></li>
-      <li><span class="bench-name">Fine-tuned RoBERTa</span><meter min="0" max="100" value="57.12"></meter><span class="bench-score">57.1</span></li>
-      <li><span class="bench-name">Fine-tuned BART</span><meter min="0" max="100" value="56.71"></meter><span class="bench-score">56.7</span></li>
-      <li><span class="bench-name">Program-FC</span><meter min="0" max="100" value="53.43"></meter><span class="bench-score">53.4</span></li>
+      <li><span class="bench-name">Best research system built for this test</span><meter min="0" max="100" value="58.32"></meter><span class="bench-score">58.3</span></li>
+      <li><span class="bench-name">Extra reasoning, shown no evidence at all</span><meter min="0" max="100" value="57.71"></meter><span class="bench-score">57.7</span></li>
       <li class="bench-us"><span class="bench-name">Project Mirador (fast)</span><meter min="0" max="100" value="50.71"></meter><span class="bench-score">50.7</span></li>
-      <li><span class="bench-name">Fine-tuned NumT5</span><meter min="0" max="100" value="50.26"></meter><span class="bench-score">50.3</span></li>
-      <li><span class="bench-name">GPT-3.5, with examples</span><meter min="0" max="100" value="47.00"></meter><span class="bench-score">47.0</span></li>
-      <li><span class="bench-name">Flan-T5, with examples</span><meter min="0" max="100" value="36.52"></meter><span class="bench-score">36.5</span></li>
-      <li><span class="bench-name">GPT-4, with examples</span><meter min="0" max="100" value="36.50"></meter><span class="bench-score">36.5</span></li>
-      <li><span class="bench-name">GPT-3.5, no examples</span><meter min="0" max="100" value="33.87"></meter><span class="bench-score">33.9</span></li>
-      <li><span class="bench-name">Answering “False” every time</span><meter min="0" max="100" value="24.21"></meter><span class="bench-score">24.2</span></li>
+      <li><span class="bench-name">OpenAI GPT-3.5, shown examples</span><meter min="0" max="100" value="47.00"></meter><span class="bench-score">47.0</span></li>
+      <li><span class="bench-name">OpenAI GPT-4, shown examples</span><meter min="0" max="100" value="36.50"></meter><span class="bench-score">36.5</span></li>
+      <li><span class="bench-name">Guessing “False” every time</span><meter min="0" max="100" value="24.21"></meter><span class="bench-score">24.2</span></li>
     </ol>
-    <p class="bench-note">Mirador: 300 random claims from the test, so &plusmn;6.
+    <p class="bench-note"><strong>Not a real win.</strong> These fact-checks were online before the models Mirador uses were built.
+      Shown no evidence at all, extra reasoning still scored 57.7, so most of its score is what the model already knew.
+      The older systems could not know that. Read the top two as level.</p>
+    <p class="bench-note">Mirador: 300 random claims from the test, so &plusmn;6 (no-evidence run: 120).
       Others: as published by the benchmark&rsquo;s authors (Venktesh et al., SIGIR 2024). The live site runs fast mode; extra reasoning is not offered there yet.
-      Tested November 18, 2026. <a href="https://github.com/RadoKyselak/Stelthar-API/tree/main/backend/eval">How it was run</a>.</p>
+      Tested November 18, 2026.</p>
   </main>
   <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/benchmarks">Benchmarks</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
 </body>
