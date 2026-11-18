@@ -63,10 +63,31 @@ class TestJudging:
         return judge_found(text, parse_claim(text), found, time.monotonic())
 
     def test_the_claims_figure_comes_from_the_text_and_the_arithmetic_from_here(self):
-        text = "Every child born today inherits a $30,000 share in a national debt that stands at more than $13 trillion."
-        got = self.judge(text, Found(DEBT, True, second=PEOPLE, operation="ratio", claim_figure="$30,000"))
+        text = "The national debt comes to $20,000 for every American."
+        got = self.judge(text, Found(DEBT, True, second=PEOPLE, operation="ratio", claim_figure="$20,000"))
         assert got.verdict == CONTRADICTED and got.confidence == MEDIUM
         assert "No agency publishes this figure as such" in got.caveats[0]
+
+    def test_a_share_of_the_debt_may_be_a_share_of_its_other_total(self):
+        """PolitiFact rated this Mostly True: $30,419 a person is the debt
+        held by the public over the population. Against all of the debt it is
+        $46,000, and it was marked Contradicted."""
+        text = "Every child born today inherits a $30,000 share in a national debt that stands at more than $13 trillion."
+        assert self.judge(text, Found(DEBT, True, second=PEOPLE, operation="ratio", claim_figure="$30,000")) is None
+
+    def test_arithmetic_on_two_figures_is_not_held_to_the_dollar(self):
+        """PolitiFact rated this True ("about $48,000"). It was Contradicted
+        for being 1.2% off."""
+        text = "The national debt is $47,900 for every living American."
+        debt = point(15.11e12, "usd", "Total public debt outstanding", metric="national_debt")
+        people = point(311.59e6, "persons", "Total population", metric="population")
+        got = self.judge(text, Found(debt, True, second=people, operation="ratio", claim_figure="$47,900"))
+        assert got.verdict == "Mostly accurate" and "worked out from two others" in got.headline
+
+    def test_a_promise_is_not_settled_by_the_figure_it_names(self):
+        text = 'President Obama pushed through the stimulus "based on the promise of keeping unemployment under 8 percent."'
+        rate = point(8.3, "percent", "Unemployment rate", 2012, 1, metric="unemployment_rate")
+        assert self.judge(text, Found(rate, True, claim_figure="8 percent", comparator="less than")) is None
 
     def test_a_sentence_the_rules_cannot_read(self):
         text = 'Says that during President Barack Obama’s tenure, the United States has created "15 million new jobs."'

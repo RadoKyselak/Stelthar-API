@@ -20,7 +20,7 @@ from typing import List, Optional, Set
 
 import config
 from claims.parser import ParsedClaim, income_band
-from claims.verdict import HIGH, MEDIUM, NO_VERDICT, assess
+from claims.verdict import CONTRADICTED, HIGH, MEDIUM, MOSTLY_ACCURATE, NO_VERDICT, assess
 from config import logger
 from evidence import ai_search
 from evidence.datasets import Candidate, census_profile, finder, fred, picker
@@ -312,6 +312,10 @@ async def verify_found(text: str, parsed: ParsedClaim, client_ip: Optional[str],
     return judge_found(text, parsed, found, started)
 
 
+# A computed figure this close to the claim's is not called wrong.
+_COMPUTED_CLOSE = 0.05
+# Measures with a second official total, and how far apart the two run.
+_SECOND_MEASURE = {"national_debt": 0.45}
 _OP_WORDS = {"difference": "less", "percent_change": "percent change from", "ratio": "divided by",
              "percent_of": "as a percent of"}
 
@@ -373,6 +377,12 @@ def judge_found(text: str, parsed: ParsedClaim, found, started: float):
     dp = found.datapoint
     if dp is None or not found.exact:
         return None
+    from claims.parser import not_a_published_figure
+    if not_a_published_figure(text):
+        # "On the promise of keeping unemployment under 8 percent": a right
+        # lookup of the unemployment rate still judges a sentence that is not
+        # about the unemployment rate.
+        return None
     computed = found.operation != "value"
     if computed:
         dp = combine(found)
@@ -412,7 +422,21 @@ def judge_found(text: str, parsed: ParsedClaim, found, started: float):
     from services.verify_v2 import _verdict_to_result  # avoid an import cycle
     judged = replace(parsed, geography=dp.geography,
                      metric=parsed.metric if parsed.metric and parsed.metric.metric == dp.metric else None)
-    result = _verdict_to_result(text, judged, assess(judged, [dp]), started)
+    verdict = assess(judged, [dp])
+    if computed and verdict.verdict == CONTRADICTED and verdict.relative_delta is not None:
+        gap = abs(verdict.relative_delta)
+        if gap <= _COMPUTED_CLOSE:
+            # $47,900 a person against $48,495: the speaker divided one day's
+            # debt by one population estimate, the engine another day's by
+            # another. Arithmetic on two figures cannot be held to the dollar.
+            verdict = replace(verdict, verdict=MOSTLY_ACCURATE,
+                              headline=f"{verdict.headline.rstrip('.')}: close, for a figure worked out from two others.")
+        elif gap <= _SECOND_MEASURE.get(found.datapoint.metric, 0.0):
+            # The debt has two official totals a third apart (all of it, and
+            # the part held by the public). A share of "the debt" that misses
+            # one may be a share of the other, and which was meant is not said.
+            return None
+    result = _verdict_to_result(text, judged, verdict, started)
     if result.verdict == NO_VERDICT:
         return None
     result.tier = TIER_DATASET
