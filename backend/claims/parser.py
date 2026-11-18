@@ -151,9 +151,11 @@ _RELATIVE_PERIOD_RE = re.compile(
 # following the 1973 oil crisis" is not a claim about calendar 1973 (when GDP
 # grew 5.6%), and reading it as one stamps "Contradicted" on a true sentence.
 _EVENT_NOUNS = (r"crisis|crises|recession|crash|panic|pandemic|election|tax cuts?|stimulus|shutdown|war|attacks?|"
-                r"bailout|embargo|downturn|collapse|bubble|depression|act|law|reforms?|strike|hurricane|earthquake")
+                r"bailout|embargo|downturn|collapse|bubble|depression|act|law|reforms?|strike|hurricane|earthquake|"
+                # "According to a 2024 study": when it was written, not what it measured.
+                r"study|studies|report|survey|poll|paper|analysis|review|audit|book|article|interview|speech|ruling")
 _EVENT_YEAR_RE = re.compile(
-    rf"\bthe\s+((?:19|20)\d\d)(?:[-\u2013]\d{{2,4}})?\s+(?:[A-Za-z-]+\s+){{0,2}}(?:{_EVENT_NOUNS})\b"
+    rf"\b(?:the|a|an|one)\s+((?:19|20)\d\d)(?:[-\u2013]\d{{2,4}})?\s+(?:[A-Za-z-]+\s+){{0,2}}(?:{_EVENT_NOUNS})\b"
     r"|\b(?:following|in the wake of|in the aftermath of|as a result of)\s+(?:the\s+)?(?:[A-Za-z-]+\s+){0,3}?"
     r"((?:19|20)\d\d)\b",
     re.IGNORECASE)
@@ -191,7 +193,8 @@ _SUBGROUP_RE = re.compile(
     r"seniors|elderly|older (?:americans|adults|workers)|retirees|veterans|"
     r"immigrants?|foreign[- ]born|native[- ]born|non[- ]citizens?|"
     r"rural|urban|disabled|people with disabilities|households headed by|"
-    r"married couples?|families with)\b"
+    r"married couples?|families with|respondents|transgender|lgbtq?\+?|gay|lesbian|renters|homeowners|"
+    r"students|undocumented|(?:one|two|three|four|five|six|seven|\d)(?:-or-more)?-person households?)\b"
     r"|\b(?:aged?|ages)\s+\d{1,2}\b"
     # "over 65" is an age; "over 4.1%" is a threshold, so a decimal is not an age.
     r"|\b(?:under|over|above|below)\s+(?:the\s+age\s+of\s+)?\d{1,2}(?![.,]\d)\b" + _NUM_UNIT_AHEAD +
@@ -409,6 +412,40 @@ _ONE_MONTH_CHANGE_RE = re.compile(
     rf"|\bfrom\s+(?:{_MONTH_NAMES_RE})\b(?!\.?\s*,?\s*(?:19|20)\d\d)", re.IGNORECASE)
 
 
+# A level that is said to have moved by an amount, in the forms a rate's
+# "rose 0.3%" does not cover: "added $1 trillion to the national debt", "an
+# increase in the national debt of $1,017 billion", "a $500 billion increase
+# in defense spending", "the deficit rose by $300 billion".
+_AMOUNT = r"[$]?(\d[\d,]*(?:\.\d+)?)"
+_MOVED_BY_RE = re.compile(
+    rf"\b(?:{_CHANGE_VERBS})\s+{_CHANGE_HEDGES}{_AMOUNT}"
+    rf"|\b(?:increase|rise|jump|gain|growth|decline|drop|decrease|reduction|cut|fall)\s+(?:in|to)\b[^.;]{{0,50}}?"
+    rf"\bof\s+(?:about\s+|nearly\s+|roughly\s+|more than\s+|over\s+)?{_AMOUNT}"
+    rf"|{_AMOUNT}\s*(?:trillion|billion|million|thousand|bn|tn|mn)?[- ]+(?:dollar\s+)?"
+    rf"(?:increase|rise|jump|hike|boost|gain|decline|drop|decrease|reduction|cut)\b"
+    rf"|\badd(?:ed|s|ing)?\s+(?:about\s+|nearly\s+|roughly\s+|more than\s+|over\s+)?{_AMOUNT}"
+    rf"\s*(?:trillion|billion|million|thousand|bn|tn|mn)?\s+(?:more\s+)?(?:in\s+[a-z ]{{0,20}}?)?to\b",
+    re.IGNORECASE)
+# "The Fed's 2% inflation target", "was forecast to average 11.5%", "economists
+# had expected 90,000": a figure that was aimed at or foreseen, not published.
+_NOT_A_PUBLISHED_FIGURE_RE = re.compile(
+    r"\btarget(?:s|ed)?\b|\bgoal\b|\bforecast(?:s|ed|ing)?\b|\bproject(?:ed|s|ion|ions)\b|"
+    r"\bpredict(?:ed|s|ion|ions)\b|\bexpect(?:ed|s|ing|ation|ations)?\b|\bon track to\b", re.IGNORECASE)
+# GDP as what something else is measured against: "debt to GDP rose to 99%".
+_AGAINST_GDP_RE = re.compile(
+    r"\bto[- ](?:the\s+)?(?:u\.?s\.?\s+)?gdp\b|\b(?:%|percent|share|percentage|proportion|fraction)\s+of\s+"
+    r"(?:the\s+)?(?:u\.?s\.?\s+)?gdp\b|\b(?:ratio|relative)\b[^.;]{0,40}\bgdp\b", re.IGNORECASE)
+_OTHER_UNEMPLOYMENT_RE = re.compile(
+    r"\bnatural rate\b|\bnairu\b|\bu-?6\b|\bunderemploy\w*|\binsured unemployment\b|\bstructural unemployment\b",
+    re.IGNORECASE)
+_OTHER_POVERTY_RE = re.compile(
+    r"\b(?:supplemental|full-income|deep|extreme|absolute|relative|anchored)\s+poverty\b|\bspm\b", re.IGNORECASE)
+# A period named only by comparison with now.
+_BY_COMPARISON_RE = re.compile(
+    r"\b(?:this|the same|that same)\s+(?:time|point|period|month|quarter|week)\s+(?:in|of|last|a year)\b"
+    r"|\bat this point (?:in|last)\b", re.IGNORECASE)
+
+
 def _is_a_change(spec: MetricSpec) -> bool:
     """Whether the series itself is a change (growth, inflation, jobs added)
     rather than a level (a rate, a price, a count)."""
@@ -434,6 +471,32 @@ def structured_blocker(text: str, spec: Optional[MetricSpec], quarter: Optional[
         return ("the claim compares with an earlier date; the period its figure is for is not stated")
     if spec.bls_kind == "cpi_yoy" and _ONE_MONTH_CHANGE_RE.search(text):
         return "the claim is about the change over one month; the series is the change over 12 months"
+    if _NOT_A_PUBLISHED_FIGURE_RE.search(text):
+        return "the claim is about a target, a forecast or an expectation, not a published figure"
+    if _BY_COMPARISON_RE.search(text):
+        return "the claim names its period only by comparison (\u201cthis time in\u201d); the period is not stated"
+    if spec.metric in ("gdp", "real_gdp_growth") and _AGAINST_GDP_RE.search(text):
+        return "the claim measures something against GDP; it is not a figure for GDP itself"
+    if spec.metric.startswith("unemployment_rate") and _OTHER_UNEMPLOYMENT_RE.search(text):
+        return "the claim is about a different measure of unemployment than the headline rate"
+    if spec.metric == "poverty_rate" and _OTHER_POVERTY_RE.search(text):
+        return "the claim is about a different measure of poverty than the official rate"
+    number = re.search(r"\d[\d,]*(?:\.\d+)?", (claimed.raw or "")) if claimed is not None else None
+    if number and not _is_a_change(spec):
+        # "Added $1 trillion to the national debt" is not a claim that the debt is $1 trillion.
+        for m in _MOVED_BY_RE.finditer(text):
+            moved = next((g for g in m.groups() if g), "")
+            after = text[m.end():m.end() + 12]
+            if moved == number.group(0) and not re.match(r"\s*(?:%|percent)", after) \
+                    and not _CHANGE_THEN_LEVEL_RE.search(text):
+                return "the claim says how much the figure changed, not what it was"
+    if number and _is_a_change(spec) and spec.family == _units.PERCENT:
+        # "Dealer markups accounted for 35% of new vehicle inflation": a share of it.
+        share = re.search(rf"(?<![\d.,]){re.escape(number.group(0))}\s*(?:%|percent)\s+(?:to\s+\d[\d.]*\s*(?:%|percent)\s+)?"
+                          r"of\s+(?:the\s+|all\s+|total\s+|overall\s+)?(?:[a-z-]+\s+){0,3}?"
+                          r"(?:inflation|growth|increase|rise|gains?)\b", text, re.IGNORECASE)
+        if share:
+            return "the claim's figure is a share of the change, not the change itself"
     # "The unemployment rate rose 0.3%" says how far a rate moved. Checked as
     # the rate itself, it would be held against 4%.
     if spec.family == _units.PERCENT and not _is_a_change(spec) and claimed is not None:
@@ -748,6 +811,12 @@ def parse_claim(text: str) -> ParsedClaim:
     years = _extract_years(raw)
     # A year that only names an event ("the 1973 oil crisis") dates nothing.
     events = _event_years(raw)
+    if events:
+        # "During the 2008 financial crisis, GDP fell 5% from the spring of
+        # 2008 to the spring of 2009": 2008 names the event and is also one
+        # end of the span, so it still counts where it stands on its own.
+        apart = _extract_years(_EVENT_YEAR_RE.sub(" ", raw))
+        events = [y for y in events if y not in apart]
     dated_by_event = bool(events) and all(y in events for y in years)
     years = [y for y in years if y not in events] if events else years
     present = False
