@@ -165,3 +165,144 @@ class TestWhatRealStoriesShowed:
     def test_a_pair_of_months_is_not_a_place(self):
         got = parse_claim("The economy expanded at a 3.4% annual rate in the July-September quarter of 2026")
         assert got.geography is None
+
+
+class TestTheOtherSideOfAFigure:
+    """The Census Bureau's own release says "92.0% of the U.S. population had
+    health insurance coverage". Read as the uninsured rate, it was held
+    against 8.2% and marked Contradicted. Census publishes both shares."""
+
+    @pytest.mark.parametrize("claim", [
+        "Meanwhile, 92.0% of the U.S. population had health insurance coverage for all or part of 2024",
+        "About 92% of Texans have health insurance",
+        "Health insurance coverage reached 92% in 2023",
+        "92% of Americans were covered by health insurance in 2023",
+    ])
+    def test_people_with_coverage(self, claim):
+        got = parse_claim(claim)
+        assert got.metric.metric == "insured_rate" and got.metric.census_variable == "S2701_C03_001E"
+
+    @pytest.mark.parametrize("claim", [
+        "The uninsured rate was 8.2% in 2024",
+        "8% of Americans don't have health insurance",
+        "8% of Americans do not have health insurance",
+        "17% of Texans lack health insurance",
+        "8.2% of people were without health insurance coverage in 2024",
+        "8% of people had no health insurance coverage in 2024",
+    ])
+    def test_people_without_it(self, claim):
+        assert parse_claim(claim).metric.metric == "uninsured_rate"
+
+    def test_the_two_surveys_differ_by_tenths_not_by_points(self):
+        """A claim within a point of the figure may be quoting the other
+        survey; one that is five points off is not."""
+        from claims.metrics import BY_METRIC
+        spec = BY_METRIC["insured_rate"]
+        assert spec.alternate_measure and spec.alternate_band <= 0.02
+
+
+class TestWhatASentenceDoesNotSay:
+    """Sentences from encyclopedia articles on the U.S. economy, each of which
+    was given a verdict on something it does not claim."""
+
+    @pytest.mark.parametrize("claim", [
+        "Fed governor Barr said tariffs caused us to deviate from our path toward the 2% inflation target in September 2026",
+        "The unemployment rate was forecast to average 11.5% in 2020 and 9.3% in 2021",
+        "Economists had expected GDP to grow 3% in the third quarter of 2026",
+        "CBO projected a deficit of $1.9 trillion for fiscal year 2025",
+        "The administration's goal is unemployment of 4% in 2026",
+    ])
+    def test_a_target_or_a_forecast_is_not_a_published_figure(self, claim):
+        got = parse_claim(claim)
+        assert got.metric is None or "a target, a forecast or an expectation" in got.structured_blocker
+
+    @pytest.mark.parametrize("claim", [
+        "The U.S. added $1 trillion to the national debt in fiscal year 2008",
+        "The Treasury Department reported an increase in the national debt of $1,017 billion for fiscal year 2008",
+        "Trump argued for a $500 billion increase in defense spending in 2026",
+        "The national debt rose by $2 trillion in 2023",
+        "The deficit fell $300 billion in fiscal year 2022",
+    ])
+    def test_how_far_a_level_moved_is_not_the_level(self, claim):
+        assert "how much the figure changed" in parse_claim(claim).structured_blocker
+
+    @pytest.mark.parametrize("claim", [
+        "The national debt rose to $34 trillion in 2023",
+        "The national debt was $34 trillion in 2023",
+        "The deficit increased by $300 billion to $1.7 trillion in fiscal year 2023",
+        "The federal government spent $6.3 trillion in fiscal year 2022",
+    ])
+    def test_a_level_is_still_checked(self, claim):
+        assert parse_claim(claim).structured_blocker == ""
+
+    def test_gdp_as_what_something_is_measured_against(self):
+        got = parse_claim("The ratio of household debt to GDP rose from 70% in 2001 to 99% in 2008")
+        assert got.metric is None or "against GDP" in got.structured_blocker
+        got = parse_claim("Federal spending was 23% of GDP in 2023")
+        assert got.metric is None or got.metric.metric not in ("gdp", "real_gdp_growth") or got.structured_blocker
+
+    def test_a_share_of_a_change_is_not_the_change(self):
+        got = parse_claim("Dealer markups accounted for 35% of new vehicle inflation in 2022")
+        assert got.metric is None or "share of the change" in got.structured_blocker
+
+    @pytest.mark.parametrize("claim, why", [
+        ("The Fed says the natural rate of unemployment was around 5% in 2015", "different measure of unemployment"),
+        ("The U-6 unemployment rate was 7% in 2023", "different measure of unemployment"),
+        ("The Supplemental Poverty Measure showed a poverty rate of 12.9% in 2023", "different measure of poverty"),
+        ("The percentage of transgender respondents living in poverty was 34% in 2022", "subgroup"),
+        ("Two-person households had a median income of $39,755 in Alabama in 2004", "subgroup"),
+        ("The economy added 390,000 jobs at this time in 2022", "by comparison"),
+    ])
+    def test_another_measure_group_or_period(self, claim, why):
+        assert why in parse_claim(claim).structured_blocker
+
+    def test_the_year_of_a_study_is_not_the_year_of_its_figure(self):
+        got = parse_claim("According to a 2024 study, climate change raises food inflation by 0.1%")
+        assert got.year is None
+
+    def test_a_year_that_names_an_event_and_is_also_one_end_of_a_span(self):
+        got = parse_claim("During the 2008 financial crisis, GDP fell by 5.0% from the spring of 2008 to the spring of 2009")
+        assert got.all_years == [2008, 2009] and got.is_trend_claim
+
+    @pytest.mark.parametrize("claim, place", [
+        ("Guam had a poverty rate of 22.9% in 2010", "Guam"),
+        ("The Northern Mariana Islands had a poverty rate of 52.3% in 2010", "Northern Mariana Islands"),
+        ("The U.S. Virgin Islands had a poverty rate of 22.4% in 2010", "U.S. Virgin Islands"),
+        ("In 2017, American Samoa had a poverty rate of 65%, the highest of any state or territory in the United States",
+         "American Samoa"),
+    ])
+    def test_a_territory_is_not_the_country(self, claim, place):
+        got = parse_claim(claim).geography
+        assert got.name == place and got.level == "place"
+
+    def test_another_countrys_state_is_not_an_american_one(self):
+        got = parse_claim("São Paulo was the only Brazilian state to see GDP growth in 2020, of about 0.4%").geography
+        assert got is not None and got.level == "unknown" and got.name == "Brazil"
+
+    @pytest.mark.parametrize("claim", [
+        "The New York Times reported that the unemployment rate was 4.1% in 2023",
+        "A University of Michigan survey found unemployment at 4.1% in 2023",
+        "The Federal Reserve Bank of New York said unemployment was 4.1% in 2023",
+    ])
+    def test_named_after_a_place_is_not_the_place(self, claim):
+        got = parse_claim(claim).geography
+        assert got is None or got.level == "nation"
+
+    @pytest.mark.parametrize("claim, place", [
+        ("Unemployment in New York was 4.2% in 2023", "New York"),
+        ("The Washington Post said unemployment in Texas was 4.1% in 2023", "Texas"),
+        ("Michigan's unemployment rate was 4% in 2023", "Michigan"),
+        ("About 28% of Californians speak Spanish at home", "California"),
+    ])
+    def test_a_place_is_still_a_place(self, claim, place):
+        assert parse_claim(claim).geography.name == place
+
+
+def test_an_estimate_made_before_the_year_was_over_is_not_the_years_figure():
+    got = parse_claim("U.S. GDP was an estimated $15.6 trillion for 2012 based on activity during the first two quarters")
+    assert got.metric is None or "a target, a forecast or an expectation" in got.structured_blocker
+
+
+def test_an_estimate_an_agency_published_is_still_a_figure():
+    got = parse_claim("An estimated 8.2% of people were uninsured in 2024")
+    assert got.metric.metric == "uninsured_rate" and got.structured_blocker == ""

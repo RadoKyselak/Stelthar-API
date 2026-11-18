@@ -352,6 +352,43 @@ DATELINE_RE = re.compile(
     r"|^\s*[A-Z]{3,}(?:[ .][A-Z.]{2,})*(?:,\s*[A-Z][A-Za-z.]+)?\s*[\u2014\u2013]\s*")
 
 
+# Named after a place, and not that place: "The New York Times reported that
+# unemployment was 4.1%" is not a claim about New York, nor is a figure from
+# "the University of Michigan" one about Michigan.
+_NAMED_AFTER_A_PLACE_RE = re.compile(
+    r"\b(?:The\s+)?(?:[A-Z][A-Za-z.]+\s+){1,3}(?:Times|Post|Tribune|Herald|Globe|Chronicle|Journal(?:-Constitution)?|"
+    r"Gazette|Sun-Times|Star[- ]Tribune|Daily News|Morning News|Examiner|Inquirer|Sentinel|Dispatch|Courier|"
+    r"Observer|Review-Journal|Free Press|Stock Exchange)\b"
+    r"|\b(?:University|College|Bank|Federal Reserve Bank|Fed)\s+of\s+(?:[A-Z][A-Za-z.]+\s*){1,3}"
+    r"|\b(?:[A-Z][A-Za-z.]+\s+){1,2}(?:State\s+)?(?:University|College|Tech|Institute of Technology|Fed)\b")
+
+# U.S. territories. They are not states, the national series do not cover
+# them, and "American Samoa" must not be read as "American": a 65% poverty
+# rate there was held against the country's.
+_TERRITORIES = (
+    ("northern mariana islands", "Northern Mariana Islands"), ("cnmi", "Northern Mariana Islands"),
+    ("u.s. virgin islands", "U.S. Virgin Islands"), ("us virgin islands", "U.S. Virgin Islands"),
+    ("virgin islands", "U.S. Virgin Islands"), ("american samoa", "American Samoa"), ("guam", "Guam"),
+)
+
+# "the only Brazilian state to see GDP growth": another country, named by its
+# adjective. Only before a word that makes it a place or an economy, because
+# the same adjectives name languages ("speak Spanish at home").
+_FOREIGN_ADJECTIVES = {
+    "brazilian": "Brazil", "chinese": "China", "german": "Germany", "french": "France", "japanese": "Japan",
+    "mexican": "Mexico", "canadian": "Canada", "british": "United Kingdom", "russian": "Russia",
+    "italian": "Italy", "spanish": "Spain", "australian": "Australia", "korean": "South Korea",
+    "turkish": "Turkey", "argentine": "Argentina", "argentinian": "Argentina", "indian": "India",
+    "european": "Europe", "greek": "Greece", "irish": "Ireland", "swiss": "Switzerland", "dutch": "Netherlands",
+    "swedish": "Sweden", "polish": "Poland", "venezuelan": "Venezuela", "iranian": "Iran", "israeli": "Israel",
+}
+_FOREIGN_ADJECTIVE_RE = re.compile(
+    r"(?<!american )(?<!new )\b(" + "|".join(_FOREIGN_ADJECTIVES) + r")\s+(?:state|states|province|provinces|"
+    r"economy|government|unemployment|inflation|gdp|population|workers|households|central bank|market|markets|"
+    r"consumers|city|cities|capital|president|prime minister|officials|data|statistics|exports|imports)\b",
+    re.IGNORECASE)
+
+
 def resolve_geography(text: str) -> Optional[Geography]:
     """Return the geography a claim is about, or None if it names no place.
 
@@ -362,7 +399,12 @@ def resolve_geography(text: str) -> Optional[Geography]:
     if not text:
         return None
     text = DATELINE_RE.sub("", text, count=1)
+    text = _NAMED_AFTER_A_PLACE_RE.sub(" ", text)
     lowered = " ".join(text.lower().split())
+
+    for words, name in _TERRITORIES:
+        if _word_bounded(lowered, words):
+            return Geography(name=name, level="place")
 
     local = _local_place(text)
     if local is not None:
@@ -402,6 +444,10 @@ def resolve_geography(text: str) -> Optional[Geography]:
     for abbrev, full in _STATE_ABBREV.items():
         if _word_bounded(lowered, abbrev):
             return Geography(name=full.title(), level="state", fips=_STATE_FIPS[full])
+
+    foreign = _FOREIGN_ADJECTIVE_RE.search(lowered)
+    if foreign:
+        return Geography.unknown(_FOREIGN_ADJECTIVES[foreign.group(1).lower()])
 
     # Before the national phrases, because "america" is one of them and would
     # otherwise swallow "South America" and "Latin America".

@@ -91,6 +91,16 @@ class TestDirection:
     async def test_a_figure_is_left_to_the_normal_check(self):
         assert await derived._direction("The economy added 250,000 jobs in September 2026.") is None
 
+    @pytest.mark.parametrize("claim", [
+        "Private payrolls rose by 150,000 in October 2026.",       # a figure with no unit after it
+        "Payrolls rose by 900 in October 2026.",
+        "Private-sector payrolls rose in October 2026.",            # a part of payrolls
+        "Manufacturing lost jobs in July 2026.",                    # one industry
+    ])
+    async def test_not_a_claim_about_which_way_total_payrolls_went(self, claim, monkeypatch):
+        monkeypatch.setattr(derived, "_rows", series({("PAYEMS", None): PAY, ("PAYEMS", "any"): PAY_FIRST}))
+        assert await derived._direction(claim) is None
+
 
 class TestChangeSince:
     async def test_prices_since_a_month(self, monkeypatch):
@@ -178,6 +188,85 @@ class TestFirstPrint:
         assert got.revision == {"first": "2.5%", "current": "2.9%", "period": "2023",
                                 "archive": got.revision["archive"], "measure": "Real GDP growth"}
         assert "first published as 2.5%" in got.headline and "revised to 2.9%" in got.headline
+
+    async def test_a_months_jobs_as_the_report_first_gave_them(self, monkeypatch):
+        """A story of 2 October 2026 said 29,000 jobs were added in September.
+        BLS has since revised that to 60,000. The story was right."""
+        monkeypatch.setattr(derived, "_rows", series({
+            ("PAYEMS", "any"): [(date(2026, 8, 1), 159000.0), (date(2026, 9, 1), 159029.0)]}))
+        p = parse_claim("Employers added 29,000 jobs in September 2026.")
+        dp = Datapoint(quantity=Quantity(60000.0, "jobs"), metric="jobs_added",
+                       label="Jobs added (change in nonfarm payrolls)", observed=Period(2026, "monthly", month=9),
+                       geography=Geography.national(), source="BLS", source_url="x")
+        v = assess(p, [dp])
+        assert v.verdict == CONTRADICTED
+        got = await derived.first_print_match(p, v)
+        assert got is not None and got.verdict == SUPPORTED
+        assert got.revision["first"] == "+29,000" and got.revision["current"] == "+60,000"
+        assert got.revision["period"] == "September 2026"
+        assert "first published as +29,000" in got.headline and "revised to +60,000" in got.headline
+
+    async def test_jobs_that_match_neither_figure_stay_contradicted(self, monkeypatch):
+        monkeypatch.setattr(derived, "_rows", series({
+            ("PAYEMS", "any"): [(date(2026, 8, 1), 159000.0), (date(2026, 9, 1), 159029.0)]}))
+        p = parse_claim("Employers added 250,000 jobs in September 2026.")
+        dp = Datapoint(quantity=Quantity(60000.0, "jobs"), metric="jobs_added",
+                       label="Jobs added (change in nonfarm payrolls)", observed=Period(2026, "monthly", month=9),
+                       geography=Geography.national(), source="BLS", source_url="x")
+        assert await derived.first_print_match(p, assess(p, [dp])) is None
+
+    async def test_a_loss_first_reported_keeps_its_sign(self, monkeypatch):
+        monkeypatch.setattr(derived, "_rows", series({
+            ("PAYEMS", "any"): [(date(2025, 5, 1), 159500.0), (date(2025, 6, 1), 159487.0)]}))
+        p = parse_claim("The economy lost 13,000 jobs in June 2025.")
+        dp = Datapoint(quantity=Quantity(14000.0, "jobs"), metric="jobs_added",
+                       label="Jobs added (change in nonfarm payrolls)", observed=Period(2025, "monthly", month=6),
+                       geography=Geography.national(), source="BLS", source_url="x")
+        got = await derived.first_print_match(p, assess(p, [dp]))
+        assert got is not None and got.revision["first"] == "-13,000" and got.revision["current"] == "+14,000"
+
+    async def test_gdp_in_dollars_as_it_stood_when_the_sentence_was_written(self, monkeypatch):
+        """An article written in 2012 says GDP was about $15 trillion in 2011.
+        BEA has since restated 2011 as $15.6 trillion."""
+        monkeypatch.setattr(derived, "_rows", series({("GDPA", "any"): [(date(2011, 1, 1), 15094.0)]}))
+        p = parse_claim("U.S. GDP was $15.1 trillion in 2011.")
+        dp = Datapoint(quantity=Quantity(15.6e12, "usd"), metric="gdp",
+                       label="Gross domestic product (current dollars)", observed=Period(2011, ANNUAL),
+                       geography=Geography.national(), source="BEA", source_url="x")
+        v = assess(p, [dp])
+        assert v.verdict in (CONTRADICTED, MOSTLY_ACCURATE)
+        got = await derived.first_print_match(p, v)
+        assert got is not None and got.verdict == SUPPORTED
+        assert got.revision["first"] == "$15.09 trillion" and got.revision["current"] == "$15.60 trillion"
+
+    async def test_a_hedge_does_not_make_any_old_figure_a_match(self, monkeypatch):
+        monkeypatch.setattr(derived, "_rows", series({("GDPA", "any"): [(date(2019, 1, 1), 21430.0)]}))
+        p = parse_claim("U.S. GDP was about $20 trillion in 2019.")
+        dp = Datapoint(quantity=Quantity(21.54e12, "usd"), metric="gdp",
+                       label="Gross domestic product (current dollars)", observed=Period(2019, ANNUAL),
+                       geography=Geography.national(), source="BEA", source_url="x")
+        v = assess(p, [dp])
+        if v.verdict in (CONTRADICTED, MOSTLY_ACCURATE):
+            assert await derived.first_print_match(p, v) is None
+
+    async def test_a_later_estimate_counts_too(self, monkeypatch):
+        """GDP's second estimate comes a month after the first. A story written
+        then quotes it, and neither the first print nor today's figure matches."""
+        calls = []
+
+        async def rows(s, start=None, end=None, vintage=None):
+            calls.append(vintage)
+            first = min(c for c in calls if c)
+            return [(date(2026, 4, 1), 1.5 if vintage == first else 1.9)]
+        monkeypatch.setattr(derived, "_rows", rows)
+        p = parse_claim("GDP grew 1.9% in Q2 2026.")
+        dp = Datapoint(quantity=Quantity(2.2, "percent"), metric="real_gdp_growth",
+                       label="Real GDP growth", observed=Period(2026, "quarterly", quarter=2),
+                       geography=Geography.national(), source="BEA", source_url="x")
+        got = await derived.first_print_match(p, assess(p, [dp]))
+        assert got is not None and got.verdict == SUPPORTED
+        assert got.revision["first"] == "1.9%" and got.revision["current"] == "2.2%"
+        assert "was published as 1.9%" in got.headline and "first published" not in got.headline
 
     async def test_a_quarter_still_reads_the_quarterly_series(self, monkeypatch):
         monkeypatch.setattr(derived, "_rows", series({

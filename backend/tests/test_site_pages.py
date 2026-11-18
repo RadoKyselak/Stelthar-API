@@ -74,8 +74,9 @@ class TestWhatThePagesPromise:
 
     def test_first_release_coverage_matches_the_engine(self):
         from services import derived
-        assert set(derived._FIRST_PRINT) == {"unemployment_rate", "real_gdp_growth"}
-        assert "the unemployment rate and for real GDP growth" in page("methodology.html")
+        assert set(derived._FIRST_PRINT) == {"unemployment_rate", "real_gdp_growth", "jobs_added", "gdp"}
+        assert ("unemployment rate, for the jobs added in a month, for real GDP growth by quarter and year, "
+                "and for a year&rsquo;s GDP in dollars") in " ".join(page("methodology.html").split())
 
     def test_the_test_run_on_the_method_page_is_the_one_on_file(self):
         """The score stated on the site, held to the committed results of that run."""

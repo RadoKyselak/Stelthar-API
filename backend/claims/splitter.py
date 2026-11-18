@@ -78,9 +78,11 @@ class ClaimSpan:
     end: int
     kind: str             # STATISTIC | RECORD | OTHER
     inherited: List[str] = field(default_factory=list)
-    # The period came from the page's date, and the text around the sentence
-    # names another year: the sentence may be about that year instead. Such a
-    # claim is listed only when the official figure bears the reading out.
+    # The reading leans on something the sentence does not say: its period
+    # came from the page's date while the text around it names another year,
+    # or it names no place while the text before it is about another country
+    # or a state. Such a claim is listed only when the official figure bears
+    # the reading out.
     tentative: bool = False
 
 
@@ -408,6 +410,14 @@ def _one_figure_one_period(claim: str) -> bool:
     return True
 
 
+# In text nobody picked: a sentence about what may happen, or what someone
+# wants to happen. "About 6.3 million people could lose eligibility by fiscal
+# year 2029 if the proposed change takes effect" holds a figure and a year,
+# and nothing that has been counted.
+_SPECULATIVE = re.compile(r"\b(?:would|could|might|should|proposed|proposal|proposes|plans? to|aims? to|"
+                          r"seeks? to|hopes? to|(?:is|are) set to|if (?:the|it|they|congress|lawmakers))\b", re.I)
+
+
 def _what_it_says(claim: str) -> tuple:
     """The measure, place, period and figure a statistic comes down to."""
     p = parse_claim(claim)
@@ -425,18 +435,35 @@ def _firm_record(text: str) -> bool:
     return regulatory.topic(text) in ("bill", "fda", "ftc") or _has_figure(text)
 
 
-def _names_another_year(text: str, a: int, b: int, years: Tuple[int, ...]) -> bool:
-    """Whether the paragraph a sentence sits in, or the two before it, names
-    a year other than `years`. A story that turned to 2022 two paragraphs up
-    and then says "peaked in June" does not mean this June."""
+def _around(text: str, a: int, b: int, before_only: bool = False) -> str:
+    """The paragraph a sentence sits in and the two before it."""
     start = a
     for _ in range(3):
         start = text.rfind("\n", 0, max(start - 1, 0)) + 1
         if start == 0:
             break
+    if before_only:
+        return text[start:a]
     end = text.find("\n", b)
-    around = text[start:end if end != -1 else len(text)]
-    return any(y not in years for y in _extract_years(around))
+    return text[start:end if end != -1 else len(text)]
+
+
+def _names_another_year(text: str, a: int, b: int, years: Tuple[int, ...]) -> bool:
+    """Whether the paragraph a sentence sits in, or the two before it, names
+    a year other than `years`. A story that turned to 2022 two paragraphs up
+    and then says "peaked in June" does not mean this June."""
+    return any(y not in years for y in _extract_years(_around(text, a, b)))
+
+
+def _names_another_place(text: str, a: int, b: int, claim: str) -> bool:
+    """Whether a sentence that names no place of its own follows text about
+    somewhere else. "In 2020, the economy contracted 13.4%" in a paragraph on
+    Peru is Peru's economy; read alone it is the United States'."""
+    from claims.geography import resolve_geography
+    if resolve_geography(claim) is not None:
+        return False            # it says where, the country included
+    near = resolve_geography(_around(text, a, b, before_only=True))
+    return near is not None and near.level != "nation"
 
 
 def split_claims(text: str, max_claims: int = 12,
@@ -455,6 +482,8 @@ def split_claims(text: str, max_claims: int = 12,
         for span in _split_sentence(text, a, b, as_of):
             if span.kind not in kinds:
                 continue
+            if strict and _SPECULATIVE.search(span.claim):
+                continue        # what would, could or is proposed to happen is not on record yet
             if strict and span.kind == STATISTIC and not _one_figure_one_period(span.claim):
                 continue
             if strict and span.kind == RECORD and not _firm_record(span.claim):
@@ -466,10 +495,14 @@ def split_claims(text: str, max_claims: int = 12,
                 if same in said:
                     continue
                 said.add(same)
+            unsure = False
             if as_of is not None and any("page's date" in note for note in span.inherited):
                 period = _page_period(text[a:b], as_of)
-                if period and _names_another_year(text, a, b, (period.year,)):
-                    span = ClaimSpan(span.claim, span.span, span.start, span.end, span.kind,
-                                     span.inherited, tentative=True)
+                unsure = bool(period and _names_another_year(text, a, b, (period.year,)))
+            if strict and span.kind == STATISTIC and not unsure:
+                unsure = _names_another_place(text, a, b, span.claim)
+            if unsure:
+                span = ClaimSpan(span.claim, span.span, span.start, span.end, span.kind,
+                                 span.inherited, tentative=True)
             found.append(span)
     return found[:max_claims], len(found) > max_claims

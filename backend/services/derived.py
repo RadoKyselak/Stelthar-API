@@ -66,6 +66,10 @@ GDP = Series("A191RL1Q225SBEA", "Q", PERCENT, "Real gross domestic product, perc
              "percent change at a seasonally adjusted annual rate")
 GDP_ANNUAL = Series("A191RL1A225NBEA", "A", PERCENT, "Real gross domestic product, percent change",
                     _BEA, "percent change from the preceding year")
+# GDP in dollars. Its level is restated back through the decades whenever BEA
+# changes what counts as output (research spending was added in 2013), so a
+# sentence written at the time is off by hundreds of billions today.
+GDP_DOLLARS = Series("GDPA", "A", USD, "Gross domestic product", _BEA, "billions of dollars")
 
 
 def fred_series(sid: str, title: str = "", units: str = "") -> Series:
@@ -263,7 +267,12 @@ _LOST_JOBS_RE = re.compile(r"\b(lost|shed|cut|eliminated|losing|shedding)\s+(?:\
                           r"|\bpayrolls?\s+(?:fell|declined|dropped|shrank|contracted)\b", re.I)
 _ADDED_JOBS_RE = re.compile(r"\b(added|gained|created|adding|gaining|creating)\s+(?:\w+\s+)?jobs\b"
                             r"|\bpayrolls?\s+(?:rose|grew|increased|expanded)\b", re.I)
-_ANY_NUMBER_RE = re.compile(r"\d[\d,.]*\s*(%|percent|million|billion|thousand|k\b)|\$\s*\d", re.I)
+# A figure, with or without a unit after it. "Payrolls rose by 150,000" names
+# no unit; it was taken for a claim about direction only, and "private
+# payrolls rose by 150,000" came back Supported because total payrolls rose.
+_ANY_NUMBER_RE = re.compile(r"\d[\d,.]*\s*(%|percent|million|billion|thousand|k\b)|\$\s*\d"
+                            r"|(?<![\d,.])\d{1,3}(?:,\d{3})+(?![\d,])"
+                            r"|(?<![\d,.])(?!(?:19|20)\d\d\b)\d{3,}\b", re.I)
 
 
 async def _direction(text: str) -> Optional[Verdict]:
@@ -276,6 +285,11 @@ async def _direction(text: str) -> Optional[Verdict]:
     obs, freq = _subject_period(text)
     if obs is None:
         return None
+    if topic == "jobs":
+        # One industry's jobs, or private payrolls, are not total payrolls.
+        from claims.parser import _PRIVATE_PAYROLLS_RE, _SECTOR_RE
+        if _SECTOR_RE.search(text) or _PRIVATE_PAYROLLS_RE.search(text) or re.search(r"\bprivate[- ]sector\b", text, re.I):
+            return None
     if topic == "gdp" and freq == "Q":
         down = bool(_SHRANK_RE.search(text))
         if not down and not _GREW_RE.search(text):
@@ -590,13 +604,44 @@ async def record_aside(text: str) -> Optional[Verdict]:
 _FIRST_PRINT = {
     "unemployment_rate": {"M": UNRATE},
     "real_gdp_growth": {"Q": GDP, "A": GDP_ANNUAL},
+    # The jobs report's count for a month is revised in each of the next two
+    # reports, often by more than the count itself. A story written on the day
+    # quotes the first one.
+    "jobs_added": {"M": PAYEMS},
+    "gdp": {"A": GDP_DOLLARS},
 }
 
 
+async def _as_published(metric: str, s: Series, obs: date, vd: date) -> Optional[float]:
+    """The figure for `obs` as the archive of `vd` has it. For jobs added that
+    is a difference: the month's level less the month before's, both read
+    from the same archive, since both are revised together."""
+    rows = await _rows(s, obs, obs, vintage=vd)
+    hit = [v for d, v in rows if d == obs]
+    if not hit:
+        return None
+    if metric == "gdp":
+        return hit[0] * 1e9                                   # the series is in billions
+    if metric != "jobs_added":
+        return hit[0]
+    prev = date(obs.year - (obs.month == 1), (obs.month - 2) % 12 + 1, 1)
+    before = await _rows(s, prev, prev, vintage=vd)
+    if not before:
+        return None
+    return round(hit[0] - before[0][1]) * 1000.0          # the series is in thousands
+
+
+# Days after the first release at which the next ones are in the archive: the
+# jobs report revises a month in each of the next two reports, and GDP gets a
+# second and a third estimate a month apart.
+_LATER_RELEASES = (0, 35, 70)
+
+
 async def first_print_match(parsed, v: Verdict) -> Optional[Verdict]:
-    """A near miss or a contradiction that matches what the agency first
-    published. Claims quote the release they read; BLS and BEA revise later.
-    Returns the claim judged against the first print, with the revision named."""
+    """A near miss or a contradiction that matches what the agency published
+    at the time. Claims quote the release they read; BLS and BEA revise later.
+    Returns the claim judged against that release, with the revision named.
+    The first release is tried, then the two that followed it."""
     spec = parsed.metric
     by_freq = _FIRST_PRINT.get(spec.metric if spec else "")
     if not by_freq or not v.evidence or parsed.claimed_value is None:
@@ -618,19 +663,41 @@ async def first_print_match(parsed, v: Verdict) -> Optional[Verdict]:
     first = await first_release(s, obs)
     if not first:
         return None
-    value, vd = first
+    jobs = spec.metric == "jobs_added"
+    now = dp.quantity.magnitude
     claimed = parsed.claimed_value.magnitude
-    tol = parsed.claimed_value.tolerance() or 0.05
-    if abs(value - dp.quantity.magnitude) < 1e-9 or abs(value - claimed) > tol + 1e-9:
-        return None
-    note = (f"{dp.label} for {_when(obs, s.freq)} was first published as {value:g}% "
-            f"({vd:%B %-d, %Y} archive), which the claim matches; it has since been revised to "
-            f"{dp.quantity.magnitude:g}%.")
-    return replace(v, verdict=SUPPORTED, confidence=MEDIUM,
-                   headline=f"{v.headline.split(': close')[0].rstrip('.')}. {note}",
-                   revision={"first": f"{value:g}%", "current": f"{dp.quantity.magnitude:g}%",
-                             "period": _when(obs, s.freq), "archive": vd.isoformat(),
-                             "measure": dp.label})
+    tol = parsed.claimed_value.tolerance() or (500.0 if jobs else 0.05)
+    if spec.metric == "gdp":
+        # A level in the trillions is quoted to a tenth of a trillion at best.
+        # Never more than 2% of it: a hedge ("about $20 trillion") does not make a
+        # figure a trillion off a match for an old release.
+        tol = min(max(tol, 0.005 * abs(now)), 0.02 * abs(now))
+    today = datetime.now(timezone.utc).date()
+
+    dollars = dp.quantity.family == USD
+
+    def shown(x: float) -> str:
+        if jobs:
+            return f"{x:+,.0f}"
+        return humanize(x, USD) if dollars else f"{x:g}%"
+
+    for later in _LATER_RELEASES:
+        vd = first[1] + timedelta(days=later)
+        if vd >= today:
+            break
+        value = await _as_published(spec.metric, s, obs, vd)
+        if value is None or abs(value - now) < 1e-6 or abs(value - claimed) > tol + 1e-6:
+            continue
+        when = _when(obs, s.freq)
+        what = f"The change in payrolls for {when}" if jobs else f"{dp.label} for {when}"
+        note = (f"{what} was {'first ' if later == 0 else ''}published as {shown(value)} "
+                f"({vd:%B %-d, %Y} archive), which the claim matches; it has since been revised to "
+                f"{shown(now)}.")
+        return replace(v, verdict=SUPPORTED, confidence=MEDIUM,
+                       headline=f"{v.headline.split(': close')[0].rstrip('.')}. {note}",
+                       revision={"first": shown(value), "current": shown(now), "period": when,
+                                 "archive": vd.isoformat(), "measure": dp.label})
+    return None
 
 
 # ------------------------------------------------------------------ fixed facts

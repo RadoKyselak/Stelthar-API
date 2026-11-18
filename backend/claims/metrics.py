@@ -462,8 +462,28 @@ _SPECS: List[MetricSpec] = [
         alternate_band=0.15,
         geo_levels=("nation", "state"),
         phrases=("uninsured rate", "without health insurance", "uninsured",
-                 "lack health insurance", "lacked health insurance", "no health insurance",
-                 "health insurance coverage"),
+                 "lack health insurance", "lacked health insurance", "lacks health insurance",
+                 "no health insurance", "not have health insurance", "didn't have health insurance",
+                 "don't have health insurance", "doesn't have health insurance", "not insured",
+                 "without health coverage", "lack health coverage", "lacked health coverage",
+                 "no health coverage", "not have health coverage", "without health insurance coverage",
+                 "no health insurance coverage", "not covered by health insurance"),
+    ),
+    MetricSpec(
+        # The other side of the same table. "92% had health insurance coverage"
+        # was read as the uninsured rate and held against 8.2%: a true
+        # sentence marked wrong. Census publishes this share itself.
+        metric="insured_rate", label="Share of people with health insurance", source="CENSUS",
+        family=PERCENT, census_variable="S2701_C03_001E",
+        census_dataset="acs/acs1/subject", min_year=2015,
+        alternate_measure="the CPS ASEC coverage rate",
+        # The two surveys differ by a few tenths of a point on a figure near 92.
+        alternate_band=0.01,
+        geo_levels=("nation", "state"),
+        phrases=("had health insurance", "have health insurance", "has health insurance",
+                 "with health insurance", "health insurance coverage", "insured rate",
+                 "health coverage rate", "had health coverage", "have health coverage",
+                 "has health coverage", "with health coverage", "covered by health insurance"),
     ),
     MetricSpec(
         metric="median_home_value", label="Median home value", source="CENSUS",
