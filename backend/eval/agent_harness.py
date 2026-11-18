@@ -133,10 +133,13 @@ async def answer(path: str, figure: str, exact: bool, place: str, why: str, clai
         if dp is None:
             out["reason"] = "the figure could not be read again"
         else:
-            out["official"] = {"value": dp.display_value(), "measure": dp.label, "place": dp.geography.name,
+            out["official"] = {"value": dp.display_value(), "magnitude": dp.quantity.magnitude,
+                               "raw": dp.raw_value, "measure": dp.label, "place": dp.geography.name,
                                "period": dp.observed.describe(), "source": dp.source, "series": dp.series_id}
-            if dp.geography.level == "nation" and finder._geo(place) is not None:
+            if finder.local_question_national_figure(dp, place):
                 out["reason"] = "national figure for a local question"
+            elif not claim_figure and text.rstrip().endswith("?"):
+                out["reason"] = "a lookup: the figure is the answer, and nothing is judged"
             else:
                 # The claim as the service would read it: with its period
                 # written in when the day it was said gives one.
