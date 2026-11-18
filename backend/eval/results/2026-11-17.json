@@ -1,0 +1,488 @@
+{
+  "service": "https://stelthar-api.vercel.app",
+  "date": "2026-11-17",
+  "mode": "free data only",
+  "claims": 28,
+  "correct": 28,
+  "degraded": 0,
+  "accuracy": 1.0,
+  "model_calls": 0,
+  "outcomes": [
+    {
+      "id": "bls-unemp-2019-true",
+      "claim": "The unemployment rate in 2019 was 3.7%.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 3.7%. BLS reports 3.7% for 2019.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2019 annual average",
+        "value": 3.7
+      }
+    },
+    {
+      "id": "bls-unemp-2019-false",
+      "claim": "The unemployment rate in 2019 was 6.2%.",
+      "expected": "Contradicted",
+      "expected_reason": null,
+      "got": "Contradicted",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 6.2%. BLS reports 3.7% for 2019.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2019 annual average",
+        "value": 3.7
+      }
+    },
+    {
+      "id": "bls-unemp-2021-true",
+      "claim": "The unemployment rate in 2021 was 5.3%.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 5.3%. BLS reports 5.3% for 2021.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2021 annual average",
+        "value": 5.3
+      }
+    },
+    {
+      "id": "bls-unemp-2021-false",
+      "claim": "The unemployment rate in 2021 was 7.9%.",
+      "expected": "Contradicted",
+      "expected_reason": null,
+      "got": "Contradicted",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 7.9%. BLS reports 5.3% for 2021.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2021 annual average",
+        "value": 5.3
+      }
+    },
+    {
+      "id": "bls-unemp-2022-true",
+      "claim": "The unemployment rate in 2022 was 3.6%.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 3.6%. BLS reports 3.6% for 2022.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2022 annual average",
+        "value": 3.6
+      }
+    },
+    {
+      "id": "bls-unemp-2022-false",
+      "claim": "The unemployment rate in 2022 was 6.1%.",
+      "expected": "Contradicted",
+      "expected_reason": null,
+      "got": "Contradicted",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 6.1%. BLS reports 3.6% for 2022.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2022 annual average",
+        "value": 3.6
+      }
+    },
+    {
+      "id": "bls-unemp-2023-true",
+      "claim": "The unemployment rate in 2023 was 3.6%.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 3.6%. BLS reports 3.6% for 2023.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2023 annual average",
+        "value": 3.6
+      }
+    },
+    {
+      "id": "bls-unemp-2023-false",
+      "claim": "The unemployment rate in 2023 was 6.1%.",
+      "expected": "Contradicted",
+      "expected_reason": null,
+      "got": "Contradicted",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 6.1%. BLS reports 3.6% for 2023.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2023 annual average",
+        "value": 3.6
+      }
+    },
+    {
+      "id": "bls-unemp-2024-true",
+      "claim": "The unemployment rate in 2024 was 4%.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 4%. BLS reports 4.0% for 2024.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2024 annual average",
+        "value": 4.0
+      }
+    },
+    {
+      "id": "bls-unemp-2024-false",
+      "claim": "The unemployment rate in 2024 was 6.5%.",
+      "expected": "Contradicted",
+      "expected_reason": null,
+      "got": "Contradicted",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 6.5%. BLS reports 4.0% for 2024.",
+      "truth": {
+        "source": "BLS",
+        "series": "LNU04000000",
+        "period": "2024 annual average",
+        "value": 4.0
+      }
+    },
+    {
+      "id": "bls-cpi-2022-m6-true",
+      "claim": "Inflation was 9.1% in June 2022.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says 9.1%. BLS reports 9.1% for June 2022.",
+      "truth": {
+        "source": "BLS",
+        "series": "CUUR0000SA0",
+        "period": "June 2022",
+        "value": 9.05975796478415
+      }
+    },
+    {
+      "id": "treasury-debt-2020-true",
+      "claim": "The national debt was $27.7 trillion in 2020.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says $27.7 trillion. Treasury reports $27.75 trillion as of December 31, 2020.",
+      "truth": {
+        "source": "TREASURY",
+        "series": "debt_to_penny",
+        "period": "2020 year end",
+        "value": 27747797947667.77
+      }
+    },
+    {
+      "id": "treasury-debt-2020-over",
+      "claim": "The national debt was over $23 trillion in 2020.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says more than $23 trillion. Treasury reports $27.75 trillion as of December 31, 2020.",
+      "truth": {
+        "source": "TREASURY",
+        "series": "debt_to_penny",
+        "period": "2020 year end",
+        "value": 27747797947667.77
+      }
+    },
+    {
+      "id": "treasury-debt-2020-false",
+      "claim": "The national debt was $40 trillion in 2020.",
+      "expected": "Contradicted",
+      "expected_reason": null,
+      "got": "Contradicted",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says $40 trillion. Treasury reports $27.75 trillion as of December 31, 2020.",
+      "truth": {
+        "source": "TREASURY",
+        "series": "debt_to_penny",
+        "period": "2020 year end",
+        "value": 27747797947667.77
+      }
+    },
+    {
+      "id": "treasury-debt-2022-true",
+      "claim": "The national debt was $31.4 trillion in 2022.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says $31.4 trillion. Treasury reports $31.42 trillion as of December 30, 2022.",
+      "truth": {
+        "source": "TREASURY",
+        "series": "debt_to_penny",
+        "period": "2022 year end",
+        "value": 31419689421557.9
+      }
+    },
+    {
+      "id": "treasury-debt-2022-over",
+      "claim": "The national debt was over $26 trillion in 2022.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says more than $26 trillion. Treasury reports $31.42 trillion as of December 30, 2022.",
+      "truth": {
+        "source": "TREASURY",
+        "series": "debt_to_penny",
+        "period": "2022 year end",
+        "value": 31419689421557.9
+      }
+    },
+    {
+      "id": "treasury-debt-2022-false",
+      "claim": "The national debt was $43 trillion in 2022.",
+      "expected": "Contradicted",
+      "expected_reason": null,
+      "got": "Contradicted",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says $43 trillion. Treasury reports $31.42 trillion as of December 30, 2022.",
+      "truth": {
+        "source": "TREASURY",
+        "series": "debt_to_penny",
+        "period": "2022 year end",
+        "value": 31419689421557.9
+      }
+    },
+    {
+      "id": "treasury-debt-2023-true",
+      "claim": "The national debt was $34.0 trillion in 2023.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says $34.0 trillion. Treasury reports $34.00 trillion as of December 29, 2023.",
+      "truth": {
+        "source": "TREASURY",
+        "series": "debt_to_penny",
+        "period": "2023 year end",
+        "value": 34001493655565.48
+      }
+    },
+    {
+      "id": "treasury-debt-2023-over",
+      "claim": "The national debt was over $29 trillion in 2023.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says more than $29 trillion. Treasury reports $34.00 trillion as of December 29, 2023.",
+      "truth": {
+        "source": "TREASURY",
+        "series": "debt_to_penny",
+        "period": "2023 year end",
+        "value": 34001493655565.48
+      }
+    },
+    {
+      "id": "treasury-debt-2023-false",
+      "claim": "The national debt was $46 trillion in 2023.",
+      "expected": "Contradicted",
+      "expected_reason": null,
+      "got": "Contradicted",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "Claim says $46 trillion. Treasury reports $34.00 trillion as of December 29, 2023.",
+      "truth": {
+        "source": "TREASURY",
+        "series": "debt_to_penny",
+        "period": "2023 year end",
+        "value": 34001493655565.48
+      }
+    },
+    {
+      "id": "honest-future-year",
+      "claim": "The unemployment rate in 2031 was 3.5%.",
+      "expected": "No verdict",
+      "expected_reason": "data_not_published_for_that_period",
+      "got": "No verdict",
+      "got_reason": "data_not_published_for_that_period",
+      "correct": true,
+      "tier": "none",
+      "headline": "No official figure for 2031 exists yet: that period has not happened or has not been published.",
+      "truth": {
+        "source": "",
+        "series": "",
+        "period": "",
+        "value": null
+      }
+    },
+    {
+      "id": "honest-substate-geography",
+      "claim": "The population of New York City is 8.3 million.",
+      "expected": "No verdict",
+      "expected_reason": "no_official_series_at_that_geography",
+      "got": "No verdict",
+      "got_reason": "no_official_series_at_that_geography",
+      "correct": true,
+      "tier": "none",
+      "headline": "None of the official data series we check covers this claim.",
+      "truth": {
+        "source": "",
+        "series": "",
+        "period": "",
+        "value": null
+      }
+    },
+    {
+      "id": "honest-no-series-crime",
+      "claim": "Crime is out of control in our cities.",
+      "expected": "No verdict",
+      "expected_reason": "no_official_series_for_this_claim",
+      "got": "No verdict",
+      "got_reason": "not_recognised_as_a_claim",
+      "correct": true,
+      "tier": "none",
+      "headline": "(not read as a claim)",
+      "truth": {
+        "source": "",
+        "series": "",
+        "period": "",
+        "value": null
+      }
+    },
+    {
+      "id": "honest-no-series-immigration",
+      "claim": "They let in 10 million illegal immigrants.",
+      "expected": "No verdict",
+      "expected_reason": "no_official_series_for_this_claim",
+      "got": "No verdict",
+      "got_reason": "no_official_series_for_this_claim",
+      "correct": true,
+      "tier": "none",
+      "headline": "None of the official data series we check covers this claim.",
+      "truth": {
+        "source": "",
+        "series": "",
+        "period": "",
+        "value": null
+      }
+    },
+    {
+      "id": "honest-foreign-country-france",
+      "claim": "The unemployment rate in France was 4% in 2023.",
+      "expected": "Contradicted",
+      "expected_reason": null,
+      "got": "Contradicted",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "World Bank (World Development Indicators): France's unemployment rate was 7.3% in 2023 (ILO modeled estimate); the claim says 4%.",
+      "truth": {
+        "source": "World Bank",
+        "series": "SL.UEM.TOTL.ZS",
+        "period": "2023",
+        "value": 7.335
+      }
+    },
+    {
+      "id": "honest-foreign-country-germany",
+      "claim": "The unemployment rate in Germany was 3% in 2023.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "World Bank (World Development Indicators): Germany's unemployment rate was 3.1% in 2023 (ILO modeled estimate).",
+      "truth": {
+        "source": "World Bank",
+        "series": "SL.UEM.TOTL.ZS",
+        "period": "2023",
+        "value": 3.071
+      }
+    },
+    {
+      "id": "honest-foreign-country-japan",
+      "claim": "The unemployment rate in Japan was 2.6% in 2023.",
+      "expected": "Supported",
+      "expected_reason": null,
+      "got": "Supported",
+      "got_reason": null,
+      "correct": true,
+      "tier": "structured",
+      "headline": "World Bank (World Development Indicators): Japan's unemployment rate was 2.6% in 2023 (ILO modeled estimate).",
+      "truth": {
+        "source": "World Bank",
+        "series": "SL.UEM.TOTL.ZS",
+        "period": "2023",
+        "value": 2.6
+      }
+    },
+    {
+      "id": "honest-nonsense-geography",
+      "claim": "The unemployment rate on Mars was 4% in 2023.",
+      "expected": "No verdict",
+      "expected_reason": "no_official_series_at_that_geography",
+      "got": "No verdict",
+      "got_reason": "no_official_series_at_that_geography",
+      "correct": true,
+      "tier": "none",
+      "headline": "None of the official data series we check covers this claim.",
+      "truth": {
+        "source": "",
+        "series": "",
+        "period": "",
+        "value": null
+      }
+    }
+  ]
+}

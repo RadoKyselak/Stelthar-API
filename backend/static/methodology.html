@@ -122,6 +122,15 @@
     <p>Agencies revise what they publish. Every answer carries the date it was checked, and figures for an
       open period are fetched again within the hour. A check you saved earlier can be run again.</p>
 
+    <h2>How it is tested</h2>
+    <p>A set of plain claims whose answers were read from the agencies&rsquo; own data is run against the live
+      service, on agency data only. The last run, on November 17, 2026, checked 28 claims: 28 were answered
+      correctly, 5 of them by rightly declining, and no model was called. That set is small and its claims
+      are simple, so it shows the checker reads and compares correctly on the kinds of claim it is built
+      for; it is not a measure of how often any claim at all gets an answer. The claims, the expected answers
+      and the full results are in the project&rsquo;s <a href="/developers">public code</a>, and the run stops
+      without reporting a score if any source was down.</p>
+
     <h2>Corrections</h2>
     <p>If an answer is wrong, <a href="https://github.com/RadoKyselak/Stelthar-API/issues">open an issue</a> with
       the claim and what the agency&rsquo;s record says. Fixes are made in the open, in the project&rsquo;s public
