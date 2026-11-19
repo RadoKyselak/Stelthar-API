@@ -218,6 +218,8 @@ _CRAWLER_FILES = {
     "llms.txt": "text/plain; charset=utf-8",
     # Google Search Console ownership check; must stay for the site to remain verified.
     "googleb5ef9942613b66ba.html": "text/html; charset=utf-8",
+    # IndexNow key (Bing, Yandex, Seznam, Naver): proves a URL submission is ours.
+    "1c008d11c7ba75cfa5507734063fa160.txt": "text/plain; charset=utf-8",
 }
 
 
