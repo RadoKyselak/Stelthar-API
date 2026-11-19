@@ -4,4 +4,4 @@ Disallow: /verify
 Disallow: /v2/
 Disallow: /health
 
-Sitemap: https://stelthar-api.vercel.app/sitemap.xml
+Sitemap: https://factcheckgov.app/sitemap.xml

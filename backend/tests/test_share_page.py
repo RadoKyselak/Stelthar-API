@@ -106,8 +106,8 @@ class TestPreviewPicture:
     def test_the_picture_says_the_verdict(self, test_client, verdict, picture):
         fake, _ = engine(verdict)
         r = get(test_client, "Unemployment was 3.6% in 2023", fake)
-        assert f'property="og:image" content="https://stelthar-api.vercel.app/static/{picture}"' in r.text
-        assert f'name="twitter:image" content="https://stelthar-api.vercel.app/static/{picture}"' in r.text
+        assert f'property="og:image" content="https://factcheckgov.app/static/{picture}"' in r.text
+        assert f'name="twitter:image" content="https://factcheckgov.app/static/{picture}"' in r.text
         assert "og.png" not in r.text
 
     def test_a_figure_since_revised_has_its_own_picture(self, test_client):
@@ -122,7 +122,7 @@ class TestPreviewPicture:
     def test_an_unsettled_claim_keeps_the_sites_own_picture(self, test_client):
         fake, _ = engine(NO_VERDICT)
         r = get(test_client, "The moon is made of cheese", fake)
-        assert 'property="og:image" content="https://stelthar-api.vercel.app/static/og.png"' in r.text
+        assert 'property="og:image" content="https://factcheckgov.app/static/og.png"' in r.text
 
     def test_every_picture_is_a_file_that_is_served_at_the_size_previews_expect(self, test_client):
         import struct
