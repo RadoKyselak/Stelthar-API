@@ -200,28 +200,4 @@ body:not(:has(#out:not(:empty))) .main { flex: none; padding-bottom: 0; }
 .doc ol { margin: 0; padding-left: 22px; }
 
 /* Benchmarks: one bar per system, Mirador's set apart. */
-.bench-lede { margin: 0 0 14px; }
-.bench { list-style: none; margin: 0; padding: 0; }
-.bench li { display: grid; grid-template-columns: minmax(0, 15em) 1fr 3.2em; align-items: center; gap: 12px; margin: 0; padding: 7px 0; border-bottom: 1px solid var(--line, rgba(0,0,0,.08)); font-size: 15px; }
-.bench meter { width: 100%; height: 12px; }
-.bench-score { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
-.bench-us .bench-name, .bench-us .bench-score { font-weight: 700; color: var(--ink); }
-.bench-note { margin-top: 12px; color: var(--meta); font-size: 14px !important; }
-.bench-big { display: flex; flex-wrap: wrap; gap: 28px; margin: 6px 0 0; }
-.bench-big p { margin: 0; display: flex; flex-direction: column; }
-.bench-big strong { font: 500 34px/1.1 var(--sans); color: var(--ink); }
-.bench-big span { color: var(--meta); font-size: 14px; }
-@media (max-width: 560px) { .bench li { grid-template-columns: 1fr 3.2em; } .bench meter { grid-column: 1 / -1; grid-row: 2; } }
-.bench meter::-webkit-meter-bar { background: rgba(0,0,0,.08); border: 0; border-radius: 6px; }
-.bench meter::-webkit-meter-optimum-value { background: #9aa3ad; border-radius: 6px; }
-.bench meter::-moz-meter-bar { background: #9aa3ad; border-radius: 6px; }
-.bench-us meter::-webkit-meter-optimum-value { background: #15803d; }
-.bench-us meter::-moz-meter-bar { background: #15803d; }
-.bench-table-wrap { overflow-x: auto; margin-top: 18px; }
-.bench-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.bench-table th, .bench-table td { padding: 6px 6px; border-bottom: 1px solid var(--line, rgba(0,0,0,.08)); text-align: left; vertical-align: top; }
-.bench-table th { color: var(--meta); font-weight: 600; position: sticky; top: 0; background: var(--bg, #fff); }
-.bench-table td.v { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.bench-table td.miss { color: #b42318; }
-.bench-table .us { font-weight: 700; }
 main.doc { width: 100%; }
