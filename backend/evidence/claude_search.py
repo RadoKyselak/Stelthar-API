@@ -188,6 +188,18 @@ async def ground_claim(claim: str, context_hint: str = "",
                     source_quality.tier(source.uri, [k.get("url", "") for k in known_pages or []], claim))
     pages = [k.get("url", "") for k in known_pages or []]
     rank = {source_quality.OFFICIAL: 0, source_quality.RELIABLE: 1}
+    if source is None:
+        # The answer named no page, or one the search did not return, though
+        # the search did return official or reliable pages (NOAA for a climate
+        # record, CAL FIRE for a fire count). The answer was read from those
+        # results, so the best of them stands as its source; a page the search
+        # never returned still counts for nothing.
+        best = sorted((c for c in citations
+                       if source_quality.tier(c.uri, pages, claim) in rank),
+                      key=lambda c: rank[source_quality.tier(c.uri, pages, claim)])
+        if best:
+            source = best[0]
+            logger.info("Claude search: no named source among the results; using %s", source.uri[:160])
     ordered = sorted(citations, key=lambda c: (c is not source,
                                                rank.get(source_quality.tier(c.uri, pages, claim), 2)))
     return GroundedAnswer(
