@@ -4,12 +4,12 @@
 
 Project Mirador is an independent, free fact checker. It is not a government service.
 
-- Web: https://stelthar-api.vercel.app/
+- Web: https://factcheckgov.app/
 - Chrome extension: https://chromewebstore.google.com/detail/project-mirador/anehbncclhojcaihgeoebennaccpeegn
-- About and FAQ: https://stelthar-api.vercel.app/about
-- How a claim is judged: https://stelthar-api.vercel.app/methodology
-- API for developers: https://stelthar-api.vercel.app/developers
-- Privacy: https://stelthar-api.vercel.app/privacy
+- About and FAQ: https://factcheckgov.app/about
+- How a claim is judged: https://factcheckgov.app/methodology
+- API for developers: https://factcheckgov.app/developers
+- Privacy: https://factcheckgov.app/privacy
 - Source code: https://github.com/RadoKyselak/Stelthar-API
 
 ## How it works

@@ -36,7 +36,7 @@ class TestPage:
                    "LinkedInBot/1.0", "Mozilla/5.0 (compatible; Discordbot/2.0)", "WhatsApp/2.23"):
             page = test_client.get("/", headers={"user-agent": ua, "accept": "*/*"})
             assert page.headers["content-type"].startswith("text/html"), ua
-            assert 'property="og:image" content="https://stelthar-api.vercel.app/static/og.png"' in page.text
+            assert 'property="og:image" content="https://factcheckgov.app/static/og.png"' in page.text
             assert 'name="twitter:card" content="summary_large_image"' in page.text
         assert test_client.head("/", headers={"user-agent": "facebookexternalhit/1.1"}).status_code == 200
         img = test_client.get("/static/og.png")
@@ -95,6 +95,8 @@ class TestPage:
         html = (STATIC / "index.html").read_text()
         # Structured data for search engines is data, not code: it is never run.
         html = re.sub(r'<script type="application/ld\+json">.*?</script>', "", html, flags=re.S)
+        # The canonical link names this page's own address for search engines; nothing loads from it.
+        html = re.sub(r'<link rel="canonical" href="https://factcheckgov\.app/[^"]*">', "", html)
         assert not re.search(r"<script(?![^>]*\bsrc=)", html), "inline script"
         assert "<style" not in html and " style=" not in html and re.search(r"\son\w+=", html) is None
         for m in re.finditer(r'(?:src|href)="([^"]+)"', html):

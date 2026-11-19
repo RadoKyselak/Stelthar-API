@@ -22,6 +22,7 @@ from utils.request_limits import client_ip as _client_ip, limit
 from utils.validation import ValidationError
 from middleware.context import RequestContextMiddleware, get_request_id
 from middleware.security import SecurityMiddleware
+from middleware.canonical_host import CanonicalHostMiddleware
 from exceptions import MiradorException, CircuitBreakerOpenException
 
 _DOCS = config.ENABLE_API_DOCS
@@ -53,6 +54,16 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type"],
+)
+# Pages asked for on the old vercel.app address or a spare domain move to
+# factcheckgov.app, so search engines index one copy. The API is not moved.
+app.add_middleware(
+    CanonicalHostMiddleware,
+    canonical_url=config.PUBLIC_BASE_URL,
+    aliases=["stelthar-api.vercel.app", "factcheckthis.app", "www.factcheckthis.app",
+             "www.factcheckgov.app"],
+    wants_page=lambda h: ("text/html" in h.get("accept", "")
+                          or bool(_PREVIEW_BOTS.search(h.get("user-agent", "")))),
 )
 # Outermost: security headers and the body-size cap apply to every response,
 # including errors and CORS preflights.
@@ -218,6 +229,8 @@ _CRAWLER_FILES = {
     "llms.txt": "text/plain; charset=utf-8",
     # Google Search Console ownership check; must stay for the site to remain verified.
     "googleb5ef9942613b66ba.html": "text/html; charset=utf-8",
+    # IndexNow key (Bing, Yandex, Seznam, Naver): proves a URL submission is ours.
+    "1c008d11c7ba75cfa5507734063fa160.txt": "text/plain; charset=utf-8",
 }
 
 
