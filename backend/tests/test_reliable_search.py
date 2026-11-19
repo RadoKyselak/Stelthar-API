@@ -315,3 +315,10 @@ def test_the_search_is_told_to_match_the_record_and_the_kind_of_money():
     p = _build_prompt("<claim>x</claim>")
     assert "same record" in p and "Last year's order" in p
     assert "ceiling or potential value" in p and "not money obligated" in p
+
+
+def test_a_change_to_the_rules_starts_a_fresh_cache(monkeypatch):
+    from evidence import ai_search, claude_search
+    before = ai_search._cache_key("A claim", "")
+    monkeypatch.setattr(claude_search, "_SYSTEM", claude_search._SYSTEM + " One more rule.")
+    assert ai_search._cache_key("A claim", "") != before

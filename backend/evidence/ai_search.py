@@ -101,9 +101,19 @@ def ttl_for(claim: str) -> int:
     return _CACHE_TTL
 
 
+def _prompt_version() -> str:
+    """A fingerprint of the instructions the search model is given. An answer
+    is only reused under the rules that produced it: a hand-bumped version tag
+    was forgotten, and with a shared store a stale answer outlives deploys."""
+    from evidence import claude_search
+    from evidence.grounded import _build_prompt
+    text = claude_search._SYSTEM + _build_prompt("<claim></claim>", "")
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+
 def _cache_key(claim: str, hint: str) -> str:
-    # Bumped when the prompt changes: "v4": a second search for a reliable page.
-    return hashlib.sha256(f"v5|{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
+    return hashlib.sha256(
+        f"{_prompt_version()}|{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
 
 
 def _from_dict(d: dict) -> GroundedAnswer:
