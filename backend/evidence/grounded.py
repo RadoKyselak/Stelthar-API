@@ -168,6 +168,15 @@ Rules:
 - Report what the source actually says, including the period it covers. If the
   claim names a year and the best source covers a different period, say so in
   PERIOD and treat that as a mismatch rather than a match.
+- A claim about a contract, grant, order, award or budget line is checked against
+  that same record: the same parties, the date it was signed and the period it
+  covers. Last year's order, or one that ended when the claim's began, is a
+  different record. Find the right one or set VERDICT to NO_EVIDENCE; never
+  compare the claim with another record's figure.
+- Compare like with like. A ceiling or potential value ("worth up to", "could
+  reach", "maximum", "all options") is not money obligated, spent or paid, and a
+  budget request is not an appropriation. Use the source's figure of the same
+  kind, and name the kind in OFFICIAL_VALUE.
 - If the claim is not empirically checkable (opinion, prediction, value judgement),
   set VERDICT to NOT_EMPIRICAL.
 - If reliable sources cover the claim's subject but none supports its specific
@@ -182,8 +191,8 @@ Rules:
 - If the claim matches an official figure as it was first published, and the
   agency has since revised it, answer SUPPORTED and say in EXPLANATION what the
   figure was revised to. A revision is not the claimant's error.
-- If the claim's figure is close to the official one but not equal at the
-  precision it was written - off by one step in its last digit, such as 4.1%
+- If the claim's figure is close to the official one (the same measure in the
+  same record) but not equal at the precision it was written - off by one step in its last digit, such as 4.1%
   against an official 4.0%, and within 5% of it - set VERDICT to MOSTLY_ACCURATE.
   A figure that is off by more than that is CONTRADICTED.
 - A claim can be numerically accurate yet misleading through a cherry-picked

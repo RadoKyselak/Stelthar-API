@@ -84,6 +84,7 @@ async def call(path: str, tool: str, raw: str) -> str:
     s = finder._Session(data["claim"])
     s.fred_seen = {k: Candidate(**v) for k, v in data["fred_seen"].items()}
     s.eia_seen = {k: Candidate(**v) for k, v in data.get("eia_seen", {}).items()}
+    s.awards_seen = set(data.get("awards_seen", []))
     fn = finder._RUN.get(tool)
     if fn is None:
         out: Any = {"error": "unknown tool"}
@@ -108,6 +109,7 @@ async def call(path: str, tool: str, raw: str) -> str:
             data.setdefault(name, {})[k] = {"provider": c.provider, "id": c.id, "title": c.title,
                                             "units": c.units, "frequency": c.frequency,
                                             "detail": c.detail, "meta": c.meta}
+    data["awards_seen"] = sorted(s.awards_seen)
     text = json.dumps(out, ensure_ascii=False)[:finder._RESULT_CHARS]
     data["log"].append({"tool": tool, "input": inp, "result": text})
     _save(path, data)

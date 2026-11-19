@@ -37,6 +37,8 @@ async def check_endpoint(req: CheckRequest, request: Request) -> Dict[str, Any]:
         which adds a year or place the sentence stated once for several
         claims. `inherited` says what was added.
     """
+    from evidence import ai_search
+    ai_search.FRESH.set(bool(req.fresh))
     if req.url is not None:
         if not config.CHECK_LINKS:
             raise HTTPException(status_code=400, detail="Checking a page by its address is switched off. "

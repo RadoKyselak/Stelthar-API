@@ -121,7 +121,11 @@ async function checkText(text, { bypassCache = false } = {}) {
   const link = /^https?:\/\/\S+$/i.test(text.trim());
   let check;
   try {
-    check = await postJSON(CHECK_URL, link ? { url: text.trim() } : { text }, "The check");
+    // "Check again" (bypassCache) also asks the server for a fresh answer
+    // instead of the one it stored, and that answer replaces it for everyone.
+    const body = link ? { url: text.trim() } : { text };
+    if (bypassCache) body.fresh = true;
+    check = await postJSON(CHECK_URL, body, "The check");
   } catch (e) {
     if (e.status !== 404 && e.status !== 405) throw e;
     if (link) throw new Error("Checking a page by its link isn't available right now. Highlight the text on the page instead.");

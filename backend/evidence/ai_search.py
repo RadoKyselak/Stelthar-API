@@ -11,6 +11,7 @@ free check has passed:
      per-client cap)                  -> no call
   5. One capped provider call
 """
+import contextvars
 import hashlib
 import json
 import re
@@ -24,7 +25,17 @@ from evidence.grounded import Citation, GroundedAnswer, GroundedSegment
 from evidence.grounded import ground_claim as gemini_ground_claim
 from utils import spend_guard
 
-_CACHE_TTL = 24 * 3600
+# An answer about the present is kept for hours, not a day: new records
+# appear (a new contract, a new release) and an answer from before them is
+# wrong after.
+_CACHE_TTL = 6 * 3600
+# Close calls (Mostly accurate, Misleading, Can't verify) are where a wrong
+# answer is most likely; reused for an hour at most, and never from disk.
+_CLOSE_CALL_TTL = 3600
+_FIRM = ("SUPPORTED", "CONTRADICTED", "NOT_EMPIRICAL")
+# True for a request that asked for a fresh check ("Check again"): the cache
+# is not read, and the new answer replaces the stored one.
+FRESH: contextvars.ContextVar = contextvars.ContextVar("ai_search_fresh", default=False)
 _MAX_WORDS = 60
 _DIGIT_RE = re.compile(r"\d")
 _WORD_RE = re.compile(r"[A-Za-z]{2,}")
@@ -101,9 +112,19 @@ def ttl_for(claim: str) -> int:
     return _CACHE_TTL
 
 
+def _prompt_version() -> str:
+    """A fingerprint of the instructions the search model is given. An answer
+    is only reused under the rules that produced it: a hand-bumped version tag
+    was forgotten, and with a shared store a stale answer outlives deploys."""
+    from evidence import claude_search
+    from evidence.grounded import _build_prompt
+    text = claude_search._SYSTEM + _build_prompt("<claim></claim>", "")
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+
 def _cache_key(claim: str, hint: str) -> str:
-    # Bumped when the prompt changes: "v4": a second search for a reliable page.
-    return hashlib.sha256(f"v5|{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
+    return hashlib.sha256(
+        f"{_prompt_version()}|{config.AI_SEARCH_PROVIDER}|{normalise(claim)}|{hint}".encode()).hexdigest()
 
 
 def _from_dict(d: dict) -> GroundedAnswer:
@@ -126,13 +147,25 @@ async def _cache_get(key: str, ttl: int = _CACHE_TTL) -> Optional[GroundedAnswer
     return None
 
 
+def keep_for(g: GroundedAnswer, ttl: int) -> int:
+    """How long an answer may be reused. A firm verdict resting on an official
+    or reliable page keeps the claim's usual time; anything else an hour."""
+    from evidence import source_quality as sq
+    firm = g.verdict in _FIRM and (g.verdict == "NOT_EMPIRICAL" or g.source_tier in (sq.OFFICIAL, sq.RELIABLE))
+    return ttl if firm else min(ttl, _CLOSE_CALL_TTL)
+
+
 async def _cache_put(key: str, g: GroundedAnswer, ttl: int = _CACHE_TTL) -> None:
     data = asdict(g)
+    kept = keep_for(g, ttl)
     try:
-        await spend_guard.get_store().set_str(f"ai:answer:{key}", json.dumps(data), ttl)
+        await spend_guard.get_store().set_str(f"ai:answer:{key}", json.dumps(data), kept)
     except Exception as e:
         logger.debug("AI answer cache write (shared) failed: %s", e)
-    disk_cache.write("ai_answers", key, data)
+    if kept == ttl:
+        # The disk copy is read back by age against the claim's usual time,
+        # so only firm answers go there.
+        disk_cache.write("ai_answers", key, data)
 
 
 async def search(claim: str, hint: str = "", *, client_ip: Optional[str] = None,
@@ -147,7 +180,7 @@ async def search(claim: str, hint: str = "", *, client_ip: Optional[str] = None,
         return GroundedAnswer(ok=False, error=why_not, model_calls=0, skipped=True)
 
     key, ttl = _cache_key(claim, hint), ttl_for(claim)
-    hit = await _cache_get(key, ttl)
+    hit = None if FRESH.get() else await _cache_get(key, ttl)
     if hit is not None:
         return hit
 

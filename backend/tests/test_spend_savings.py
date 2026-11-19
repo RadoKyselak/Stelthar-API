@@ -92,9 +92,59 @@ class TestAnswerCacheKey:
     def test_different_figures_differ(self):
         assert ai_search._cache_key("x was 3% in 2023", "") != ai_search._cache_key("x was 4% in 2023", "")
 
-    def test_past_year_kept_a_week_present_a_day(self):
+    def test_past_year_kept_a_week_present_six_hours(self):
         last = datetime.now(timezone.utc).year - 1
         assert ai_search.ttl_for(f"Egg prices rose 30% in {last}") == 7 * 24 * 3600
-        assert ai_search.ttl_for("Egg prices are up 30% now") == 24 * 3600
-        assert ai_search.ttl_for(f"Egg prices are up 30% since {last}, currently") == 24 * 3600
-        assert ai_search.ttl_for(f"Egg prices rose 30% in {last + 1}") == 24 * 3600
+        assert ai_search.ttl_for("Egg prices are up 30% now") == 6 * 3600
+        assert ai_search.ttl_for(f"Egg prices are up 30% since {last}, currently") == 6 * 3600
+        assert ai_search.ttl_for(f"Egg prices rose 30% in {last + 1}") == 6 * 3600
+
+
+class TestWhatTheCacheKeeps:
+    """A cached answer is served to everyone who asks the same thing, so a wrong
+    one spreads. Only firm, sourced answers are kept for long; a close call is
+    kept an hour; "Check again" asks for a fresh answer."""
+
+    def _g(self, verdict, tier):
+        from evidence.grounded import GroundedAnswer
+        return GroundedAnswer(ok=True, verdict=verdict, source_tier=tier)
+
+    @pytest.mark.parametrize("verdict,tier,kept", [
+        ("SUPPORTED", "official", 6 * 3600), ("CONTRADICTED", "reliable", 6 * 3600),
+        ("NOT_EMPIRICAL", "", 6 * 3600),
+        ("SUPPORTED", "other", 3600), ("MOSTLY_ACCURATE", "official", 3600),
+        ("MISLEADING", "official", 3600), ("NO_EVIDENCE", "", 3600)])
+    def test_only_firm_sourced_answers_keep_the_claims_time(self, verdict, tier, kept):
+        assert ai_search.keep_for(self._g(verdict, tier), 6 * 3600) == kept
+
+    def test_a_fresh_check_does_not_read_the_cache(self, monkeypatch):
+        import asyncio
+        from evidence.grounded import GroundedAnswer
+        read = []
+
+        async def cache_get(key, ttl):
+            read.append(key)
+            return GroundedAnswer(ok=True, verdict="SUPPORTED", model_calls=0)
+        monkeypatch.setattr(ai_search, "_cache_get", cache_get)
+        monkeypatch.setattr(ai_search.config, "AI_SEARCH_PROVIDER", "claude")
+        monkeypatch.setattr(ai_search, "gate", lambda *a: None)
+        token = ai_search.FRESH.set(False)
+        try:
+            asyncio.run(ai_search.search("Egg prices rose 30% in 2023"))
+            assert read
+            read.clear()
+            ai_search.FRESH.set(True)
+
+            async def refuse(ip):
+                from types import SimpleNamespace
+                return SimpleNamespace(allowed=False, reason="test", message="no")
+            monkeypatch.setattr(ai_search.spend_guard, "reserve", refuse)
+            asyncio.run(ai_search.search("Egg prices rose 30% in 2023"))
+            assert read == []
+        finally:
+            ai_search.FRESH.reset(token)
+
+    def test_both_endpoints_take_fresh(self):
+        from models.claims import CheckRequest, VerifyRequest
+        assert VerifyRequest(claim="abc def", fresh=True).fresh
+        assert CheckRequest(text="abc def", fresh=True).fresh
