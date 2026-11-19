@@ -109,6 +109,24 @@ async def test_no_named_source_falls_back_to_an_official_page_the_search_returne
     assert v.citations[0]["url"] == FDC[0]
 
 
+async def test_an_unranked_page_gives_way_to_an_official_one_the_search_returned(monkeypatch):
+    # An agency's report on a CDN address cannot be ranked; the agency's own
+    # page from the same search stands as the source.
+    cdn = ("https://abc-cdn-endpoint.azureedge.net/report.pdf", "Report")
+    fake(monkeypatch, response(answer(url=cdn[0]), [cdn, FDC]))
+    v = await run("A 12-ounce can of Coca-Cola has 140 calories.")
+    assert v.verdict == verify_v2.SUPPORTED and v.citations[0]["url"] == FDC[0]
+
+
+@pytest.mark.parametrize("host,want", [("public.wmo.int", "official"), ("www.esa.int", "official"),
+                                       ("climate.copernicus.eu", "official"), ("nsidc.org", "official"),
+                                       ("www.nationalgeographic.com", "reliable"),
+                                       ("www.guinnessworldrecords.com", "reliable")])
+def test_science_and_treaty_bodies_are_ranked(host, want):
+    from evidence import source_quality
+    assert source_quality.tier(host) == want
+
+
 async def test_no_named_source_and_only_poor_pages_still_gets_no_verdict(monkeypatch):
     fake(monkeypatch, response(answer(url="NONE"), APPS))
     v = await run("A 12-ounce can of Coca-Cola has 140 calories.")

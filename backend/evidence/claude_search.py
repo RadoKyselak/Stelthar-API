@@ -188,8 +188,9 @@ async def ground_claim(claim: str, context_hint: str = "",
                     source_quality.tier(source.uri, [k.get("url", "") for k in known_pages or []], claim))
     pages = [k.get("url", "") for k in known_pages or []]
     rank = {source_quality.OFFICIAL: 0, source_quality.RELIABLE: 1}
-    if source is None:
-        # The answer named no page, or one the search did not return, though
+    if source is None or source_quality.tier(source.uri, pages, claim) not in rank:
+        # The answer named no page, one the search did not return, or one that
+        # cannot be ranked (an agency's report on a CDN address), though
         # the search did return official or reliable pages (NOAA for a climate
         # record, CAL FIRE for a fire count). The answer was read from those
         # results, so the best of them stands as its source; a page the search

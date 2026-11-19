@@ -25,6 +25,8 @@ statcan.gc.ca abs.gov.au inegi.org.mx ibge.gov.br indec.gob.ar stat.go.jp
 kostat.go.kr mospi.gov.in stats.gov.cn europa.eu ecb.europa.eu oecd.org imf.org
 worldbank.org un.org who.int ilo.org bis.org wto.org federalreserve.gov
 ons.gov.uk fred.stlouisfed.org stlouisfed.org newyorkfed.org
+copernicus.eu ecmwf.int nsidc.org fao.org unesco.org unicef.org iea.org ipcc.ch
+unep.org undp.org unfpa.org wmo.int esa.int
 """.split())
 
 # Fact-checkers (IFCN signatories and newsroom fact-check desks), research
@@ -43,6 +45,8 @@ nature.com science.org nejm.org thelancet.com jamanetwork.com bmj.com
 cell.com pnas.org sciencedirect.com springer.com wiley.com
 mayoclinic.org clevelandclinic.org hopkinsmedicine.org heart.org cancer.org
 britannica.com ballotpedia.org
+nationalgeographic.com smithsonianmag.com scientificamerican.com newscientist.com
+guinnessworldrecords.com variety.com hollywoodreporter.com ucar.edu mbari.org
 """.split())
 
 # Kept out of search results entirely: they rarely publish a figure first-hand,
@@ -73,7 +77,9 @@ def is_official(url_or_host: str) -> bool:
     host = _host(url_or_host)
     if not host:
         return False
-    if host.endswith((".gov", ".mil", ".fed.us")) or _in(host, _OFFICIAL_DOMAINS):
+    # .int is issued only to organisations set up by treaty between governments
+    # (WMO, ESA, ECMWF, NATO), so it is official the way .gov is.
+    if host.endswith((".gov", ".mil", ".fed.us", ".int")) or _in(host, _OFFICIAL_DOMAINS):
         return True
     # National government domains such as gov.uk, gouv.fr, gc.ca, go.jp: the
     # label right before a two-letter country code ("abcnews.go.com" is not one).
