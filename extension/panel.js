@@ -1,6 +1,6 @@
-// Project Mirador side panel. One field: a sentence, a yes/no question or a
+// Mirador side panel. One field: a sentence, a yes/no question or a
 // whole passage is checked, each claim in it on its own; a short measure
-// ("unemployment texas 2023") is looked up. Right-click "Check with Project
+// ("unemployment texas 2023") is looked up. Right-click "Fact-check with
 // Mirador" sends the highlighted text here; the address bar ("mir ...") opens
 // this page in a tab with ?q=.
 const MAX_TEXT_LEN = 8000;   // the server's cap for one passage
