@@ -56,6 +56,8 @@ class CheckRequest(BaseModel):
     # "text": something a person pasted. "page": a page scan, which keeps only
     # the claims free government data can settle. A `url` is always a page.
     mode: str = Field("text", pattern="^(text|page)$")
+    # "Check again": skip any stored answer and replace it with a new one.
+    fresh: bool = False
     # The day the text was said or written (YYYY-MM-DD), if known. A claim in
     # it that names no period is then held to the figure that was newest on
     # that day, not today's.
@@ -95,6 +97,8 @@ class CheckRequest(BaseModel):
 class VerifyRequest(BaseModel):
     """Request body for /verify endpoint with validation."""
     claim: str = Field(..., min_length=3, max_length=1000)
+    # "Check again": skip any stored answer and replace it with a new one.
+    fresh: bool = False
 
     @field_validator('claim')
     @classmethod

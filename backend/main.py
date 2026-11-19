@@ -324,7 +324,8 @@ async def verify_v2_endpoint(req: VerifyRequest, request: Request) -> Dict[str, 
     if not claim:
         raise HTTPException(status_code=400, detail="Claim cannot be empty.")
 
-    from evidence import fact_checks
+    from evidence import ai_search, fact_checks
+    ai_search.FRESH.set(bool(req.fresh))
     related = fact_checks.start(claim)
     result = await verify_v2(claim, client_ip=_client_ip(request))
     result.fact_checks = await fact_checks.finish(related)
