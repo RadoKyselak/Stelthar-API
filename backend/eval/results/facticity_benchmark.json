@@ -1,0 +1,1091 @@
+{
+ "source": "Facticity, “Updated and Expanded Originality Dataset Benchmark”, 20 June 2024",
+ "rows": [
+  {
+   "n": 1,
+   "claim": "Captain Kirk's \"Boldly go where no one has gone before\" phrase is rooted in ancient Greek philosophy.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 2,
+   "claim": "Ava DuVernay's \"A Wrinkle in Time\" had the biggest debut ever for a film directed by a woman, earning $280 million opening weekend.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 3,
+   "claim": "At the start of the 118th Congress in 2023, there were 20 women serving in the U.S. Senate.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 4,
+   "claim": "Croatia adopted the Yen as its currency on the 1st of January 2023.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 5,
+   "claim": "The 2023 edition of the Eurovision was held in Oslo, Norway.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 6,
+   "claim": "The 2023 FIFA Womenʼs World Cup was co-hosted by Germany and France.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 7,
+   "claim": "Cristiano Ronaldo, a well-known figure in the football world, retired from professional football in January 2023.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 8,
+   "claim": "India declared a population decrease, falling behind China in 2023.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 9,
+   "claim": "Oasis, a major Britpop band, announced they'll be disbanding permanently in 2023.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 10,
+   "claim": "The movie Creed III was released on streaming platforms exclusively on March 3, 2023.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 11,
+   "claim": "The United Nations declared 2023 as the International Year of Rice.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 12,
+   "claim": "The 2023 Winter Universiade was held in Sochi, Russia.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 13,
+   "claim": "August 2023 was the planet's coldest month on record ever.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 14,
+   "claim": "Drs. Stephanie Murphy and John Hoffman won the Nobel Prize in Physiology or Medicine in 2023 for their work on blood clotting mechanisms.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 15,
+   "claim": "Potent odors, like ammonia, can be sensed by the human nose in concentrations as tiny as 5 parts per billion.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 16,
+   "claim": "California experienced 6,300 wildfires in 2021.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 17,
+   "claim": "420,000 acres of land burned in Oregon in 2022.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 18,
+   "claim": "Filmmaker Werner Herzog once cycled 200 miles from Berlin to Warsaw to attend a film festival.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 19,
+   "claim": "Filmmaker Werner Herzog used hot sauce to help coach Joaquin Phoenix for a movie scene.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 20,
+   "claim": "Happy Dolphin is an online dolphin identification database that keeps a record of 15,000 dolphins' dorsal fin patterns.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 21,
+   "claim": "Radishes can grow to 2 feet in diameter or more.",
+   "truth": "FALSE",
+   "facticity": "TRUE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 22,
+   "claim": "A new and rare yellow scorpion, named Hottentotta Trilineatus, was discovered in Brazil.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 23,
+   "claim": "Machine learning models require extensive training to understand basic equations.",
+   "truth": "FALSE",
+   "facticity": "Inconclusive",
+   "perplexity": "FALSE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 24,
+   "claim": "After Mark Zuckerberg acquired Twitter, Diaspora grew donations by 300% and reached 900,000 active users in 2022.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 25,
+   "claim": "India is the largest robot market in the world, followed by Japan, Germany, and the United States.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 26,
+   "claim": "Apple sold 90 million iPhones and 30 million iPads in 2022.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 27,
+   "claim": "Brain waves were first recorded in the 1940s by Richard Caton.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 28,
+   "claim": "More than 900 varieties of corn are grown in the Andes Mountains.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 29,
+   "claim": "At least 1 in 5 adults has a low iron level.",
+   "truth": "FALSE",
+   "facticity": "Inconclusive",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 30,
+   "claim": "The Department of Justice filed 9 civil charges against Kraken CEO Jesse Powell.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 31,
+   "claim": "Human babies are born with the ability to detect spicy flavors.",
+   "truth": "FALSE",
+   "facticity": "Inconclusive",
+   "perplexity": "FALSE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 32,
+   "claim": "Olivia Wilde was conceived through surrogacy.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 33,
+   "claim": "The artist Dali produced more than 1,000 sculptures.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 34,
+   "claim": "Hunger increases positive and decreases negative emotions.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 35,
+   "claim": "Inception is the highest-grossing film in Christopher Nolanʼs career.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 36,
+   "claim": "The Dark Knight music score includes extensive use of string instruments.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 37,
+   "claim": "More than 3 in 10 U.S. workers don't fully use their paid time off.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 38,
+   "claim": "Chat GPT has real-time browsing capability.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "FALSE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 39,
+   "claim": "Laufey's single From the End became the most-streamed blues song in the world.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 40,
+   "claim": "Oral caffeine is an effective nasal decongestant.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 41,
+   "claim": "Tech entrepreneur Emily White has spent more than $2 million developing a sleep-enhancement system.",
+   "truth": "FALSE",
+   "facticity": "Inconclusive",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 42,
+   "claim": "The worldʼs oldest DNA was found in thousand-year-old saber-toothed tiger fangs.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 43,
+   "claim": "The world's tallest pogo stick is 20.2 feet tall.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 44,
+   "claim": "The 2023 Arctic sea ice maximum reached a record-setting high of 25.5 million square kilometers.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 45,
+   "claim": "Tarantulas have acute night vision.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 46,
+   "claim": "Dinosaurs had three toes.",
+   "truth": "FALSE",
+   "facticity": "Inconclusive",
+   "perplexity": "FALSE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 47,
+   "claim": "Working dogs are being trained to detect diabetes in human saliva.",
+   "truth": "FALSE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 48,
+   "claim": "Dogs have the ability to taste sweetness.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 49,
+   "claim": "Service dogs help increase social interaction for people with autism.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 50,
+   "claim": "The 2023 UEFA Champions League Final was held at the Camp Nou in Barcelona, Spain.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 51,
+   "claim": "NOAA's Altius-400 flew for a record 75 minutes inside the eye of a category 4 hurricane.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 52,
+   "claim": "Oregon farmers produce about 60% of the world's supply of hazelnuts.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 53,
+   "claim": "The flapjack octopus is the shallowest-living octopus.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 54,
+   "claim": "Japan counts its people's ages two ways.",
+   "truth": "TRUE",
+   "facticity": "FALSE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 55,
+   "claim": "Nevada uses controlled burns to help prevent forest fires.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 56,
+   "claim": "Gray whales have simple, predictable migration patterns.",
+   "truth": "FALSE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 57,
+   "claim": "There are 700 known species of tarantulas.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 58,
+   "claim": "Researchers at MIT developed a smart table that adjusts its height automatically based on the user's posture.",
+   "truth": "FALSE",
+   "facticity": "Inconclusive",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 59,
+   "claim": "The herb basil has documented anti-anxiety effects.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 60,
+   "claim": "Astronauts John Smith and Alice Johnson conducted mock Mars walks last March in a training suit that weighs more than 70 pounds.",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 61,
+   "claim": "Filmmaker Werner Herzog ate maggots to help coach Christian Bale through eating them for a movie scene",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "FALSE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 62,
+   "claim": "At least 1 in 4 adults has a low vitamin D level",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 63,
+   "claim": "Gianluca Vialli, a well-known figure in the football world, passed away in January 2023.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 64,
+   "claim": "The 2023 Winter Universiade was held in Lake Placid, New York, United States.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 65,
+   "claim": "331,360 acres of land burned in California in 2022",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 66,
+   "claim": "Filmmaker Werner Herzog once walked 600 miles from Munic to Paris to see a dying friend",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 67,
+   "claim": "Happywhale is an online whale identification database that keeps record of 30,000 humpback whales' black-and-white fluke patterns",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 68,
+   "claim": "Cabbages can grow to 4 feet in diameter or more",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 69,
+   "claim": "Tarantulas lack sharp color vision",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 70,
+   "claim": "Apple sold 82 million AirPods and 53 million Apple Watches in 2022",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 71,
+   "claim": "The Department of Justice filed 13 criminal charges against FTX CEO Sam Bankman-Fried",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 72,
+   "claim": "The artist Magritte produced more than 1,500 paintings",
+   "truth": "FALSE",
+   "facticity": "FALSE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 73,
+   "claim": "The Oppenheimer music score doesnʼt include any percussion",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 74,
+   "claim": "Laufey's single From the Start became the most-streamed jazz song in the world",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 75,
+   "claim": "The world's tallest unicycle is 34.6 feet tall",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 76,
+   "claim": "The 2023 Antarctic sea ice maximum reached a record-setting low of 16.96 million square kilometers",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 77,
+   "claim": "The 2023 edition of the Eurovision was held in Liverpool, United Kingdom.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 78,
+   "claim": "The United Nations declared 2023 as the International Year of Millets.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 79,
+   "claim": "NOAA's Altius-600 flew for a record 102 minutes inside the eye of a category 5 hurricane",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 80,
+   "claim": "Researchers at the University of Washington developed a smart speaker that lets users mute different areas of a room",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 81,
+   "claim": "After Elon Musk acquired Twitter, Mastodon grew donations by 488% and reached 1.8 million active users in 2022",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 82,
+   "claim": "China is the largest robot market in the world, followed by Japan, United States, and Korea",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 83,
+   "claim": "Oral phenylephrine is an ineffective nasal decongestant",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 84,
+   "claim": "Croatia adopted the Euro as its currency on the 1st of January 2023.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 85,
+   "claim": "The 2023 UEFA Champions League Final was held at the Atatürk Olympic Stadium in Istanbul, Turkey.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 86,
+   "claim": "The 2023 FIFA Women's World Cup was co-hosted by Australia and New Zealand.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 87,
+   "claim": "India is projected to surpass China as the world's most populated country in 2023.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 88,
+   "claim": "Blur, a major Britpop band, announced they'll be playing a one-off gig at Wembley in 2023.",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 89,
+   "claim": "The movie Creed III was released in theaters on March 3, 2023",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 90,
+   "claim": "July 2023 was the planet's hottest month on record ever",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 91,
+   "claim": "Drs. Katalin Karikó and Drew Weissman received the Nobel Prize in Physiology or Medicine in 2023 for identifying a chemical tweak in mRNA that enabled the development of Covid vaccines",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 92,
+   "claim": "Captain Spock's “Live Long and Prosper” hand gesture is derived in part from a Hebrew blessing",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 93,
+   "claim": "Potent odors, such as hydrogen sulfide, can be sensed by the human nose in concentrations as tiny as 1 part per billion",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 94,
+   "claim": "California farmers produce about 80% of the world's supply of almonds",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 95,
+   "claim": "The dumbo octopus is the deepest-living octopus",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 96,
+   "claim": "South Korea counts its peopleʼs ages three ways",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 97,
+   "claim": "California uses grazing goats to help prevent forest fires",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 98,
+   "claim": "California experienced 7,477 wildfires in 2022",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 99,
+   "claim": "Greta Gerwigʼs Barbie had the biggest debut ever for a film directed by a woman, earning $356 million opening weekend",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 100,
+   "claim": "Humpback whales are capable of record-breaking, complex migration patterns",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 101,
+   "claim": "A new and rare electric blue tarantula, named Chilobrachys Natanicharum, was discovered in Thailand",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 102,
+   "claim": "There are 900 known species of tarantulas",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 103,
+   "claim": "Machine learning models can understand complex equations even with limited training",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 104,
+   "claim": "Brain waves were first recorded in the 1920s by Hans Berger",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 105,
+   "claim": "More than 1,300 varieties of potato are grown in the Andes Mountains",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 106,
+   "claim": "The spice turmeric has proven anti-anxiety effects",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 107,
+   "claim": "Human babies are born with the ability to detect sour tastes",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 108,
+   "claim": "Kerry Washington was conceived through sperm donation",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 109,
+   "claim": "Hunger increases negative and decreases positive emotions",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 110,
+   "claim": "Oppenheimer is the highest-grossing film in Christopher Nolanʼs career",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 111,
+   "claim": "More than 4 in 10 U.S. workers donʼt fully use their paid time off",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 112,
+   "claim": "At the start of the 118th Congress in 2023, there were 25 women serving in the U.S. Senate",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 113,
+   "claim": "Chat GPT can access up to date information",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "FALSE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 114,
+   "claim": "Cats have the ability to taste umami",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 115,
+   "claim": "Service dogs help reduce severity of PTSD symptoms",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 116,
+   "claim": "Tech entrepreneur Bryan Johnson has spent more than $4 million developing a life-extension system",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "Can't verify"
+  },
+  {
+   "n": 117,
+   "claim": "Astronauts Drew Feustel and Zena Cardman conducted mock moonwalks last October in a training suit that weighs more than 80 pounds",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "FALSE",
+   "bing": "FALSE",
+   "mirador": "FALSE"
+  },
+  {
+   "n": 118,
+   "claim": "Dinosaurs had belly buttons",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 119,
+   "claim": "The worldʼs oldest DNA was found in million-year-old mammoth teeth",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  },
+  {
+   "n": 120,
+   "claim": "Working dogs are being trained to detect Covid in human sweat",
+   "truth": "TRUE",
+   "facticity": "TRUE",
+   "perplexity": "TRUE",
+   "bing": "TRUE",
+   "mirador": "TRUE"
+  }
+ ],
+ "accuracy": {
+  "mirador": 80.8,
+  "facticity": 91.7,
+  "perplexity": 88.3,
+  "bing": 78.3
+ }
+}

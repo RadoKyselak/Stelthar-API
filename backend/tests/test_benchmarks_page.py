@@ -1,75 +1,50 @@
-"""The public benchmark page: one graph, stating only what
-eval/results/benchmarks.json records, and all of it."""
+"""The public benchmark page: Facticity's own 120-claim benchmark with
+Project Mirador added, generated from eval/results/facticity_benchmark.json."""
 import json
 import pathlib
 import re
 
 import pytest
 
+from eval import facticity_benchmark as fb
+
 BACK = pathlib.Path(__file__).resolve().parent.parent
 PAGE = (BACK / "static" / "benchmarks.html").read_text()
-DATA = json.loads((BACK / "eval" / "results" / "benchmarks.json").read_text())
-CLAIMS = PAGE.split("<h2>Rating older claims</h2>")[1]
-RECENT = PAGE.split("<h2>Rating recent claims</h2>")[1].split("<h2>")[0]
-LOOKUP = PAGE.split("<h2>Looking up government figures</h2>")[1].split("<h2>")[0]
-ROWS = re.findall(r'<li( class="bench-us")?><span class="bench-name">(.*?)</span>'
-                  r'<meter min="0" max="100" value="([\d.]+)"></meter><span class="bench-score">([\d.]+)</span>', CLAIMS)
+DATA = json.loads((BACK / "eval" / "results" / "facticity_benchmark.json").read_text())
 
 
-class TestTheGraph:
-    def test_three_graphs_lookup_first(self):
-        assert PAGE.count('<ol class="bench">') == 3 and PAGE.count("<h2>") == 3
-        assert PAGE.index("Looking up government figures") < PAGE.index("Rating recent claims") < PAGE.index("Rating older claims")
+class TestTheResults:
+    def test_page_is_exactly_what_the_results_generate(self):
+        assert PAGE == fb.page(DATA)
 
-    def test_recent_graph_is_what_was_recorded_in_order(self):
-        rows = re.findall(r'<li( class="bench-us")?><span class="bench-name">(.*?)</span><meter min="0" max="100" '
-                          r'value="([\d.]+)"></meter><span class="bench-score">([\d.]+)</span>', RECENT)
-        assert [(bool(u), n, float(v)) for u, n, v, _ in rows] == [(r["mirador"], r["name"], r["score"]) for r in DATA["recent"]["rows"]]
-        assert [float(v) for _, _, v, _ in rows] == sorted((float(v) for _, _, v, _ in rows), reverse=True)
-        assert f"&plusmn;{DATA['recent']['margin']}" in RECENT
+    def test_accuracy_is_computed_from_the_rows(self):
+        for s, a in DATA["accuracy"].items():
+            assert a == fb.accuracy(DATA["rows"], s)
 
-    def test_lookup_graph_is_what_was_recorded(self):
-        L = DATA["lookup"]
-        got = dict(re.findall(r'<span class="bench-name">(.*?)</span><meter min="0" max="75" value="(\d+)">', LOOKUP))
-        assert got == {"Right": str(L["right"]), "Wrong": str(L["wrong"]), "Not answered": str(L["not_answered"])}
-        assert L["right"] + L["wrong"] + L["not_answered"] == L["questions"]
-        assert sum(L["right_detail"].values()) == L["right"]
+    def test_the_published_answers_reproduce_facticitys_own_figures(self):
+        assert [round(DATA["accuracy"][s]) for s in ("facticity", "perplexity", "bing")] == [92, 88, 78]
 
-    def test_every_recorded_score_is_a_bar_and_nothing_else_is(self):
-        recorded = sorted([m["score"] for m in DATA["mirador"]] + [o["score"] for o in DATA["others"]])
-        assert sorted(float(v) for _, _, v, _ in ROWS) == recorded
+    def test_all_120_claims_are_listed_with_every_answer(self):
+        assert len(DATA["rows"]) == 120 and PAGE.count("<tr><td") == 120
+        assert all(r["mirador"] in ("TRUE", "FALSE", "Can't verify") for r in DATA["rows"])
 
-    def test_each_bar_shows_its_value_rounded(self):
-        assert all(f"{float(v):.1f}" == shown for _, _, v, shown in ROWS)
-
-    def test_the_bars_are_in_order(self):
-        values = [float(v) for _, _, v, _ in ROWS]
-        assert values == sorted(values, reverse=True)
-
-    def test_mirador_bars_are_set_apart_and_named_by_mode(self):
-        ours = {name: float(v) for us, name, v, _ in ROWS if us}
-        assert ours == {f"Project Mirador ({m['mode']})": m["score"] for m in DATA["mirador"]}
-
-    def test_the_mode_the_live_site_runs_is_said_and_is_its_model(self):
-        import config
-        live = [m for m in DATA["mirador"] if m["live"]]
-        assert len(live) == 1 and live[0]["model"] == config.CLAUDE_SEARCH_MODEL
-        assert f"The live site runs {live[0]['mode']} mode" in PAGE
-
-    def test_the_margin_is_stated(self):
-        assert f"{DATA['mirador'][0]['claims']} random claims from the test, so &plusmn;{DATA['margin']}" in PAGE
-
-    def test_no_jargon_and_no_method_link(self):
-        assert not re.search(r"roberta|bart|numt5|flan|program-fc|how it was run", PAGE, re.I)
-
-    def test_no_model_vendor_is_named_for_mirador(self):
-        assert not re.search(r"claude|haiku|sonnet|anthropic", PAGE, re.I)
+    @pytest.mark.parametrize("verdict,shown", [("SUPPORTED", "TRUE"), ("MOSTLY_ACCURATE", "TRUE"),
+                                               ("CONTRADICTED", "FALSE"), ("MISLEADING", "FALSE"),
+                                               ("NO_EVIDENCE", "Can't verify"), ("", "Can't verify")])
+    def test_verdicts_read_as_the_service_shows_them(self, verdict, shown):
+        assert fb.answer(verdict) == shown
 
 
 class TestThePage:
+    def test_no_model_vendor_is_named(self):
+        assert not re.search(r"claude|haiku|sonnet|anthropic", PAGE, re.I)
+
+    def test_old_metrics_are_gone(self):
+        assert not re.search(r"quantemp|econwebarena|macro|politifact rated", PAGE, re.I)
+
     def test_it_is_served_and_listed(self, test_client):
         r = test_client.get("/benchmarks")
-        assert r.status_code == 200 and "Project Mirador (fast)" in r.text
+        assert r.status_code == 200 and "Project Mirador" in r.text
         assert "/benchmarks</loc>" in (BACK / "static" / "sitemap.xml").read_text()
 
     @pytest.mark.parametrize("name", ["index.html", "about.html", "privacy.html", "methodology.html",

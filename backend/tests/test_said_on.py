@@ -130,3 +130,26 @@ class TestWhatTheBenchmarkShowed:
     ])
     def test_plain_claims_are_untouched(self, claim):
         assert parse_claim(claim).structured_blocker == ""
+
+
+class TestTheDateReachesTheWebSearch:
+    def test_hint_names_the_day_and_says_to_judge_then(self):
+        from services.verify_v2 import said_on_hint
+        h = said_on_hint("2024-06-20")
+        assert "June 20, 2024" in h and "true then" in h
+
+    def test_no_date_no_hint(self):
+        from services.verify_v2 import said_on_hint
+        assert said_on_hint("") == "" and said_on_hint("not a date") == ""
+
+    def test_safe_ground_passes_it_on(self, monkeypatch):
+        import asyncio
+        from services import verify_v2
+        seen = {}
+
+        async def fake_search(text, hint, **kw):
+            seen["hint"] = hint
+            return verify_v2.GroundedAnswer(ok=False, error="x")
+        monkeypatch.setattr(verify_v2.ai_search, "search", fake_search)
+        asyncio.run(verify_v2._safe_ground("Some claim", "", None, False, "2024-06-20"))
+        assert "June 20, 2024" in seen["hint"]

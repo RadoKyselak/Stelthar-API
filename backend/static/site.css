@@ -217,3 +217,11 @@ body:not(:has(#out:not(:empty))) .main { flex: none; padding-bottom: 0; }
 .bench meter::-moz-meter-bar { background: #9aa3ad; border-radius: 6px; }
 .bench-us meter::-webkit-meter-optimum-value { background: #15803d; }
 .bench-us meter::-moz-meter-bar { background: #15803d; }
+.bench-table-wrap { overflow-x: auto; margin-top: 18px; }
+.bench-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bench-table th, .bench-table td { padding: 6px 6px; border-bottom: 1px solid var(--line, rgba(0,0,0,.08)); text-align: left; vertical-align: top; }
+.bench-table th { color: var(--meta); font-weight: 600; position: sticky; top: 0; background: var(--bg, #fff); }
+.bench-table td.v { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bench-table td.miss { color: #b42318; }
+.bench-table .us { font-weight: 700; }
+main.doc { width: 100%; }

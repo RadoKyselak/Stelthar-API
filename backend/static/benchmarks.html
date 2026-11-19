@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Project Mirador benchmark: how it scores against other fact checkers</title>
-  <meta name="description" content="Project Mirador against published fact-checking systems on QuanTemp, a benchmark of real fact-checked number claims.">
+  <title>Project Mirador benchmark</title>
+  <meta name="description" content="Project Mirador on Facticity's 120-claim benchmark, against Facticity, Perplexity and Bing.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Project Mirador">
   <meta property="og:url" content="https://stelthar-api.vercel.app/benchmarks">
   <meta property="og:title" content="Project Mirador benchmark">
-  <meta property="og:description" content="Project Mirador against published fact-checking systems on real fact-checked number claims.">
+  <meta property="og:description" content="Project Mirador on Facticity's 120-claim benchmark, against Facticity, Perplexity and Bing.">
   <meta property="og:image" content="https://stelthar-api.vercel.app/static/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -20,40 +20,142 @@
 <body>
   <main class="doc">
     <p class="doc-back"><a href="/">&larr; Check a claim</a></p>
-    <h1>Benchmarks</h1>
-    <h2>Looking up government figures</h2>
-    <p class="bench-lede">75 questions asking for a U.S. agency statistic (EconWebArena): jobs, prices, rates, income.</p>
+    <h1>Benchmark</h1>
+    <p class="bench-lede">The 120 claims Facticity uses to benchmark itself. Accuracy: the share of claims each system rated correctly as true or false.</p>
     <ol class="bench">
-      <li class="bench-us"><span class="bench-name">Right</span><meter min="0" max="75" value="36"></meter><span class="bench-score">36</span></li>
-      <li><span class="bench-name">Wrong</span><meter min="0" max="75" value="1"></meter><span class="bench-score">1</span></li>
-      <li><span class="bench-name">Not answered</span><meter min="0" max="75" value="38"></meter><span class="bench-score">38</span></li>
+      <li><span class="bench-name">Facticity</span><meter min="0" max="100" value="91.7"></meter><span class="bench-score">92%</span></li>
+      <li><span class="bench-name">Perplexity</span><meter min="0" max="100" value="88.3"></meter><span class="bench-score">88%</span></li>
+      <li class="bench-us"><span class="bench-name">Project Mirador</span><meter min="0" max="100" value="80.8"></meter><span class="bench-score">81%</span></li>
+      <li><span class="bench-name">Bing</span><meter min="0" max="100" value="78.3"></meter><span class="bench-score">78%</span></li>
     </ol>
-    <p class="bench-note">Fast mode, with figures read live from the agency. &ldquo;Right&rdquo; means the agency&rsquo;s figure: 24 match the benchmark exactly, 9 were revised by the agency since, 3 are errors in the benchmark.
-      When it cannot find the figure it says so instead of guessing.</p>
-    <h2>Rating recent claims</h2>
-    <p class="bench-lede">110 claims PolitiFact rated between July and November 2026, after the AI models were built, so none could know the answers. Score out of 100; higher is better.</p>
-    <ol class="bench">
-      <li class="bench-us"><span class="bench-name">Project Mirador (extra reasoning)</span><meter min="0" max="100" value="69.20"></meter><span class="bench-score">69.2</span></li>
-      <li class="bench-us"><span class="bench-name">Project Mirador (fast)</span><meter min="0" max="100" value="57.70"></meter><span class="bench-score">57.7</span></li>
-      <li><span class="bench-name">The same AI on its own (fast)</span><meter min="0" max="100" value="54.00"></meter><span class="bench-score">54.0</span></li>
-      <li><span class="bench-name">The same AI on its own (extra reasoning)</span><meter min="0" max="100" value="46.40"></meter><span class="bench-score">46.4</span></li>
-      <li><span class="bench-name">Guessing “False” every time</span><meter min="0" max="100" value="21.10"></meter><span class="bench-score">21.1</span></li>
-    </ol>
-    <p class="bench-note">&ldquo;On its own&rdquo; is the same AI given only the claim, with nothing looked up. 110 claims, so &plusmn;12. Tested November 18, 2026.</p>
-    <h2>Rating older claims</h2>
-    <p class="bench-lede">Real number claims rated by PolitiFact, Snopes and other fact-checkers (QuanTemp).
-      Score out of 100; higher is better.</p>
-    <ol class="bench">
-      <li class="bench-us"><span class="bench-name">Project Mirador (extra reasoning)</span><meter min="0" max="100" value="61.32"></meter><span class="bench-score">61.3</span></li>
-      <li><span class="bench-name">Best research system built for this test</span><meter min="0" max="100" value="58.32"></meter><span class="bench-score">58.3</span></li>
-      <li class="bench-us"><span class="bench-name">Project Mirador (fast)</span><meter min="0" max="100" value="50.71"></meter><span class="bench-score">50.7</span></li>
-      <li><span class="bench-name">OpenAI GPT-3.5, shown examples</span><meter min="0" max="100" value="47.00"></meter><span class="bench-score">47.0</span></li>
-      <li><span class="bench-name">OpenAI GPT-4, shown examples</span><meter min="0" max="100" value="36.50"></meter><span class="bench-score">36.5</span></li>
-      <li><span class="bench-name">Guessing “False” every time</span><meter min="0" max="100" value="24.21"></meter><span class="bench-score">24.2</span></li>
-    </ol>
-    <p class="bench-note">Mirador: 300 random claims from the test, so &plusmn;6.
-      Others: as published by the benchmark&rsquo;s authors (Venktesh et al., SIGIR 2024). The live site runs fast mode; extra reasoning is not offered there yet.
-      Tested November 18, 2026.</p>
+    <p class="bench-note">Claims, ground truth and the Facticity, Perplexity and Bing answers are from Facticity, “Updated and Expanded Originality Dataset Benchmark”, 20 June 2024. An answer that is neither true nor false counts as wrong, as in Facticity&rsquo;s table.</p>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead><tr><th>#</th><th>Claim</th><th>Truth</th><th class="us">Project Mirador</th><th>Facticity</th><th>Perplexity</th><th>Bing</th></tr></thead>
+        <tbody>
+          <tr><td class="v">1</td><td>Captain Kirk&#x27;s &quot;Boldly go where no one has gone before&quot; phrase is rooted in ancient Greek philosophy.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v miss">TRUE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">2</td><td>Ava DuVernay&#x27;s &quot;A Wrinkle in Time&quot; had the biggest debut ever for a film directed by a woman, earning $280 million opening weekend.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">3</td><td>At the start of the 118th Congress in 2023, there were 20 women serving in the U.S. Senate.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">4</td><td>Croatia adopted the Yen as its currency on the 1st of January 2023.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">5</td><td>The 2023 edition of the Eurovision was held in Oslo, Norway.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">6</td><td>The 2023 FIFA Womenʼs World Cup was co-hosted by Germany and France.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">7</td><td>Cristiano Ronaldo, a well-known figure in the football world, retired from professional football in January 2023.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">8</td><td>India declared a population decrease, falling behind China in 2023.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">9</td><td>Oasis, a major Britpop band, announced they&#x27;ll be disbanding permanently in 2023.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">10</td><td>The movie Creed III was released on streaming platforms exclusively on March 3, 2023.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">11</td><td>The United Nations declared 2023 as the International Year of Rice.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">12</td><td>The 2023 Winter Universiade was held in Sochi, Russia.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">13</td><td>August 2023 was the planet&#x27;s coldest month on record ever.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">14</td><td>Drs. Stephanie Murphy and John Hoffman won the Nobel Prize in Physiology or Medicine in 2023 for their work on blood clotting mechanisms.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">15</td><td>Potent odors, like ammonia, can be sensed by the human nose in concentrations as tiny as 5 parts per billion.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v miss">TRUE</td></tr>
+          <tr><td class="v">16</td><td>California experienced 6,300 wildfires in 2021.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">17</td><td>420,000 acres of land burned in Oregon in 2022.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">18</td><td>Filmmaker Werner Herzog once cycled 200 miles from Berlin to Warsaw to attend a film festival.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">19</td><td>Filmmaker Werner Herzog used hot sauce to help coach Joaquin Phoenix for a movie scene.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">20</td><td>Happy Dolphin is an online dolphin identification database that keeps a record of 15,000 dolphins&#x27; dorsal fin patterns.</td><td class="v">FALSE</td><td class="v miss us">Can&#x27;t verify</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">21</td><td>Radishes can grow to 2 feet in diameter or more.</td><td class="v">FALSE</td><td class="v miss us">Can&#x27;t verify</td><td class="v miss">TRUE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">22</td><td>A new and rare yellow scorpion, named Hottentotta Trilineatus, was discovered in Brazil.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">23</td><td>Machine learning models require extensive training to understand basic equations.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v miss">Inconclusive</td><td class="v">FALSE</td><td class="v miss">TRUE</td></tr>
+          <tr><td class="v">24</td><td>After Mark Zuckerberg acquired Twitter, Diaspora grew donations by 300% and reached 900,000 active users in 2022.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">25</td><td>India is the largest robot market in the world, followed by Japan, Germany, and the United States.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">26</td><td>Apple sold 90 million iPhones and 30 million iPads in 2022.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">27</td><td>Brain waves were first recorded in the 1940s by Richard Caton.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">28</td><td>More than 900 varieties of corn are grown in the Andes Mountains.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v miss">TRUE</td><td class="v miss">TRUE</td></tr>
+          <tr><td class="v">29</td><td>At least 1 in 5 adults has a low iron level.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v miss">Inconclusive</td><td class="v miss">TRUE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">30</td><td>The Department of Justice filed 9 civil charges against Kraken CEO Jesse Powell.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">31</td><td>Human babies are born with the ability to detect spicy flavors.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v miss">Inconclusive</td><td class="v">FALSE</td><td class="v miss">TRUE</td></tr>
+          <tr><td class="v">32</td><td>Olivia Wilde was conceived through surrogacy.</td><td class="v">FALSE</td><td class="v miss us">Can&#x27;t verify</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">33</td><td>The artist Dali produced more than 1,000 sculptures.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">34</td><td>Hunger increases positive and decreases negative emotions.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">35</td><td>Inception is the highest-grossing film in Christopher Nolanʼs career.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">36</td><td>The Dark Knight music score includes extensive use of string instruments.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">37</td><td>More than 3 in 10 U.S. workers don&#x27;t fully use their paid time off.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">38</td><td>Chat GPT has real-time browsing capability.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">39</td><td>Laufey&#x27;s single From the End became the most-streamed blues song in the world.</td><td class="v">FALSE</td><td class="v miss us">Can&#x27;t verify</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">40</td><td>Oral caffeine is an effective nasal decongestant.</td><td class="v">FALSE</td><td class="v miss us">Can&#x27;t verify</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">41</td><td>Tech entrepreneur Emily White has spent more than $2 million developing a sleep-enhancement system.</td><td class="v">FALSE</td><td class="v miss us">Can&#x27;t verify</td><td class="v miss">Inconclusive</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">42</td><td>The worldʼs oldest DNA was found in thousand-year-old saber-toothed tiger fangs.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">43</td><td>The world&#x27;s tallest pogo stick is 20.2 feet tall.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">44</td><td>The 2023 Arctic sea ice maximum reached a record-setting high of 25.5 million square kilometers.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">45</td><td>Tarantulas have acute night vision.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">46</td><td>Dinosaurs had three toes.</td><td class="v">FALSE</td><td class="v miss us">TRUE</td><td class="v miss">Inconclusive</td><td class="v">FALSE</td><td class="v miss">TRUE</td></tr>
+          <tr><td class="v">47</td><td>Working dogs are being trained to detect diabetes in human saliva.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v miss">TRUE</td><td class="v miss">TRUE</td><td class="v miss">TRUE</td></tr>
+          <tr><td class="v">48</td><td>Dogs have the ability to taste sweetness.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">49</td><td>Service dogs help increase social interaction for people with autism.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">50</td><td>The 2023 UEFA Champions League Final was held at the Camp Nou in Barcelona, Spain.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">51</td><td>NOAA&#x27;s Altius-400 flew for a record 75 minutes inside the eye of a category 4 hurricane.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">52</td><td>Oregon farmers produce about 60% of the world&#x27;s supply of hazelnuts.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">53</td><td>The flapjack octopus is the shallowest-living octopus.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">54</td><td>Japan counts its people&#x27;s ages two ways.</td><td class="v">TRUE</td><td class="v miss us">Can&#x27;t verify</td><td class="v miss">FALSE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">55</td><td>Nevada uses controlled burns to help prevent forest fires.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">56</td><td>Gray whales have simple, predictable migration patterns.</td><td class="v">FALSE</td><td class="v miss us">TRUE</td><td class="v miss">TRUE</td><td class="v miss">TRUE</td><td class="v miss">TRUE</td></tr>
+          <tr><td class="v">57</td><td>There are 700 known species of tarantulas.</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">58</td><td>Researchers at MIT developed a smart table that adjusts its height automatically based on the user&#x27;s posture.</td><td class="v">FALSE</td><td class="v miss us">Can&#x27;t verify</td><td class="v miss">Inconclusive</td><td class="v">FALSE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">59</td><td>The herb basil has documented anti-anxiety effects.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">60</td><td>Astronauts John Smith and Alice Johnson conducted mock Mars walks last March in a training suit that weighs more than 70 pounds.</td><td class="v">FALSE</td><td class="v miss us">Can&#x27;t verify</td><td class="v">FALSE</td><td class="v miss">TRUE</td><td class="v">FALSE</td></tr>
+          <tr><td class="v">61</td><td>Filmmaker Werner Herzog ate maggots to help coach Christian Bale through eating them for a movie scene</td><td class="v">TRUE</td><td class="v miss us">FALSE</td><td class="v">TRUE</td><td class="v miss">FALSE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">62</td><td>At least 1 in 4 adults has a low vitamin D level</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">63</td><td>Gianluca Vialli, a well-known figure in the football world, passed away in January 2023.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">64</td><td>The 2023 Winter Universiade was held in Lake Placid, New York, United States.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">65</td><td>331,360 acres of land burned in California in 2022</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">66</td><td>Filmmaker Werner Herzog once walked 600 miles from Munic to Paris to see a dying friend</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">67</td><td>Happywhale is an online whale identification database that keeps record of 30,000 humpback whales&#x27; black-and-white fluke patterns</td><td class="v">TRUE</td><td class="v miss us">FALSE</td><td class="v">TRUE</td><td class="v miss">FALSE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">68</td><td>Cabbages can grow to 4 feet in diameter or more</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">69</td><td>Tarantulas lack sharp color vision</td><td class="v">TRUE</td><td class="v miss us">FALSE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">70</td><td>Apple sold 82 million AirPods and 53 million Apple Watches in 2022</td><td class="v">TRUE</td><td class="v miss us">Can&#x27;t verify</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">71</td><td>The Department of Justice filed 13 criminal charges against FTX CEO Sam Bankman-Fried</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">72</td><td>The artist Magritte produced more than 1,500 paintings</td><td class="v">FALSE</td><td class="v us">FALSE</td><td class="v">FALSE</td><td class="v miss">TRUE</td><td class="v miss">TRUE</td></tr>
+          <tr><td class="v">73</td><td>The Oppenheimer music score doesnʼt include any percussion</td><td class="v">TRUE</td><td class="v miss us">FALSE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">74</td><td>Laufey&#x27;s single From the Start became the most-streamed jazz song in the world</td><td class="v">TRUE</td><td class="v miss us">Can&#x27;t verify</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">75</td><td>The world&#x27;s tallest unicycle is 34.6 feet tall</td><td class="v">TRUE</td><td class="v miss us">FALSE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">76</td><td>The 2023 Antarctic sea ice maximum reached a record-setting low of 16.96 million square kilometers</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">77</td><td>The 2023 edition of the Eurovision was held in Liverpool, United Kingdom.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">78</td><td>The United Nations declared 2023 as the International Year of Millets.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">79</td><td>NOAA&#x27;s Altius-600 flew for a record 102 minutes inside the eye of a category 5 hurricane</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">80</td><td>Researchers at the University of Washington developed a smart speaker that lets users mute different areas of a room</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">81</td><td>After Elon Musk acquired Twitter, Mastodon grew donations by 488% and reached 1.8 million active users in 2022</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">82</td><td>China is the largest robot market in the world, followed by Japan, United States, and Korea</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">83</td><td>Oral phenylephrine is an ineffective nasal decongestant</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">84</td><td>Croatia adopted the Euro as its currency on the 1st of January 2023.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">85</td><td>The 2023 UEFA Champions League Final was held at the Atatürk Olympic Stadium in Istanbul, Turkey.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">86</td><td>The 2023 FIFA Women&#x27;s World Cup was co-hosted by Australia and New Zealand.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">87</td><td>India is projected to surpass China as the world&#x27;s most populated country in 2023.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">88</td><td>Blur, a major Britpop band, announced they&#x27;ll be playing a one-off gig at Wembley in 2023.</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">89</td><td>The movie Creed III was released in theaters on March 3, 2023</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">90</td><td>July 2023 was the planet&#x27;s hottest month on record ever</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">91</td><td>Drs. Katalin Karikó and Drew Weissman received the Nobel Prize in Physiology or Medicine in 2023 for identifying a chemical tweak in mRNA that enabled the development of Covid vaccines</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">92</td><td>Captain Spock&#x27;s “Live Long and Prosper” hand gesture is derived in part from a Hebrew blessing</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">93</td><td>Potent odors, such as hydrogen sulfide, can be sensed by the human nose in concentrations as tiny as 1 part per billion</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">94</td><td>California farmers produce about 80% of the world&#x27;s supply of almonds</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">95</td><td>The dumbo octopus is the deepest-living octopus</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">96</td><td>South Korea counts its peopleʼs ages three ways</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">97</td><td>California uses grazing goats to help prevent forest fires</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">98</td><td>California experienced 7,477 wildfires in 2022</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">99</td><td>Greta Gerwigʼs Barbie had the biggest debut ever for a film directed by a woman, earning $356 million opening weekend</td><td class="v">TRUE</td><td class="v miss us">FALSE</td><td class="v">TRUE</td><td class="v miss">FALSE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">100</td><td>Humpback whales are capable of record-breaking, complex migration patterns</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">101</td><td>A new and rare electric blue tarantula, named Chilobrachys Natanicharum, was discovered in Thailand</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">102</td><td>There are 900 known species of tarantulas</td><td class="v">TRUE</td><td class="v miss us">FALSE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">103</td><td>Machine learning models can understand complex equations even with limited training</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">104</td><td>Brain waves were first recorded in the 1920s by Hans Berger</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">105</td><td>More than 1,300 varieties of potato are grown in the Andes Mountains</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">106</td><td>The spice turmeric has proven anti-anxiety effects</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">107</td><td>Human babies are born with the ability to detect sour tastes</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">108</td><td>Kerry Washington was conceived through sperm donation</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">109</td><td>Hunger increases negative and decreases positive emotions</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">110</td><td>Oppenheimer is the highest-grossing film in Christopher Nolanʼs career</td><td class="v">TRUE</td><td class="v miss us">FALSE</td><td class="v">TRUE</td><td class="v miss">FALSE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">111</td><td>More than 4 in 10 U.S. workers donʼt fully use their paid time off</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">112</td><td>At the start of the 118th Congress in 2023, there were 25 women serving in the U.S. Senate</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">113</td><td>Chat GPT can access up to date information</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">114</td><td>Cats have the ability to taste umami</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">115</td><td>Service dogs help reduce severity of PTSD symptoms</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">116</td><td>Tech entrepreneur Bryan Johnson has spent more than $4 million developing a life-extension system</td><td class="v">TRUE</td><td class="v miss us">Can&#x27;t verify</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">117</td><td>Astronauts Drew Feustel and Zena Cardman conducted mock moonwalks last October in a training suit that weighs more than 80 pounds</td><td class="v">TRUE</td><td class="v miss us">FALSE</td><td class="v">TRUE</td><td class="v miss">FALSE</td><td class="v miss">FALSE</td></tr>
+          <tr><td class="v">118</td><td>Dinosaurs had belly buttons</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">119</td><td>The worldʼs oldest DNA was found in million-year-old mammoth teeth</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+          <tr><td class="v">120</td><td>Working dogs are being trained to detect Covid in human sweat</td><td class="v">TRUE</td><td class="v us">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td><td class="v">TRUE</td></tr>
+        </tbody>
+      </table>
+    </div>
   </main>
   <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/benchmarks">Benchmarks</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
 </body>
