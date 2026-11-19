@@ -19,7 +19,7 @@ import httpx
 import config
 from config import logger
 from evidence.cache import cached
-from evidence.datapoint import ANNUAL, MONTHLY, POINT_IN_TIME, Datapoint, Geography, Period
+from evidence.datapoint import ANNUAL, MONTHLY, POINT_IN_TIME, QUARTERLY, Datapoint, Geography, Period
 from evidence.datasets import Candidate, query_tokens
 from evidence.excerpt import make as make_excerpt, row as ex_row
 from evidence.sources import SourceUnavailable
@@ -115,10 +115,36 @@ _STAT_TEXT = {"average": "annual average", "value": "annual average",
               "peak": "highest value in the year", "low": "lowest value in the year"}
 
 
-async def fetch(c: Candidate, year: Optional[int], month: Optional[int], stat: str) -> Optional[Datapoint]:
+async def fetch(c: Candidate, year: Optional[int], month: Optional[int], stat: str,
+                day: Optional[int] = None, quarter: Optional[int] = None) -> Optional[Datapoint]:
     sid = c.id
     params: Dict[str, str] = {"series_id": sid}
-    if year and month:
+    if year and month and day:
+        # One named day: that day's observation of a daily series, or, for a
+        # weekly one, the week's (the latest observation in the seven days
+        # up to it). Never an average: "the 10-year yield on March 10" is one
+        # number, and a month's mean is another.
+        try:
+            on = datetime(year, month, day)
+        except ValueError:
+            return None
+        from datetime import timedelta
+        params.update(observation_start=(on - timedelta(days=6)).strftime("%Y-%m-%d"),
+                      observation_end=on.strftime("%Y-%m-%d"), sort_order="desc", limit="1")
+        kind, basis = POINT_IN_TIME, ("" if c.frequency.startswith("daily") else f"{c.frequency} observation")
+    elif year and quarter:
+        start = 3 * quarter - 2
+        last = calendar.monthrange(year, start + 2)[1]
+        params.update(observation_start=f"{year}-{start:02d}-01", observation_end=f"{year}-{start + 2:02d}-{last:02d}")
+        if c.frequency.lower().startswith("quarterly"):
+            kind, basis = QUARTERLY, ""
+        else:
+            # A quarter of a series published more often: FRED's own
+            # quarterly average. (The Fed's consumer credit rates carry one
+            # reading a quarter in a monthly series; this returns it.)
+            params.update(frequency="q", aggregation_method="avg")
+            kind, basis = QUARTERLY, "quarterly average"
+    elif year and month:
         last = calendar.monthrange(year, month)[1]
         params.update(observation_start=f"{year}-{month:02d}-01",
                       observation_end=f"{year}-{month:02d}-{last:02d}",
@@ -149,9 +175,13 @@ async def fetch(c: Candidate, year: Optional[int], month: Optional[int], stat: s
         return None
     family, scale = _family(c.units)
     date = str(o.get("date") or "")
+    if day and c.frequency.startswith("daily") and date != f"{year}-{month:02d}-{day:02d}":
+        return None      # no observation that day (a holiday, a weekend): not the day before's
     if kind == POINT_IN_TIME:
         period = Period(year=int(date[:4]) if date[:4].isdigit() else None, kind=POINT_IN_TIME,
                         basis=basis, record_date=date or None)
+    elif kind == QUARTERLY:
+        period = Period(year=year, kind=QUARTERLY, quarter=quarter, basis=basis)
     elif kind == MONTHLY:
         period = Period(year=year, kind=MONTHLY, month=month, basis=basis)
     else:
@@ -173,5 +203,8 @@ async def fetch(c: Candidate, year: Optional[int], month: Optional[int], stat: s
                # FRED's own observation row: its date and value, as FRED lists them.
                "excerpt": make_excerpt([ex_row(date, o["value"], cited=True)], units=c.units,
                                        note=(f"Aggregated by FRED: {basis} of the {c.frequency} series."
-                                             if basis and kind != POINT_IN_TIME else ""))},
+                                             if basis and kind != POINT_IN_TIME else "")),
+               # FRED carries state and local series too ("Initial Claims in
+               # Texas"). Its title says where; nothing else in its record does.
+               "titled_place": c.title},
     )

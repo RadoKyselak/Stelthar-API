@@ -7,10 +7,11 @@
   <meta name="description" content="Check claims and look up official U.S. government figures from your own code. A free JSON API with no key, and an endpoint for assistants.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Project Mirador">
-  <meta property="og:url" content="https://stelthar-api.vercel.app/developers">
+  <meta property="og:url" content="https://factcheckgov.app/developers">
+  <link rel="canonical" href="https://factcheckgov.app/developers">
   <meta property="og:title" content="Project Mirador for developers">
   <meta property="og:description" content="Check claims and look up official U.S. government figures from your own code. A free JSON API with no key, and an endpoint for assistants.">
-  <meta property="og:image" content="https://stelthar-api.vercel.app/static/og.png">
+  <meta property="og:image" content="https://factcheckgov.app/static/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
@@ -27,11 +28,11 @@
     <h2>What you get</h2>
     <p>The same checks the extension and this site run. Send a claim or a passage; get back a verdict, the
       official figure, the agency series it came from and a ready-made citation. Base address:
-      <code>https://stelthar-api.vercel.app</code>.</p>
+      <code>https://factcheckgov.app</code>.</p>
 
     <h2>Check a passage</h2>
     <p><code>POST /v2/check</code> takes up to 8,000 characters and answers each claim in it.</p>
-    <pre><code>curl -s https://stelthar-api.vercel.app/v2/check \
+    <pre><code>curl -s https://factcheckgov.app/v2/check \
   -H 'Content-Type: application/json' \
   -d '{"text": "Inflation hit 9.1% in June 2022. Gas averaged $7 a gallon in June 2022."}'</code></pre>
     <ul>
@@ -55,7 +56,7 @@
 
     <h2>Check one claim</h2>
     <p><code>POST /v2/verify</code> takes <code>{"claim": "..."}</code>, up to 1,000 characters.</p>
-    <pre><code>curl -s https://stelthar-api.vercel.app/v2/verify \
+    <pre><code>curl -s https://factcheckgov.app/v2/verify \
   -H 'Content-Type: application/json' \
   -d '{"claim": "Unemployment in Texas was 4.1% in 2023"}'</code></pre>
     <ul>

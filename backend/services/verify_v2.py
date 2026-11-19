@@ -264,9 +264,24 @@ def _soften_for_alternate_measure(parsed: ParsedClaim, v: Verdict) -> Verdict:
     )
 
 
+def said_on_hint(said_on: str) -> str:
+    """What the web search is told when the claim's date is known: a claim is
+    held to what was true when it was made, not to what has changed since."""
+    if not said_on:
+        return ""
+    try:
+        from datetime import date as _date
+        d = _date.fromisoformat(said_on[:10])
+    except ValueError:
+        return ""
+    return (f"The claim was made on {_SAID_MONTHS[d.month - 1]} {d.day}, {d.year}. Judge it by what was "
+            f"true then; a record, ranking or count that changed later does not make it wrong.")
+
+
 async def _safe_ground(text: str, hint: str, client_ip: Optional[str] = None,
-                       names_a_metric: bool = False) -> GroundedAnswer:
+                       names_a_metric: bool = False, said_on: str = "") -> GroundedAnswer:
     """The paid AI tier, behind its gate and spend limits. Never raises."""
+    hint = f"{hint} {said_on_hint(said_on)}".strip()
     try:
         # Published fact-checks of the claim, already being fetched by the
         # endpoint: leads for the search, and a second opinion on its answer.
@@ -1009,7 +1024,7 @@ async def _verify_one(claim: str, allow_grounding: bool = True,
                 f"{verdict.headline}"
             )
             if allow_grounding:
-                g = await _safe_ground(text, hint, client_ip, parsed.metric is not None)
+                g = await _safe_ground(text, hint, client_ip, parsed.metric is not None, said_on)
                 if g.ok:
                     result = _grounded_to_result(text, parsed, g, started)
                     if not near_miss or result.verdict == SUPPORTED:
@@ -1110,7 +1125,7 @@ async def _verify_one(claim: str, allow_grounding: bool = True,
         # another agency ran). Claude searches, told where the record lives.
         # These claims often state no number, so the figure gate does not apply.
         hint = f"{hint} {reg_hint}".strip()
-    g = await _safe_ground(text, hint, client_ip, parsed.metric is not None or bool(reg_hint))
+    g = await _safe_ground(text, hint, client_ip, parsed.metric is not None or bool(reg_hint), said_on)
     if not g.ok and g.skipped:
         # Deliberately not sent: a limit, or a claim the gate keeps away from
         # the paid tier. Not an outage, and nothing was spent.

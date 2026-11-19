@@ -145,7 +145,7 @@ const checkDeeper = (claim) => postJSON(VERIFY_URL, { claim }, "The search");
 const PENDING_KEY = "mirador_pending";
 
 // The panel picks this up when it opens, or right away if it is already open.
-// intent "check": right-click is "Check with Project Mirador", so the
+// intent "check": right-click is "Fact-check with Mirador", so the
 // highlighted text is checked as a claim even when it has no figure in it.
 const sendToPanel = (text, intent) =>
   chrome.storage.session.set({ [PENDING_KEY]: { text, intent, at: Date.now() } });
@@ -156,7 +156,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: "mirador-check",
-      title: "Check with Project Mirador",
+      title: "Fact-check with Mirador",
       contexts: ["selection"],
     });
   });

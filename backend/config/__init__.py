@@ -167,7 +167,7 @@ LOOKUP_PER_MINUTE = _env_int("LOOKUP_PER_MINUTE", 60, 1, 1000)
 LOOKUP_PER_DAY = _env_int("LOOKUP_PER_DAY", 2000, 1, 100000)
 
 # Where the site is served from: the address a shared result links back to.
-PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "https://stelthar-api.vercel.app").strip().rstrip("/")
+PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "https://factcheckgov.app").strip().rstrip("/")
 
 # --- Checking a passage (POST /v2/check) --------------------------------------
 # A pasted paragraph or a page holds several claims; each is checked on its

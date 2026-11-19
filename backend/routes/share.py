@@ -104,6 +104,8 @@ def page(claim: str, result: Optional[Dict[str, Any]]) -> str:
         html = _set_meta(html, attr, name, content)
     # Any claim can be put in this address: keep such pages out of search results.
     html = html.replace("</title>", '</title>\n  <meta name="robots" content="noindex">', 1)
+    # The home page's canonical link would contradict that noindex.
+    html = re.sub(r'\n *<link rel="canonical"[^>]*>', "", html, count=1)
 
     # The claim goes in the box; the answer in a data block the page's script
     # draws. "<" is escaped so no text in a result can close the block.
@@ -138,4 +140,6 @@ async def shared_check(request: Request, claim: str = ""):
     except LookupError:
         logger.exception("The share page could not be built from index.html")
         return RedirectResponse(f"/?claim={quote(claim, safe='')}", status_code=302)
+    from utils import usage
+    await usage.count("share")
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})

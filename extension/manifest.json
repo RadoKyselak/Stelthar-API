@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Project Mirador",
+  "name": "Mirador: Fact Check Gov",
+  "short_name": "Mirador",
   "version": "2.2.0",
-  "description": "Check a claim or look up an official U.S. statistic in a side panel, with the exact source: BLS, BEA, Census and Treasury data.",
+  "description": "Fact-check claims and look up official U.S. statistics in a side panel, with the exact source: BLS, BEA, Census and Treasury data.",
   "permissions": [
     "sidePanel",
     "contextMenus",
@@ -12,7 +13,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Open Project Mirador"
+    "default_title": "Open Mirador fact check"
   },
   "side_panel": {
     "default_path": "panel.html"
@@ -23,7 +24,7 @@
         "default": "Ctrl+Shift+Y",
         "mac": "Command+Shift+Y"
       },
-      "description": "Open Project Mirador"
+      "description": "Open Mirador fact check"
     }
   },
   "icons": {

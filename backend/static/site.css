@@ -198,3 +198,6 @@ body:not(:has(#out:not(:empty))) .main { flex: none; padding-bottom: 0; }
 .doc pre { margin: 12px 0; padding: 14px 16px; border-radius: 10px; background: var(--panel); overflow-x: auto; }
 .doc pre code { padding: 0; background: none; }
 .doc ol { margin: 0; padding-left: 22px; }
+
+/* Benchmarks: one bar per system, Mirador's set apart. */
+main.doc { width: 100%; }

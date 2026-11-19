@@ -1,5 +1,5 @@
 /*
- * Project Mirador: the extension's look, matching the website.
+ * Mirador: the extension's look, matching the website.
  *
  * Black and white with a yellow marker on the answer, a large figure, the
  * source rows in a soft panel and black pill buttons. It sits on top of the

@@ -176,6 +176,19 @@ def _titled(name: str) -> str:
     return " ".join(w if w.isupper() else w.capitalize() for w in name.split())
 
 
+# Who a question says the figure comes from: a source, not a place or a measure.
+_ATTRIBUTION = re.compile(
+    r"^\s*(?:according to|as (?:reported|published|shown|noted|stated|recorded)(?: by| on| in)?|based on|"
+    r"per|from)\b[^,?]{3,140}?,\s*", re.IGNORECASE)
+
+
+def _is_a_sentence(text: str) -> bool:
+    """A question or statement in full, as opposed to search-box words
+    ("salem oregon population")."""
+    t = " ".join((text or "").split())
+    return len(t.split()) >= 9 or bool(_ATTRIBUTION.match(t))
+
+
 def _place_in_query(text: str, parsed, spec: MetricSpec) -> Optional[Geography]:
     """The place a search-box query names, wherever it sits.
 
@@ -187,6 +200,13 @@ def _place_in_query(text: str, parsed, spec: MetricSpec) -> Optional[Geography]:
     country, which is a different number from the one asked for."""
     g = parsed.geography
     if g is not None and g.level not in ("unknown", "state"):
+        return g
+    if _is_a_sentence(text):
+        # "According to the U.S. Bureau of Labor Statistics, what was the
+        # unemployment rate for California in March 2025?" is a sentence, and
+        # its place is where the parser found it. Taking what is left after
+        # the measure for a place name made a city of "according to u.s.
+        # bureau labor statistics", and a plain state question was refused.
         return g
     rest = f" {text.lower()} "
     terms = list(spec.phrases) + [spec.label]
