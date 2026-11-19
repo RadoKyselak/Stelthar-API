@@ -37,7 +37,12 @@ def run_panel(expr: str):
 class TestBackground:
     def test_a_check_goes_to_the_passage_endpoint(self):
         assert "`${API}/v2/check`" in BG
-        assert "postJSON(CHECK_URL, link ? { url: text.trim() } : { text }" in BG
+        assert "const body = link ? { url: text.trim() } : { text };" in BG
+        assert "postJSON(CHECK_URL, body," in BG
+
+    def test_check_again_asks_the_server_for_a_fresh_answer(self):
+        check = BG[BG.index("async function checkText"):BG.index("const checkDeeper")]
+        assert "if (bypassCache) body.fresh = true;" in check
 
     def test_a_pasted_link_is_sent_as_a_page_to_fetch(self):
         check = BG[BG.index("async function checkText"):BG.index("const checkDeeper")]
