@@ -17,6 +17,7 @@ from services.verification_service import VerificationService
 from services.verify_v2 import to_response_dict, verify as verify_v2
 from services.lookup import lookup, to_response_dict as lookup_to_response_dict
 from services import verify_compat
+from utils import usage as _usage
 from utils import gemini_models, spend_guard
 from utils.request_limits import client_ip as _client_ip, limit
 from utils.validation import ValidationError
@@ -250,6 +251,15 @@ def _health_details_allowed(request: Request) -> bool:
     return bool(config.HEALTH_TOKEN) and hmac.compare_digest(token, config.HEALTH_TOKEN)
 
 
+@app.get("/usage")
+async def usage_report(request: Request, days: int = 30):
+    """How many checks have been made: by day and kind, and in total. For the
+    operator only (X-Health-Token). Counts, never claims or visitors."""
+    if not _health_details_allowed(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    return await _usage.report(max(1, min(days, 400)))
+
+
 @app.get("/health")
 async def detailed_health_check(request: Request):
     """What the service will actually use — so a retired model or a missing key
@@ -320,6 +330,9 @@ async def verify_v2_endpoint(req: VerifyRequest, request: Request) -> Dict[str, 
     related = fact_checks.start(claim)
     result = await verify_v2(claim, client_ip=_client_ip(request))
     result.fact_checks = await fact_checks.finish(related)
+    out = to_response_dict(result)
+    await _usage.count("claim")
+    await _usage.count_verdicts([out["display"]["verdict"]["key"]])
     logger.info(
         "v2 verification complete",
         extra={
@@ -329,7 +342,7 @@ async def verify_v2_endpoint(req: VerifyRequest, request: Request) -> Dict[str, 
             "verdict": result.verdict,
         },
     )
-    return to_response_dict(result)
+    return out
 
 
 @app.post("/v2/lookup", dependencies=[Depends(limit("lookup"))])
@@ -351,6 +364,8 @@ async def lookup_endpoint(req: LookupRequest, request: Request) -> Dict[str, Any
     visible to be usable.
     """
     result = await lookup(req.query.strip(), deep=req.deep, client_ip=_client_ip(request))
+    if req.deep or result.ok:
+        await _usage.count("lookup")      # a keystroke that found nothing is not a lookup
     logger.info(
         "lookup complete",
         extra={
@@ -375,6 +390,8 @@ async def verify(req: VerifyRequest, request: Request) -> Dict[str, Any]:
     if not claim:
         raise HTTPException(status_code=400, detail="Claim cannot be empty.")
     result = await verify_compat.verify(claim, client_ip=_client_ip(request))
+    await _usage.count("claim")
+    await _usage.count_verdicts([((result.get("display") or {}).get("verdict") or {}).get("key", "no-verdict")])
     logger.info(
         "verification complete",
         extra={

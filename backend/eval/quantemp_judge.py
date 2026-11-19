@@ -7,6 +7,7 @@ wrong. The best published system without leaked evidence scores 58.32.
 
     python -m eval.quantemp_judge split CLAIMS EVIDENCE OUTDIR [--dev 150] [--test 300]
     python -m eval.quantemp_judge score OUTDIR/<set>.jsonl OUTDIR/<set>-verdicts*.jsonl
+    python -m eval.quantemp_judge resolve REPLIES.jsonl VERDICTS.jsonl     # decomposed replies -> verdicts
 
 `split` draws a development set and a disjoint test set at random (fixed
 seed) and writes, for each claim, what the judge reads: the instructions'
@@ -45,21 +46,25 @@ def said_on(url: str) -> str:
     return f"{m.group(1)}-{_MON[m.group(2)]:02d}-{int(m.group(3)):02d}" if m and m.group(2) in _MON else ""
 
 
-def split(claims_path: str, evidence_path: str, out: str, dev: int, test: int) -> None:
+def split(claims_path: str, evidence_path: str, out: str, dev: int, test: int,
+          skip: int = 0, snippets: int = 30) -> None:
     claims = json.load(open(claims_path))
     evidence = json.load(open(evidence_path))
     assert len(claims) == len(evidence)
     order = list(range(len(claims)))
     random.Random(SEED).shuffle(order)
-    sets = {"dev": order[:dev], "test": order[dev:dev + test]}
+    # `skip` leaves out claims an earlier test drew (the first dev + skip of
+    # the same shuffle), so a fresh test never reuses them.
+    sets = {"dev": order[:dev], "test": order[dev + skip:dev + skip + test]}
     outdir = pathlib.Path(out)
     outdir.mkdir(parents=True, exist_ok=True)
     (outdir / "INSTRUCTIONS.txt").write_text(evidence_judge.INSTRUCTIONS)
+    (outdir / "DECOMPOSE_INSTRUCTIONS.txt").write_text(evidence_judge.DECOMPOSE_INSTRUCTIONS)
     for name, idx in sets.items():
         with open(outdir / f"{name}.jsonl", "w") as f:
             for i in idx:
                 c = claims[i]
-                ev = evidence_judge.usable(evidence[i]["docs"])
+                ev = evidence_judge.usable(evidence[i]["docs"], limit=snippets)
                 f.write(json.dumps({"id": f"t{i}", "label": c["label"], "said_on": said_on(c.get("url", "")),
                                     "input": evidence_judge.render(c["claim"], ev, said_on(c.get("url", "")))},
                                    ensure_ascii=False) + "\n")
@@ -103,17 +108,39 @@ def score(set_path: str, verdict_paths: List[str]) -> Dict[str, float]:
     return s
 
 
+def resolve(replies: str, out: str) -> None:
+    """Decomposed replies ({"id", "questions", "lean"} per line) to verdicts,
+    worked out by evidence_judge.decide."""
+    n = 0
+    with open(out, "w") as f:
+        for line in open(replies):
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            got = evidence_judge.read_decomposed(json.dumps(row))
+            if got is not None:
+                f.write(json.dumps({"id": row.get("id"), **got}, ensure_ascii=False) + "\n")
+                n += 1
+    print(f"{n} verdicts -> {out}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("split")
     a.add_argument("claims"); a.add_argument("evidence"); a.add_argument("out")
     a.add_argument("--dev", type=int, default=150); a.add_argument("--test", type=int, default=300)
+    a.add_argument("--skip", type=int, default=0); a.add_argument("--snippets", type=int, default=30)
+    r = sub.add_parser("resolve")
+    r.add_argument("replies"); r.add_argument("out")
     b = sub.add_parser("score")
     b.add_argument("set"); b.add_argument("verdicts", nargs="+")
     args = ap.parse_args()
     if args.cmd == "split":
-        split(args.claims, args.evidence, args.out, args.dev, args.test)
+        split(args.claims, args.evidence, args.out, args.dev, args.test, args.skip, args.snippets)
+    elif args.cmd == "resolve":
+        resolve(args.replies, args.out)
     else:
         s = score(args.set, args.verdicts)
         print(json.dumps({k: (round(v * 100, 2) if isinstance(v, float) else v) for k, v in s.items()}, indent=1))

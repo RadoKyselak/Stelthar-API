@@ -140,4 +140,6 @@ async def shared_check(request: Request, claim: str = ""):
     except LookupError:
         logger.exception("The share page could not be built from index.html")
         return RedirectResponse(f"/?claim={quote(claim, safe='')}", status_code=302)
+    from utils import usage
+    await usage.count("share")
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})

@@ -1,5 +1,5 @@
 /*
- * Project Mirador: the result card.
+ * Mirador: the result card.
  *
  * One renderer for both surfaces, the in-page card and the toolbar popup. It
  * draws the API's `display` block (a claim check) or a lookup result (one

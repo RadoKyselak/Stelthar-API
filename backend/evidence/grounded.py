@@ -160,14 +160,25 @@ Rules:
   checked against the official record (the agency, court or legislature) or the
   position of the relevant scientific body (CDC, NIH, NASA, the National
   Academies), and professional fact-checks of it.
+- A claim about a person, a work, an event, a record, a discovery, a company or
+  nature usually has no official publisher. For it, reliable sources are major
+  news outlets, encyclopedias such as Britannica, Guinness World Records,
+  peer-reviewed studies, universities, museums, and the subject's own site.
 - A claim phrased as a yes/no question is checked as the statement it asks about.
 - Report what the source actually says, including the period it covers. If the
   claim names a year and the best source covers a different period, say so in
   PERIOD and treat that as a mismatch rather than a match.
 - If the claim is not empirically checkable (opinion, prediction, value judgement),
   set VERDICT to NOT_EMPIRICAL.
-- If you cannot find an authoritative figure, set VERDICT to NO_EVIDENCE. Do not
-  guess a number.
+- If reliable sources cover the claim's subject but none supports its specific
+  detail (a name, number, place, date or event), and they describe it differently
+  or the detail appears nowhere, set VERDICT to CONTRADICTED and say what the
+  sources do say. Set VERDICT to NO_EVIDENCE only when the searches find nothing
+  reliable about the subject at all. Do not guess a number.
+- When reliable sources support the substance of the claim, answer SUPPORTED even
+  if they add caveats, use a reasonable different count, or the evidence is not
+  conclusive (for "has documented effects", studies documenting the effects are
+  enough). Put the caveat in EXPLANATION.
 - If the claim matches an official figure as it was first published, and the
   agency has since revised it, answer SUPPORTED and say in EXPLANATION what the
   figure was revised to. A revision is not the claimant's error.
@@ -178,7 +189,9 @@ Rules:
 - A claim can be numerically accurate yet misleading through a cherry-picked
   baseline, a nominal-vs-inflation-adjusted comparison, a raw count where a rate
   is the meaningful measure, or a subgroup presented as the whole. If that is the
-  case set VERDICT to MISLEADING and explain the framing in EXPLANATION.
+  case set VERDICT to MISLEADING and explain the framing in EXPLANATION. Use
+  MISLEADING only for framing that changes what the claim means, never for a
+  caveat or a small difference in wording.
 
 CLAIM: '''{claim}'''{hint}
 

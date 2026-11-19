@@ -22,6 +22,15 @@ the trade, and how their ratings fall by kind of claim in the training split
 of the benchmark (QuanTemp's train file: a politician's quoted statement is
 rated True 29%, Conflicting 36%, False 34%; a photo, video or viral post
 8%, 17%, 76%). Nothing in them comes from the claims a run is scored on.
+
+Measured on QuanTemp (macro-F1, 300 held-out test claims, the published
+systems' evidence, the same frozen INSTRUCTIONS; 18 Nov 2026):
+
+    Haiku-class judge     50.71
+    Sonnet-class judge    61.32   (+10.6 on the same claims; 95% +3.4 to +17.6)
+    best published        58.32   (FinQA-RoBERTa with ClaimDecomp, no leaked evidence)
+
+The judges were agents reading the instructions, not the production API.
 """
 import json
 import re
@@ -112,3 +121,93 @@ def read(reply: str) -> Optional[dict]:
     if verdict not in VERDICTS:
         return None
     return {"verdict": verdict, "service_verdict": AS_SERVICE[verdict], "why": str(got.get("why") or "")[:400]}
+
+# ------------------------------------------------------------------ decomposed
+
+# The published systems' largest gain on QuanTemp came from splitting a
+# claim into the questions that check it (ClaimDecomp: +8.8% macro-F1). A
+# half-true claim is one whose figure survives and whose framing does not;
+# asked as one question, a judge tends to call it False. Asked as several,
+# with the verdict worked out here from the answers, it should be Conflicting.
+#
+# Measured on QuanTemp's 150 development claims (18 Nov 2026), it did not
+# pay: 46.74 macro-F1, against 58.68 for the single verdict on the same
+# claims (the single verdict's instructions were tuned on them; its held-out
+# score is 50.71). Half-true claims were caught more often (Conflicting F1
+# 45.65 against 43.48), but True collapsed: the snippets rarely confirm a
+# figure outright, so most "core" answers were "unclear" (79 of 150) and the
+# verdict fell to the lean. Kept, with its tests, so a stronger judge or
+# better evidence can be measured against it; INSTRUCTIONS is what to use.
+
+DECOMPOSE_INSTRUCTIONS = """You check a claim the way a professional fact-checker would: by splitting it into the questions that decide it, and answering each from the evidence given. You never look anything up and never rely on what you happen to remember about how this claim was rated.
+
+Write 2 to 4 yes/no questions whose answers decide the claim:
+- "core": is the claim's figure itself right? One or two questions: the number, for the thing, place and period named ("Did 15 million jobs get created between 2010 and 2016?", "Is about 22,000 the number of deaths a year?").
+- "framing": does what the claim makes of the figure hold? One or two questions: the comparison, the cause or credit, the period chosen, what is left out ("Is the count taken from the job market's low point rather than the start of the term?", "Does the evidence attribute those deaths to lack of insurance?").
+Write each so that "yes" is good for the claim.
+
+Answer each "yes", "no" or "unclear" from the evidence. Snippets are lower-case fragments, often about something nearby; weigh only those about the same thing, place and time. Silence in the evidence is "unclear", never "no".
+
+Then give "lean": your overall verdict if the answers alone cannot decide it. Use how fact-checkers rate claims of this kind:
+- A politician's or official's statement on the record: True 30%, Conflicting 36%, False 34%. Politicians usually cite a real number; the question is usually what they make of it.
+- An anonymous or viral post, a photo or video caption, a meme, a quote attributed to a celebrity: about 3 in 4 False.
+- A claim about another country made in its political debate: about 4 in 5 False.
+- A claim worded as a fact-check's headline ("No, X did not...") names the claim being denied: lean False.
+
+Reply with JSON only:
+{"questions": [{"q": "...", "kind": "core" | "framing", "answer": "yes" | "no" | "unclear", "why": "<short, citing the evidence>"}], "lean": "True" | "Conflicting" | "False"}"""
+
+
+def decide(questions: List[dict], lean: str) -> str:
+    """The verdict from a claim's checked questions. Fact-checkers' scale,
+    worked out the way they work it:
+
+      the figure is wrong                          -> False
+      the figure is right, the framing is not      -> Conflicting
+      the figure is right, the framing holds       -> True
+      the figure cannot be checked from the evidence -> the lean, which
+                                                      rests on the kind of claim
+    """
+    core = [q["answer"] for q in questions if q.get("kind") == "core"]
+    framing = [q["answer"] for q in questions if q.get("kind") == "framing"]
+    lean = lean if lean in VERDICTS else "False"
+    if "no" in core:
+        # A wrong figure whose framing is otherwise fair is still a wrong figure.
+        return "False"
+    if core and all(a == "yes" for a in core):
+        if "no" in framing:
+            return "Conflicting"
+        if all(a == "yes" for a in framing):
+            return "True"
+        # The figure holds and the framing cannot be checked: never worse
+        # than Conflicting, and True only if the kind of claim leans that way.
+        return "True" if lean == "True" else "Conflicting"
+    # The figure itself is unclear.
+    if "no" in framing and lean == "True":
+        return "Conflicting"
+    return lean
+
+
+def read_decomposed(reply: str) -> Optional[dict]:
+    """The questions and the verdict worked out from them, or None."""
+    m = re.search(r"\{.*\}", reply or "", re.DOTALL)
+    if not m:
+        return None
+    try:
+        got = json.loads(m.group(0))
+    except ValueError:
+        return None
+    qs = []
+    for q in got.get("questions") or []:
+        if not isinstance(q, dict):
+            continue
+        kind = str(q.get("kind") or "").lower()
+        answer = str(q.get("answer") or "").lower()
+        if kind in ("core", "framing") and answer in ("yes", "no", "unclear"):
+            qs.append({"q": str(q.get("q") or "")[:240], "kind": kind, "answer": answer,
+                       "why": str(q.get("why") or "")[:240]})
+    lean = str(got.get("lean") or "").strip().title()
+    if not qs and lean not in VERDICTS:
+        return None
+    verdict = decide(qs, lean)
+    return {"verdict": verdict, "service_verdict": AS_SERVICE[verdict], "lean": lean, "questions": qs}
