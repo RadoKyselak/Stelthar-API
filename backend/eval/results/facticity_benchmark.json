@@ -10,7 +10,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 2,
@@ -21,7 +22,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 3,
@@ -32,7 +34,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "US Senate/Congress records"
+   "focus_why": "US Senate/Congress records",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 4,
@@ -43,7 +46,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "EU/Croatian government currency adoption"
+   "focus_why": "EU/Croatian government currency adoption",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 5,
@@ -54,7 +58,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 6,
@@ -65,7 +70,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 7,
@@ -76,7 +82,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 8,
@@ -87,7 +94,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "Indian government/UN population data"
+   "focus_why": "Indian government/UN population data",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 9,
@@ -98,7 +106,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 10,
@@ -109,7 +118,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 11,
@@ -120,7 +130,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "UN declaration"
+   "focus_why": "UN declaration",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 12,
@@ -131,7 +142,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 13,
@@ -142,7 +154,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "NOAA/NASA climate records"
+   "focus_why": "NOAA/NASA climate records",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 14,
@@ -153,7 +166,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 15,
@@ -164,7 +178,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 16,
@@ -175,7 +190,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "Cal Fire wildfire statistics"
+   "focus_why": "Cal Fire wildfire statistics",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 17,
@@ -186,7 +202,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "Oregon forestry agency acreage data"
+   "focus_why": "Oregon forestry agency acreage data",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 18,
@@ -197,7 +214,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 19,
@@ -208,7 +226,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 20,
@@ -219,7 +238,8 @@
    "bing": "FALSE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 21,
@@ -230,7 +250,8 @@
    "bing": "FALSE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 22,
@@ -241,7 +262,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 23,
@@ -252,7 +274,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 24,
@@ -263,7 +286,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 25,
@@ -274,7 +298,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 26,
@@ -285,7 +310,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 27,
@@ -296,7 +322,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 28,
@@ -307,7 +334,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 29,
@@ -318,7 +346,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 30,
@@ -327,9 +356,10 @@
    "facticity": "FALSE",
    "perplexity": "FALSE",
    "bing": "FALSE",
-   "mirador": "FALSE",
+   "mirador": "Can't verify",
    "in_focus": true,
-   "focus_why": "Justice Department charges"
+   "focus_why": "Justice Department charges",
+   "mirador_live_verdict": "no-verdict"
   },
   {
    "n": 31,
@@ -340,7 +370,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 32,
@@ -351,7 +382,8 @@
    "bing": "FALSE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 33,
@@ -362,7 +394,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 34,
@@ -373,7 +406,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 35,
@@ -384,7 +418,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 36,
@@ -395,7 +430,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 37,
@@ -406,7 +442,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 38,
@@ -417,7 +454,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 39,
@@ -428,7 +466,8 @@
    "bing": "FALSE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 40,
@@ -439,7 +478,8 @@
    "bing": "FALSE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 41,
@@ -450,7 +490,8 @@
    "bing": "FALSE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 42,
@@ -461,7 +502,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 43,
@@ -472,7 +514,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 44,
@@ -483,7 +526,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "NSIDC/NOAA sea ice records"
+   "focus_why": "NSIDC/NOAA sea ice records",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 45,
@@ -494,7 +538,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 46,
@@ -505,7 +550,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 47,
@@ -516,7 +562,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 48,
@@ -527,7 +574,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 49,
@@ -538,7 +586,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 50,
@@ -549,7 +598,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 51,
@@ -560,7 +610,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "NOAA mission records"
+   "focus_why": "NOAA mission records",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 52,
@@ -571,7 +622,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 53,
@@ -582,7 +634,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 54,
@@ -593,7 +646,8 @@
    "bing": "TRUE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 55,
@@ -604,7 +658,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "Nevada state forestry agency program"
+   "focus_why": "Nevada state forestry agency program",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 56,
@@ -615,7 +670,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 57,
@@ -626,7 +682,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 58,
@@ -637,7 +694,8 @@
    "bing": "FALSE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 59,
@@ -648,7 +706,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 60,
@@ -657,9 +716,10 @@
    "facticity": "FALSE",
    "perplexity": "TRUE",
    "bing": "FALSE",
-   "mirador": "Can't verify",
+   "mirador": "FALSE",
    "in_focus": true,
-   "focus_why": "NASA astronaut training records"
+   "focus_why": "NASA astronaut training records",
+   "mirador_live_verdict": "contradicted"
   },
   {
    "n": 61,
@@ -670,7 +730,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 62,
@@ -681,7 +742,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 63,
@@ -692,7 +754,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 64,
@@ -703,7 +766,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 65,
@@ -714,7 +778,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "Cal Fire acreage statistics"
+   "focus_why": "Cal Fire acreage statistics",
+   "mirador_live_verdict": "mostly-accurate"
   },
   {
    "n": 66,
@@ -725,7 +790,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 67,
@@ -736,7 +802,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 68,
@@ -747,7 +814,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 69,
@@ -758,7 +826,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 70,
@@ -769,7 +838,8 @@
    "bing": "FALSE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 71,
@@ -780,7 +850,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "Justice Department charges"
+   "focus_why": "Justice Department charges",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 72,
@@ -791,7 +862,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 73,
@@ -802,7 +874,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 74,
@@ -813,7 +886,8 @@
    "bing": "TRUE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 75,
@@ -824,7 +898,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 76,
@@ -835,7 +910,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "NSIDC/NOAA sea ice records"
+   "focus_why": "NSIDC/NOAA sea ice records",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 77,
@@ -846,7 +922,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 78,
@@ -857,7 +934,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "UN declaration"
+   "focus_why": "UN declaration",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 79,
@@ -868,7 +946,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "NOAA mission records"
+   "focus_why": "NOAA mission records",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 80,
@@ -879,7 +958,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 81,
@@ -890,7 +970,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 82,
@@ -901,7 +982,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 83,
@@ -912,7 +994,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "FDA finding on phenylephrine"
+   "focus_why": "FDA finding on phenylephrine",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 84,
@@ -923,7 +1006,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "ECB/EU decision on euro adoption"
+   "focus_why": "ECB/EU decision on euro adoption",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 85,
@@ -934,7 +1018,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 86,
@@ -945,7 +1030,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 87,
@@ -956,7 +1042,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "UN population projections"
+   "focus_why": "UN population projections",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 88,
@@ -967,7 +1054,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 89,
@@ -978,7 +1066,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 90,
@@ -989,7 +1078,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "NOAA/NASA climate records"
+   "focus_why": "NOAA/NASA climate records",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 91,
@@ -1000,7 +1090,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 92,
@@ -1011,7 +1102,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 93,
@@ -1022,7 +1114,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 94,
@@ -1033,7 +1126,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 95,
@@ -1044,7 +1138,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 96,
@@ -1055,7 +1150,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 97,
@@ -1066,7 +1162,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "California state forestry agency program"
+   "focus_why": "California state forestry agency program",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 98,
@@ -1077,7 +1174,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "Cal Fire wildfire statistics"
+   "focus_why": "Cal Fire wildfire statistics",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 99,
@@ -1088,7 +1186,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 100,
@@ -1099,7 +1198,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 101,
@@ -1110,7 +1210,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 102,
@@ -1121,7 +1222,8 @@
    "bing": "TRUE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 103,
@@ -1132,7 +1234,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 104,
@@ -1143,7 +1246,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 105,
@@ -1154,7 +1258,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 106,
@@ -1165,7 +1270,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 107,
@@ -1176,7 +1282,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 108,
@@ -1187,7 +1294,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 109,
@@ -1198,7 +1306,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 110,
@@ -1209,7 +1318,8 @@
    "bing": "FALSE",
    "mirador": "FALSE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 111,
@@ -1220,7 +1330,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 112,
@@ -1231,7 +1342,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "US Senate/Congress records"
+   "focus_why": "US Senate/Congress records",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 113,
@@ -1242,7 +1354,8 @@
    "bing": "FALSE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 114,
@@ -1253,7 +1366,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 115,
@@ -1264,7 +1378,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 116,
@@ -1275,7 +1390,8 @@
    "bing": "TRUE",
    "mirador": "Can't verify",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 117,
@@ -1284,9 +1400,10 @@
    "facticity": "TRUE",
    "perplexity": "FALSE",
    "bing": "FALSE",
-   "mirador": "FALSE",
+   "mirador": "TRUE",
    "in_focus": true,
-   "focus_why": "NASA astronaut training records"
+   "focus_why": "NASA astronaut training records",
+   "mirador_live_verdict": "supported"
   },
   {
    "n": 118,
@@ -1297,7 +1414,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 119,
@@ -1308,7 +1426,8 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   },
   {
    "n": 120,
@@ -1319,13 +1438,20 @@
    "bing": "TRUE",
    "mirador": "TRUE",
    "in_focus": false,
-   "focus_why": "not settled by a government body"
+   "focus_why": "not settled by a government body",
+   "mirador_note": "outside focus: stand-in run, not scored"
   }
  ],
  "accuracy": {
-  "mirador": 80.8,
   "facticity": 91.7,
   "perplexity": 88.3,
   "bing": 78.3
+ },
+ "mirador_how": "Government claims: the live checker on the PR 47 preview (fast mode, production code and limits), 18 Nov 2026, after the source-ranking fixes. Other claims: not scored.",
+ "accuracy_in_focus": {
+  "mirador": 96.0,
+  "facticity": 100.0,
+  "perplexity": 92.0,
+  "bing": 80.0
  }
 }

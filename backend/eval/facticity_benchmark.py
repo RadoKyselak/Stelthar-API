@@ -91,7 +91,7 @@ def page(data: Dict) -> str:
     <ol class="bench">
 {bars}
     </ol>
-    <p class="bench-note">The other {total - n} claims (films, celebrities, animals, products) are outside Project Mirador&rsquo;s focus and are not scored for any system. Claims, ground truth and the Facticity, Perplexity and Bing answers are from {html.escape(data["source"])}. An answer that is neither true nor false counts as wrong.</p>
+    <p class="bench-note">The other {total - n} claims (films, celebrities, animals, products) are outside Project Mirador&rsquo;s focus and are not scored for any system. Claims, ground truth and the Facticity, Perplexity and Bing answers are from {html.escape(data["source"])}. Project Mirador&rsquo;s answers are from its live checker, run on November 18, 2026. An answer that is neither true nor false counts as wrong.</p>
   </main>
   <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/benchmarks">Benchmarks</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
 </body>
