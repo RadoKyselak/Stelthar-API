@@ -24,9 +24,20 @@ class TestTheResults:
     def test_the_published_answers_reproduce_facticitys_own_figures(self):
         assert [round(DATA["accuracy"][s]) for s in ("facticity", "perplexity", "bing")] == [92, 88, 78]
 
-    def test_all_120_claims_are_listed_with_every_answer(self):
-        assert len(DATA["rows"]) == 120 and PAGE.count("<tr><td") == 120
+    def test_all_120_claims_are_recorded_with_every_answer_and_a_focus(self):
+        assert len(DATA["rows"]) == 120
         assert all(r["mirador"] in ("TRUE", "FALSE", "Can't verify") for r in DATA["rows"])
+        assert all(isinstance(r["in_focus"], bool) for r in DATA["rows"])
+
+    def test_bars_are_in_focus_accuracy_for_every_system_on_the_same_claims(self):
+        rows = fb.in_focus(DATA["rows"])
+        assert f"the {len(rows)} of its 120 claims" in PAGE
+        for s in ("mirador", "facticity", "perplexity", "bing"):
+            name = fb.NAMES[s]
+            assert re.search(rf'{name}</span><meter min="0" max="100" value="{fb.accuracy(rows, s):.1f}">', PAGE)
+
+    def test_no_claim_by_claim_table(self):
+        assert "<table" not in PAGE
 
     @pytest.mark.parametrize("verdict,shown", [("SUPPORTED", "TRUE"), ("MOSTLY_ACCURATE", "TRUE"),
                                                ("CONTRADICTED", "FALSE"), ("MISLEADING", "FALSE"),

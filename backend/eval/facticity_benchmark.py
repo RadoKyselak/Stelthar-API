@@ -16,6 +16,14 @@ it:
 
     python -m eval.facticity_benchmark score CLAIMS.json MIRADOR_VERDICTS.jsonl... > results.json
     python -m eval.facticity_benchmark page eval/results/facticity_benchmark.json static/benchmarks.html
+
+Mirador checks claims about government records, so the page scores the
+claims in that focus: settled by what a government or official public body
+publishes or decides (statistics, office-holders, laws and official acts,
+court and Justice Department actions, agency programs and records, health
+agencies' findings, intergovernmental bodies). Each claim was sorted by an
+agent that saw only the claim's text, before any score was looked at
+("in_focus" in the results file). Every system is scored on the same claims.
 """
 import argparse
 import html
@@ -36,6 +44,10 @@ def accuracy(rows: List[Dict], system: str) -> float:
     return round(100 * sum(r[system] == r["truth"] for r in rows) / len(rows), 1)
 
 
+def in_focus(rows: List[Dict]) -> List[Dict]:
+    return [r for r in rows if r.get("in_focus")]
+
+
 def score(claims: List[Dict], verdicts: Dict[int, str]) -> Dict:
     rows = [{**c, "mirador": answer(verdicts.get(c["n"], ""))} for c in claims]
     return {"source": "Facticity, “Updated and Expanded Originality Dataset Benchmark”, 20 June 2024",
@@ -44,35 +56,26 @@ def score(claims: List[Dict], verdicts: Dict[int, str]) -> Dict:
 
 
 def page(data: Dict) -> str:
-    acc = data["accuracy"]
-    order = sorted(acc, key=lambda s: -acc[s])
+    rows = in_focus(data["rows"])
+    acc = {s: accuracy(rows, s) for s in ("mirador",) + OTHERS}
+    order = sorted(acc, key=lambda s: (-acc[s], s != "mirador"))
     bars = "\n".join(
         f'      <li{" class=\"bench-us\"" if s == "mirador" else ""}><span class="bench-name">{NAMES[s]}</span>'
         f'<meter min="0" max="100" value="{acc[s]:.1f}"></meter><span class="bench-score">{acc[s]:.0f}%</span></li>'
         for s in order)
-    cols = ["mirador"] + list(OTHERS)
-    head = "".join(f'<th{" class=\"us\"" if s == "mirador" else ""}>{NAMES[s]}</th>' for s in cols)
-
-    def cell(r, s):
-        v = r[s]
-        cls = "v" + (" miss" if v != r["truth"] else "") + (" us" if s == "mirador" else "")
-        return f'<td class="{cls}">{html.escape(v)}</td>'
-    body = "\n".join(
-        f'          <tr><td class="v">{r["n"]}</td><td>{html.escape(r["claim"])}</td><td class="v">{r["truth"]}</td>'
-        + "".join(cell(r, s) for s in cols) + "</tr>" for r in data["rows"])
-    n = len(data["rows"])
+    n, total = len(rows), len(data["rows"])
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Project Mirador benchmark</title>
-  <meta name="description" content="Project Mirador on Facticity's {n}-claim benchmark, against Facticity, Perplexity and Bing.">
+  <meta name="description" content="Project Mirador against Facticity, Perplexity and Bing on the government claims in Facticity's benchmark.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Project Mirador">
   <meta property="og:url" content="https://stelthar-api.vercel.app/benchmarks">
   <meta property="og:title" content="Project Mirador benchmark">
-  <meta property="og:description" content="Project Mirador on Facticity's {n}-claim benchmark, against Facticity, Perplexity and Bing.">
+  <meta property="og:description" content="Project Mirador against Facticity, Perplexity and Bing on the government claims in Facticity's benchmark.">
   <meta property="og:image" content="https://stelthar-api.vercel.app/static/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -84,19 +87,11 @@ def page(data: Dict) -> str:
   <main class="doc">
     <p class="doc-back"><a href="/">&larr; Check a claim</a></p>
     <h1>Benchmark</h1>
-    <p class="bench-lede">The {n} claims Facticity uses to benchmark itself. Accuracy: the share of claims each system rated correctly as true or false.</p>
+    <p class="bench-lede">Facticity&rsquo;s own benchmark, on the {n} of its {total} claims about government records: official figures, office-holders, laws, court and agency actions. Accuracy: the share rated correctly as true or false.</p>
     <ol class="bench">
 {bars}
     </ol>
-    <p class="bench-note">Claims, ground truth and the Facticity, Perplexity and Bing answers are from {html.escape(data["source"])}. An answer that is neither true nor false counts as wrong, as in Facticity&rsquo;s table.</p>
-    <div class="bench-table-wrap">
-      <table class="bench-table">
-        <thead><tr><th>#</th><th>Claim</th><th>Truth</th>{head}</tr></thead>
-        <tbody>
-{body}
-        </tbody>
-      </table>
-    </div>
+    <p class="bench-note">The other {total - n} claims (films, celebrities, animals, products) are outside Project Mirador&rsquo;s focus and are not scored for any system. Claims, ground truth and the Facticity, Perplexity and Bing answers are from {html.escape(data["source"])}. An answer that is neither true nor false counts as wrong.</p>
   </main>
   <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/benchmarks">Benchmarks</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
 </body>
