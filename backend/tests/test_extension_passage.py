@@ -77,7 +77,7 @@ class TestBackground:
         assert 'CACHE_KEY = "stelthar_cache_v3"' in BG
 
     def test_version(self):
-        assert json.loads((EXT / "manifest.json").read_text())["version"] == "2.2.0"
+        assert json.loads((EXT / "manifest.json").read_text())["version"] == "2.3.0"
 
 
 @node

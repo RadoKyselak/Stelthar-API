@@ -26,6 +26,26 @@ function whenChecked(ts) {
 }
 const View = window.MiradorView;
 
+// The rating ask: once, after the first check with a verdict. "Not now" asks
+// once more ten verdicts later; rating or a second "Not now" ends it.
+const REVIEW_KEY = "mirador_review";
+const REVIEW_URL = "https://chromewebstore.google.com/detail/project-mirador/anehbncclhojcaihgeoebennaccpeegn/reviews";
+const DECISIVE = ["supported", "mostly-accurate", "misleading", "contradicted"];
+const ASK_AGAIN_AFTER = 10;
+
+function hasVerdict(check) {
+  return ((check && check.claims) || []).some((c) => {
+    const v = c && c.result && c.result.display && c.result.display.verdict;
+    return v && DECISIVE.includes(View.verdictKey(v.key || v.label));
+  });
+}
+
+// state: {} never asked; {later: n} said "Not now", n verdicts since; {done: true} finished.
+function shouldAsk(state) {
+  if (!state || state.done) return !state;
+  return typeof state.later === "number" && state.later >= ASK_AGAIN_AFTER;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const style = document.createElement("style");
   style.textContent = View.css + ((window.MiradorSkin || {}).css || "");
@@ -72,14 +92,16 @@ document.addEventListener("DOMContentLoaded", () => {
         onDeeper: (claim) => ask({ type: "deeper", claim }),
         onEdit: () => { q.focus(); q.select(); },
       });
+      const wrap = document.createElement("div");
       if (cut) {
         const note = document.createElement("p");
         note.className = "cut";
         note.textContent = "That was a lot of text: only the first part of it was checked.";
-        const wrap = document.createElement("div");
-        wrap.append(note, card);
-        show(wrap);
-      } else show(card);
+        wrap.appendChild(note);
+      }
+      wrap.appendChild(card);
+      show(wrap);
+      if (hasVerdict(result)) maybeAskForRating(wrap);
       loadRecent();
     } catch (e) {
       if (mine === ticket) show(View.error(e.message, retry));
@@ -119,6 +141,36 @@ document.addEventListener("DOMContentLoaded", () => {
       const fit = fitPassage(t);
       check(fit.text, false, fit.cut);
     } else find(t);
+  };
+
+  const maybeAskForRating = (wrap) => {
+    chrome.storage.local.get([REVIEW_KEY], (d) => {
+      const state = d[REVIEW_KEY];
+      if (!shouldAsk(state)) {
+        if (state && typeof state.later === "number") {
+          chrome.storage.local.set({ [REVIEW_KEY]: { later: state.later + 1 } });
+        }
+        return;
+      }
+      const box = document.createElement("div");
+      box.className = "rate";
+      const p = document.createElement("p");
+      p.textContent = "Mirador is new. A rating helps other people find it.";
+      const a = document.createElement("a");
+      a.href = REVIEW_URL;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "Rate it on the Chrome Web Store";
+      const later = document.createElement("button");
+      later.type = "button";
+      later.textContent = "Not now";
+      const end = (next) => { chrome.storage.local.set({ [REVIEW_KEY]: next }); box.remove(); };
+      a.addEventListener("click", () => end({ done: true }));
+      // The first "Not now" asks again much later; the second is final.
+      later.addEventListener("click", () => end(state ? { done: true } : { later: 0 }));
+      box.append(p, a, later);
+      wrap.appendChild(box);
+    });
   };
 
   const loadRecent = () => {

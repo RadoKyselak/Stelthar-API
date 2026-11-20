@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Mirador: Fact Check Gov",
   "short_name": "Mirador",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Fact-check any number against official U.S. government data. Get the exact figure, its date and a link to the source. Free.",
   "permissions": [
     "sidePanel",

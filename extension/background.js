@@ -156,7 +156,11 @@ const sendToPanel = (text, intent) =>
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
+  // A first install opens the short walkthrough, once. Updates open nothing.
+  if (details && details.reason === "install") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") }).catch(() => {});
+  }
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: "mirador-check",

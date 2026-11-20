@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Mirador is installed</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    /* The side panel's look: black and white, the yellow marker, black pill buttons. */
+    :root { --ink:#000; --muted:#6b6b6b; --line:#e4e4df; --bg:#fff; --subtle:#f6f6f3; --mark:#ffe58a; --ok:#1b6b3a;
+      --font: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      --display: "SF Pro Display", var(--font); color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 500 15px/1.55 var(--font);
+      -webkit-font-smoothing: antialiased; }
+    ::selection { background: var(--mark); color: #000; }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+    main { width: min(600px, calc(100% - 32px)); margin: 0 auto; padding: 64px 0 48px; }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; font-size: 14px; color: var(--muted); }
+    .brand img { width: 28px; height: 28px; }
+    h1 { margin: 0; font: 500 34px/1.1 var(--display); letter-spacing: -.02em; }
+    .lede { margin: 10px 0 0; color: var(--muted); }
+    ol { margin: 36px 0 0; padding: 0; list-style: none; counter-reset: step; }
+    li.step { position: relative; padding: 22px 0 22px 44px; border-top: 1px solid var(--line); counter-increment: step; }
+    li.step::before { content: counter(step); position: absolute; left: 0; top: 22px; width: 28px; height: 28px;
+      border-radius: 50%; background: var(--subtle); display: grid; place-items: center; font-size: 13px; }
+    li.step.done::before { content: "\2713"; background: var(--ok); color: #fff; }
+    h2 { margin: 2px 0 4px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+    p { margin: 0; }
+    .muted { color: var(--muted); }
+    .status { margin-top: 8px; font-size: 13.5px; color: var(--ok); }
+    .status:empty { display: none; }
+    .sample { margin: 14px 0 0; padding: 14px 16px; border-radius: 12px; background: var(--subtle);
+      font-size: 17px; line-height: 1.5; }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 14px; }
+    button { height: 36px; padding: 0 16px; border: 0; border-radius: 999px; cursor: pointer; background: var(--ink);
+      color: var(--bg); font: 500 13.5px var(--font); }
+    button:hover { opacity: .85; }
+    kbd { padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--subtle);
+      font: 500 13px var(--font); }
+    ul.ways { margin: 8px 0 0; padding-left: 18px; }
+    ul.ways li + li { margin-top: 4px; }
+    footer { margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+    footer a { color: inherit; text-underline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand"><img src="icons/icon48.png" alt=""> Mirador</div>
+    <h1>Check any number against the official record.</h1>
+    <p class="lede">Three steps, under a minute.</p>
+
+    <ol>
+      <li class="step" id="step-pin">
+        <h2>Pin Mirador</h2>
+        <p class="muted">Click the puzzle piece in Chrome&rsquo;s toolbar, then the pin next to Mirador.</p>
+        <p class="status" id="pin-status" role="status"></p>
+      </li>
+
+      <li class="step" id="step-try">
+        <h2>Check your first claim</h2>
+        <p class="muted">Highlight the sentence below, right-click it and choose <strong>Fact-check with Mirador</strong>.</p>
+        <p class="sample" id="sample">The U.S. unemployment rate averaged 3.6% in 2023.</p>
+        <div class="actions">
+          <button type="button" id="try">Or check it with one click</button>
+        </div>
+        <p class="status" id="try-status" role="status"></p>
+      </li>
+
+      <li class="step" id="step-use">
+        <h2>Use it anywhere</h2>
+        <ul class="ways muted">
+          <li>On any page: highlight a sentence or a whole article, right-click, <strong>Fact-check with Mirador</strong>.</li>
+          <li>Click the Mirador icon, or press <kbd id="shortcut">Ctrl+Shift+Y</kbd>, and type a claim.</li>
+          <li>In the address bar: type <kbd>mir</kbd>, press <kbd>Tab</kbd>, then a measure like &ldquo;unemployment 2023&rdquo;.</li>
+        </ul>
+      </li>
+    </ol>
+
+    <footer>Mirador only receives the text you choose to check. Independent; not a government service.
+      <a href="https://stelthar-api.vercel.app/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></footer>
+  </main>
+  <script src="welcome.js"></script>
+</body>
+</html>
