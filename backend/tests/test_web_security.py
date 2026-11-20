@@ -228,4 +228,5 @@ def test_privacy_page_is_served_with_the_page_policy(test_client):
     r = test_client.get("/privacy")
     assert r.status_code == 200 and "Privacy" in r.text
     assert "script-src 'self'" in r.headers["content-security-policy"]
-    assert "<script" not in r.text and "style=" not in r.text
+    # Only same-origin script files (the page-view counter), nothing inline.
+    assert not re.findall(r'<script(?![^>]*\bsrc="/)', r.text) and "style=" not in r.text
