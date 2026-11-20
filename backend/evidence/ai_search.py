@@ -65,9 +65,19 @@ _INSTRUCTION_RE = re.compile(
 )
 
 
-def gate(claim: str, names_a_metric: bool) -> Optional[str]:
-    """Why this claim must not reach the paid tier, or None if it may."""
+def gate(claim: str, names_a_metric: bool, question: bool = False) -> Optional[str]:
+    """Why this claim must not reach the paid tier, or None if it may. A
+    `question` (an explicit "find", answered from official pages) may end in
+    a question mark; an instruction is still refused."""
     text = (claim or "").strip()
+    if question:
+        if len(text) > 300 or len(text.split()) > 40:
+            return "The question is too long. Ask one short question about an official record or figure."
+        if _INSTRUCTION_RE.search(text):
+            return "That reads as an instruction. Ask a question about an official record or figure."
+        if len(_WORD_RE.findall(text)) < 3:
+            return "That is too short to search for."
+        return None
     if len(text) > config.AI_MAX_CLAIM_CHARS:
         return (f"The claim is too long to check ({len(text)} characters; the limit is "
                 f"{config.AI_MAX_CLAIM_CHARS}). Highlight a single sentence with one figure.")
@@ -118,7 +128,8 @@ def _prompt_version() -> str:
     was forgotten, and with a shared store a stale answer outlives deploys."""
     from evidence import claude_search
     from evidence.grounded import _build_prompt
-    text = claude_search._SYSTEM + _build_prompt("<claim></claim>", "")
+    from evidence.grounded import build_question_prompt
+    text = claude_search._SYSTEM + _build_prompt("<claim></claim>", "") + build_question_prompt("")
     return hashlib.sha256(text.encode()).hexdigest()[:12]
 
 
@@ -170,16 +181,19 @@ async def _cache_put(key: str, g: GroundedAnswer, ttl: int = _CACHE_TTL) -> None
 
 async def search(claim: str, hint: str = "", *, client_ip: Optional[str] = None,
                  names_a_metric: bool = False,
-                 leads: Optional[list] = None) -> GroundedAnswer:
+                 leads: Optional[list] = None, question: bool = False) -> GroundedAnswer:
     provider = config.AI_SEARCH_PROVIDER
     if provider not in ("claude", "gemini"):
         return GroundedAnswer(ok=False, error="Web search is turned off.", model_calls=0, skipped=True)
 
-    why_not = gate(claim, names_a_metric)
+    if question and provider != "claude":
+        return GroundedAnswer(ok=False, error="Questions are answered by the Claude search only.",
+                              model_calls=0, skipped=True)
+    why_not = gate(claim, names_a_metric, question)
     if why_not:
         return GroundedAnswer(ok=False, error=why_not, model_calls=0, skipped=True)
 
-    key, ttl = _cache_key(claim, hint), ttl_for(claim)
+    key, ttl = _cache_key(claim, "question" if question else hint), ttl_for(claim)
     hit = None if FRESH.get() else await _cache_get(key, ttl)
     if hit is not None:
         return hit
@@ -192,7 +206,8 @@ async def search(claim: str, hint: str = "", *, client_ip: Optional[str] = None,
 
     if provider == "claude":
         from evidence import claude_search
-        g = await claude_search.ground_claim(claim, context_hint=hint, known_pages=leads or [])
+        g = await claude_search.ground_claim(claim, context_hint=hint, known_pages=leads or [],
+                                             question=question)
     else:
         g = await gemini_ground_claim(claim, context_hint=hint)
 

@@ -323,6 +323,11 @@ async def lookup(query: str, accessed: Optional[date] = None, *, deep: bool = Fa
         out.elapsed_seconds = round(time.monotonic() - started, 2)
         return out
     if not finder.available() or finder.gate(text):
+        if deep:
+            answered = await _web_answer(text, client_ip)
+            if answered is not None:
+                answered.elapsed_seconds = round(time.monotonic() - started, 2)
+                return answered
         return r
     if not deep:
         r.deeper = True
@@ -330,6 +335,11 @@ async def lookup(query: str, accessed: Optional[date] = None, *, deep: bool = Fa
     found = await finder.find(text, "lookup", client_ip=client_ip)
     if found.datapoint is None:
         r.model_calls = found.model_calls
+        answered = await _web_answer(text, client_ip)
+        if answered is not None:
+            answered.model_calls += found.model_calls
+            answered.elapsed_seconds = round(time.monotonic() - started, 2)
+            return answered
         r.headline += (" A search of all the government datasets could not match it "
                        "to a published figure either.")
         r.elapsed_seconds = round(time.monotonic() - started, 2)
@@ -341,6 +351,33 @@ async def lookup(query: str, accessed: Optional[date] = None, *, deep: bool = Fa
                 + ("" if found.exact else " It is the closest official measure, not an exact match."))
     out.elapsed_seconds = round(time.monotonic() - started, 2)
     return out
+
+
+async def _web_answer(text: str, client_ip: Optional[str]) -> Optional[LookupResult]:
+    """A question no dataset answers ("how many senators voted in the latest
+    vote?"), answered by web search from the official page: the Senate's roll
+    call, an agency's release. Only an answer whose page is official or
+    reliable is shown; anything else stays "not found"."""
+    from evidence import ai_search, source_quality
+    try:
+        g = await ai_search.search(text, client_ip=client_ip, question=True)
+    except Exception:  # noqa: BLE001 — a search failure must not take the lookup down
+        logger.exception("Web answer failed for %r", text[:120])
+        return None
+    if not (g.ok and g.verdict == "SUPPORTED" and g.official_value and g.source_url
+            and g.source_tier in (source_quality.OFFICIAL, source_quality.RELIABLE)):
+        return None
+    org = g.source_org or g.source_title or ""
+    official = g.source_tier == source_quality.OFFICIAL
+    return LookupResult(
+        query=text, ok=True, label="Answer", value=g.official_value,
+        headline=g.explanation or g.official_value,
+        citations={"agency": org, "url": g.source_url,
+                   "attribution": ", ".join(x for x in (org, g.period) if x), "caveat": ""},
+        note=g.explanation + (" Found by web search on the " + ("official page." if official
+                                                                else "page of a reliable source.")),
+        model_calls=g.model_calls,
+    )
 
 
 # The same rules as intentOf() in extension/result-view.js: a sentence or a

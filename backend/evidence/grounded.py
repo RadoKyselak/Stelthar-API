@@ -214,6 +214,42 @@ SOURCE_URL: the exact URL, copied from your search results, of the single page t
 EXPLANATION: two sentences comparing the claim to what the source says"""
 
 
+def build_question_prompt(question: str) -> str:
+    """A question someone typed ("how many senators voted for the bill?"),
+    answered from what an official body publishes, in the same fields as a
+    claim so the same checks apply to the answer."""
+    return f"""You are a research assistant for a service that answers questions from
+official records. Search for the answer to the question below, then answer in the
+exact format given.
+
+Rules:
+- Only answer questions about facts or figures that a government, legislature,
+  court, agency, statistics office or other official public body publishes or
+  records: statistics, votes, laws, rulings, office-holders, budgets, contracts,
+  official programs. Use that body's own page (congress.gov, senate.gov, an
+  agency site) and put its name in your search query.
+- Only if no official page has it, rely on a professional fact-checker, a
+  research institute or a major news outlet.
+- A question that is not about such facts (advice, opinion, a prediction, a
+  request to write, translate or explain something) gets VERDICT NOT_EMPIRICAL,
+  with no search.
+- "Latest", "current" or "most recent" means the newest the sources show; give
+  its date in PERIOD.
+- If the search finds no reliable page that answers it, set VERDICT to
+  NO_EVIDENCE. Do not answer from memory and do not guess a number.
+
+QUESTION: '''{question}'''
+
+Answer in exactly this format, one field per line, nothing before or after:
+
+VERDICT: SUPPORTED (a reliable page in the results answers it) | NO_EVIDENCE | NOT_EMPIRICAL
+OFFICIAL_VALUE: the answer itself, at most 10 words, e.g. "52 yeas, 47 nays", or NONE
+PERIOD: the date or period the answer is for, or NONE
+SOURCE_ORG: the organisation that published it, or NONE
+SOURCE_URL: the exact URL, copied from your search results, of the page the answer comes from, or NONE
+EXPLANATION: two sentences: the answer in context, and what it is based on"""
+
+
 _FIELD_RE = {
     "verdict": re.compile(r"^\s*VERDICT:\s*(.+?)\s*$", re.MULTILINE),
     "official_value": re.compile(r"^\s*OFFICIAL_VALUE:\s*(.+?)\s*$", re.MULTILINE),
