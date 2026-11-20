@@ -232,7 +232,9 @@ _SUBNATIONAL = re.compile(
 _SUPRANATIONAL = re.compile(
     r"\b(world(?! Bank)|global(?:ly)?|worldwide|EU|European Union|euro ?area|eurozone|OECD|G7|G20|BRICS|"
     r"Europe|Asia|(?<!South )Africa|Latin America|the Middle East|Scandinavia|Nordic|ASEAN)\b", re.I)
-_US = re.compile(r"\b(United States|U\.S\.A?\.?|USA|America|Americans?|US)\b")
+# Bounded by letters, not \b: "U.S." ends in a dot, so "U.S. GDP" has no word
+# boundary after it, and the claim was checked against Germany's GDP.
+_US = re.compile(r"(?<![A-Za-z])(United States|U\.S\.A?\.?|USA|America|Americans?|US)(?![A-Za-z])")
 
 
 def _fold(s: str) -> str:

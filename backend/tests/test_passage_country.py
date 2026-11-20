@@ -96,3 +96,11 @@ def test_a_year_is_never_contradicted_by_one_month():
     from evidence.grounded import _build_prompt
     p = _build_prompt("x")
     assert "One month's figure (December's rate) is a" in p and "never set CONTRADICTED from it" in p
+
+
+def test_the_world_bank_check_sees_us_with_a_dot():
+    """'U.S. GDP' was not seen as the United States (no word boundary after
+    a dot), so the World Bank check answered with Germany's GDP."""
+    from services import worldbank as w
+    assert w._US.search("Despite slower growth in Germany, U.S. GDP grew 2.8% in 2024.")
+    assert not w._US.search("Germany's GDP shrank 0.5% in 2024")
