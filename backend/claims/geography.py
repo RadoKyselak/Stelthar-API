@@ -495,3 +495,56 @@ def resolve_geography(text: str) -> Optional[Geography]:
         return Geography.unknown(candidate)
 
     return None
+
+
+# What a passage is about when a sentence in it names no place. A report on
+# Japan says "the BOJ" and "the yen" more often than "Japan": a sentence from
+# it ("Inflation was stronger than expected in 2025, boosted by soaring rice
+# prices") was held against U.S. prices and called contradicted.
+_COUNTRY_CUES = {
+    "Japan": ("japan", "japanese", "boj", "bank of japan", "yen", "tokyo", "nikkei"),
+    "China": ("china", "chinese", "pboc", "people's bank of china", "yuan", "renminbi", "beijing"),
+    "United Kingdom": ("united kingdom", "britain", "british", "bank of england", "sterling", "ons", "uk"),
+    "the euro area": ("euro area", "eurozone", "ecb", "european central bank", "eurostat"),
+    "Germany": ("germany", "german", "bundesbank", "destatis"),
+    "France": ("france", "french", "banque de france", "insee"),
+    "Canada": ("canada", "canadian", "bank of canada", "statistics canada", "statcan"),
+    "India": ("india", "indian", "reserve bank of india", "rbi", "rupee", "rupees"),
+    "Mexico": ("mexico", "mexican", "banxico", "inegi"),
+    "Brazil": ("brazil", "brazilian", "banco central do brasil", "ibge"),
+    "Australia": ("australia", "australian", "reserve bank of australia", "rba"),
+    "South Korea": ("south korea", "korea", "korean", "bank of korea"),
+    "Switzerland": ("switzerland", "swiss", "swiss national bank", "snb"),
+    "Russia": ("russia", "russian", "ruble", "rouble"),
+    "Turkey": ("turkey", "turkish", "lira"),
+}
+_US_CUES = ("united states", "u.s.", "america", "american", "federal reserve", "the fed", "bls",
+            "bureau of labor statistics", "census bureau", "congress", "treasury")
+
+
+def passage_country(text: str) -> Optional[str]:
+    """The country other than the United States that a passage is about, or
+    None. Counted from its names, its central bank, its currency and its
+    statistics office; it must be named at least twice and more often than
+    the United States ("despite U.S. tariffs" in a report on Japan)."""
+    lowered = " ".join((text or "").lower().split())
+    if not lowered:
+        return None
+    count = lambda cues: sum(len(re.findall(rf"(?<![a-z.]){re.escape(c)}(?![a-z])", lowered)) for c in cues)
+    scores = {name: count(cues) for name, cues in _COUNTRY_CUES.items()}
+    name, best = max(scores.items(), key=lambda kv: kv[1])
+    if best >= 2 and best > count(_US_CUES):
+        return name
+    return None
+
+
+def with_place(sentence: str, place: str) -> str:
+    """'Inflation was 3%' -> 'In Japan, inflation was 3%'. A sentence that
+    opens with a name or an acronym keeps its capital."""
+    s = (sentence or "").strip()
+    if not s:
+        return s
+    head = s.split()[0]
+    if len(head) > 1 and head[0].isupper() and head[1:2].islower() and not head.isupper():
+        s = s[0].lower() + s[1:]
+    return f"In {place}, {s}"

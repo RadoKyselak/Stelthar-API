@@ -137,8 +137,15 @@ async def check_text(text: str, mode: str = TEXT, client_ip: Optional[str] = Non
                 return VerificationV2(
                     claim=span.claim, verdict=NO_VERDICT, confidence=LOW, reason=NO_SERIES,
                     headline="None of the official data series we check covers this claim.")
+            claim = span.claim
+            # A sentence that names no place, in a passage about another
+            # country, is about that country.
+            from claims.geography import passage_country, resolve_geography, with_place
+            if not page and resolve_geography(claim) is None and passage_country(text):
+                claim = with_place(claim, passage_country(text))
             async with gate:
-                return await verify(span.claim, allow_grounding=False, client_ip=client_ip, **said)
+                v = await verify(claim, allow_grounding=False, client_ip=client_ip, **said)
+            return v
 
         results = await asyncio.gather(*(one(s) for s in spans))
         entries = [_entry(i, s, v, _could_go_deeper(v)) for i, (s, v) in enumerate(zip(spans, results))]
