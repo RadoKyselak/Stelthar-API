@@ -389,6 +389,30 @@ _FOREIGN_ADJECTIVE_RE = re.compile(
     re.IGNORECASE)
 
 
+_US_NAME_RE = re.compile(r"(?<![a-z])(u\.s\.|usa|united states|america(?:n|'s)?)(?![a-z])")
+_FIGURE_RE = re.compile(r"(?<![\w.])\$?\d[\d,.]*\s*(?:%|percent|trillion|billion|million)?")
+_BARE_YEAR_RE = re.compile(r"^(?:19|20)\d\d$")
+
+
+def _the_figure_is_american(lowered: str) -> bool:
+    """Whether a sentence that names the United States and another country
+    states its figure about the United States: the place named last before
+    the figure owns it. "Despite slower growth in Germany, U.S. GDP grew
+    2.8%" is the U.S. figure, and was held against Germany's."""
+    figure = next((m for m in _FIGURE_RE.finditer(lowered)
+                   if not _BARE_YEAR_RE.match(m.group(0).strip())), None)
+    us = [m.end() for m in _US_NAME_RE.finditer(lowered) if figure and m.end() <= figure.start()]
+    if not us:
+        return False
+    names = [m.end() for m in _FOREIGN_ADJECTIVE_RE.finditer(lowered) if m.end() <= figure.start()]
+    for country in _NON_US_BY_LENGTH:
+        names += [m.end() for m in re.finditer(rf"(?<![a-z]){re.escape(country)}(?![a-z])", lowered)
+                  if m.end() <= figure.start()]
+    if not names:
+        return False            # only the U.S. is named: the usual path decides
+    return max(us) > max(names)
+
+
 def resolve_geography(text: str) -> Optional[Geography]:
     """Return the geography a claim is about, or None if it names no place.
 
@@ -444,6 +468,9 @@ def resolve_geography(text: str) -> Optional[Geography]:
     for abbrev, full in _STATE_ABBREV.items():
         if _word_bounded(lowered, abbrev):
             return Geography(name=full.title(), level="state", fips=_STATE_FIPS[full])
+
+    if _the_figure_is_american(lowered):
+        return Geography.national()
 
     foreign = _FOREIGN_ADJECTIVE_RE.search(lowered)
     if foreign:

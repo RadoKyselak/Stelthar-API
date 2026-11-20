@@ -168,6 +168,11 @@ Rules:
 - Report what the source actually says, including the period it covers. If the
   claim names a year and the best source covers a different period, say so in
   PERIOD and treat that as a mismatch rather than a match.
+- A figure "in 2025" with no month is the figure for the whole year as the
+  publisher states it: the annual average, the full-year total, or the change
+  over the year. Search for that. One month's figure (December's rate) is a
+  different period: never set CONTRADICTED from it. If no figure for the whole
+  year can be found, set VERDICT to NO_EVIDENCE.
 - A claim about a contract, grant, order, award or budget line is checked against
   that same record: the same parties, the date it was signed and the period it
   covers. Last year's order, or one that ended when the claim's began, is a

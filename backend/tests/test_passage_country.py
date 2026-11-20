@@ -71,3 +71,28 @@ def test_a_us_paragraph_is_unchanged():
     with patch.object(verify_v2, "_verify_one", AsyncMock(side_effect=fake)):
         asyncio.run(verify_v2.verify(us))
     assert not seen["claim"].startswith("In ")
+
+
+class TestWhoOwnsTheFigure:
+    """Found in the live test: "Despite a stronger euro and slower growth in
+    Germany, U.S. GDP grew 2.8% in 2024" was held against Germany's GDP."""
+
+    def test_the_place_named_last_before_the_figure_owns_it(self):
+        from claims.geography import resolve_geography as g
+        assert g("Despite a stronger euro and slower growth in Germany, U.S. GDP grew 2.8% in 2024.").level == "nation"
+        assert g("Unlike in China, American inflation fell to 3% in 2023").level == "nation"
+        assert g("German GDP shrank 0.5% in 2024 while the U.S. economy grew").name == "Germany"
+
+    def test_one_place_is_unchanged(self):
+        from claims.geography import resolve_geography as g
+        assert g("Unemployment in Texas was 4.1% in 2023").name == "Texas"
+        assert g("Canada unemployment was 6.9% in 2025").name == "Canada"
+        assert g("U.S. GDP grew 2.8% in 2024").level == "nation"
+
+
+def test_a_year_is_never_contradicted_by_one_month():
+    """Found in the live test: "Inflation eased to 2.1% in 2025" (the euro
+    area's annual rate) was called contradicted by December's 1.9%."""
+    from evidence.grounded import _build_prompt
+    p = _build_prompt("x")
+    assert "One month's figure (December's rate) is a" in p and "never set CONTRADICTED from it" in p
