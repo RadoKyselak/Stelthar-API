@@ -1,8 +1,8 @@
 """Onboarding (extension 2.3): a short walkthrough on install, and one rating ask.
 
-  welcome.html  opened once, on a first install (never on update): pin it,
-                check a sample claim, where else it works. Steps tick as they
-                really happen. No new permission: tabs.create, action,
+  welcome.html  opened once, on a first install (never on update): practise
+                the one move, highlight a sentence and right-click it. Both
+                steps tick as they happen. No pinning step. No new permission: tabs.create, action,
                 commands and windows need none.
   rating ask    in the side panel, after the first check with a verdict. "Not
                 now" asks once more ten verdicts later; then never again. No
@@ -32,17 +32,19 @@ class TestWelcome:
         assert 'details.reason === "install"' in hook
         assert 'chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") })' in hook
 
-    def test_three_steps_and_a_real_sample(self):
-        assert WELCOME.count('class="step"') == 3
+    def test_two_steps_highlight_then_right_click(self):
+        assert WELCOME.count('class="step"') == 2
+        assert WELCOME.index('id="step-highlight"') < WELCOME.index('id="step-check"')
+        assert "pin" not in WELCOME.lower() and "getUserSettings" not in WELCOME_JS
         assert "Fact-check with Mirador" in WELCOME          # the menu item's own words
         assert 'title: "Fact-check with Mirador"' in BG
         assert 'id="sample"' in WELCOME and 'src="welcome.js"' in WELCOME
 
     def test_steps_tick_when_they_really_happen(self):
-        assert "getUserSettings" in WELCOME_JS and "isOnToolbar" in WELCOME_JS
+        assert '"selectionchange"' in WELCOME_JS and "containsNode(sample" in WELCOME_JS
         assert '"stelthar_history"' in WELCOME_JS
 
-    def test_one_click_try_opens_the_panel_inside_the_click(self):
+    def test_the_fallback_opens_the_panel_inside_the_click(self):
         click = WELCOME_JS[WELCOME_JS.index('$("try").addEventListener'):]
         assert click.index("sidePanel.open") < click.index("storage.session.set")
         assert "await" not in click.split("});")[0]
