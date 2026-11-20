@@ -13,11 +13,11 @@
   <main class="doc">
     <p class="doc-back"><a href="/">&larr; Check a claim</a></p>
     <h1>Privacy</h1>
-    <p class="doc-meta">Project Mirador (the Chrome extension) and this web page. Last updated November 17, 2026.</p>
+    <p class="doc-meta">Project Mirador (the Chrome extension) and this web page. Last updated November 20, 2026.</p>
 
     <h2>The short version</h2>
-    <p>The only thing we receive is the text you choose to check or look up. There are no accounts, ads,
-      trackers or analytics, and nothing is sold. The extension cannot read the pages you visit.</p>
+    <p>The only thing we receive is the text you choose to check or look up, and a count of visits to this web
+      page. There are no accounts, ads or tracking cookies, and nothing is sold. The extension cannot read the pages you visit.</p>
 
     <h2>What is sent, and when</h2>
     <ul>
@@ -53,6 +53,10 @@
       <li><strong>How much it is used:</strong> we count checks by day and by kind (a claim, a passage, a
         page, a lookup) and how each claim came out. The counts hold no claim, no address and nothing about who
         asked.</li>
+      <li><strong>Visits to this web page:</strong> we count page views with Vercel Web Analytics, which sets no
+        cookies. It receives the page&rsquo;s address without the part after &ldquo;?&rdquo;, so a claim in a link
+        is not recorded, plus the browser, device type, country and referring site. The extension sends none of
+        this.</li>
     </ul>
 
     <h2>What is not collected</h2>
@@ -67,5 +71,7 @@
     <p>Open an issue at <a href="https://github.com/RadoKyselak/Stelthar-API/issues">github.com/RadoKyselak/Stelthar-API</a>.</p>
   </main>
   <footer class="foot">Independent fact checker · Not a government website · <a href="/about">About</a> · <a href="/methodology">Method</a> · <a href="/developers">Developers</a> · <a href="/privacy">Privacy</a></footer>
+  <script src="/static/insights.js"></script>
+  <script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>

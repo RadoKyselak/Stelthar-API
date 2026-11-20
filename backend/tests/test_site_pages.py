@@ -100,3 +100,24 @@ class TestWhatThePagesPromise:
         app = (STATIC / "app.js").read_text()
         assert "V.examples.concat" in app
         assert 'postJSON("/v2/check", body)' in app and 'id="said"' not in (STATIC / "index.html").read_text()
+
+
+class TestPageViewCounts:
+    """Visits to the web page are counted (Vercel Web Analytics), never the claims in their links."""
+
+    PAGES = ("index", "about", "methodology", "developers", "privacy")
+
+    def test_every_page_loads_the_counter(self):
+        for name in self.PAGES:
+            html = (STATIC / f"{name}.html").read_text()
+            assert html.index('src="/static/insights.js"') < html.index('src="/_vercel/insights/script.js"'), name
+
+    def test_the_address_is_sent_without_its_query(self):
+        js = (STATIC / "insights.js").read_text()
+        assert 'window.va("beforeSend"' in js and 'url.search = ""' in js and 'url.hash = ""' in js
+
+    def test_the_site_does_not_promise_no_analytics(self):
+        for name in self.PAGES:
+            text = (STATIC / f"{name}.html").read_text()
+            assert "trackers or analytics" not in text and "no trackers" not in text.lower(), name
+        assert "Vercel Web Analytics" in (STATIC / "privacy.html").read_text()
