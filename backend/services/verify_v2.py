@@ -842,8 +842,20 @@ async def verify(claim: str, allow_grounding: bool = True,
     """Verify a claim. Never raises; every failure becomes a stated reason.
     A paragraph is checked one sentence at a time: the most checkable one.
     `said_on` is the day the claim was made, when the caller knows it."""
-    text, cut = one_sentence((claim or "").strip())
-    dated = as_said(text, said_on)
+    whole = (claim or "").strip()
+    text, cut = one_sentence(whole)
+    # A sentence picked from a passage about another country is about that
+    # country, though it may not say so ("inflation was stronger than
+    # expected" in a report on Japan).
+    elsewhere = None
+    if cut:
+        from claims.geography import passage_country, resolve_geography, with_place
+        if resolve_geography(text) is None:
+            elsewhere = passage_country(whole)
+    asked = text
+    if elsewhere:
+        text = with_place(text, elsewhere)
+    dated = None if elsewhere else as_said(text, said_on)
     if dated is not None:
         # Free data only: the period is this service's reading, not the
         # claim's words, and a paid search on a reading is not worth its cost.
@@ -870,8 +882,11 @@ async def verify(claim: str, allow_grounding: bool = True,
             if p.metric is not None and p.year is None and p.quarter is None:
                 v.caveats = list(v.caveats) + ["The claim names no date, so it was held to the newest figure. "
                                                "If it was said earlier, give the date it was said."]
+    if elsewhere:
+        v.caveats = [f"The highlighted text is about {elsewhere}, so the sentence was checked as being about "
+                     f"{elsewhere}."] + list(v.caveats)
     if cut:
-        v.caveats = [f"Only one sentence of the highlighted text was checked: \u201c{text}\u201d"] + list(v.caveats)
+        v.caveats = [f"Only one sentence of the highlighted text was checked: \u201c{asked}\u201d"] + list(v.caveats)
     return v
 
 
