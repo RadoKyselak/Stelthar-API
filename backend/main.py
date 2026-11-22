@@ -161,6 +161,9 @@ _STATIC_TYPES = {
     "app.js": "text/javascript; charset=utf-8",
     "result-view.js": "text/javascript; charset=utf-8",
     "site.css": "text/css; charset=utf-8",
+    # Drops the query from the address before a page view is counted. It was
+    # missing here, so the page asked for it and got a 404.
+    "insights.js": "text/javascript; charset=utf-8",
     "logo.png": "image/png",
     "favicon.png": "image/png",
     "og.png": "image/png",
