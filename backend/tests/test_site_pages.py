@@ -121,3 +121,12 @@ class TestPageViewCounts:
             text = (STATIC / f"{name}.html").read_text()
             assert "trackers or analytics" not in text and "no trackers" not in text.lower(), name
         assert "Vercel Web Analytics" in (STATIC / "privacy.html").read_text()
+
+
+def test_every_file_a_page_loads_is_served(test_client):
+    """insights.js was on every page and not on the list of files the site
+    serves: the address was counted with its query, claim included."""
+    for name in ("index", "about", "methodology", "developers", "privacy"):
+        html = (STATIC / f"{name}.html").read_text()
+        for path in re.findall(r'(?:src|href)="(/static/[^"]+)"', html):
+            assert test_client.get(path).status_code == 200, (name, path)

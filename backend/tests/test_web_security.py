@@ -119,7 +119,7 @@ class TestPage:
 
 
 class TestFiles:
-    @pytest.mark.parametrize("name", ["app.js", "result-view.js", "site.css", "logo.png", "favicon.png"])
+    @pytest.mark.parametrize("name", ["app.js", "result-view.js", "site.css", "logo.png", "favicon.png", "insights.js"])
     def test_allowed_files(self, test_client, name):
         r = test_client.get(f"/static/{name}")
         assert r.status_code == 200 and r.headers["cross-origin-resource-policy"] == "same-origin"
