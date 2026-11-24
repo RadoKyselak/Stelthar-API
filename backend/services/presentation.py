@@ -188,7 +188,9 @@ def _relation(p: Dict[str, Any]) -> str:
     if p.get("comparator") != "equals":
         return "meets" if p.get("verdict") == V.SUPPORTED else "fails"
     if not p.get("gap"):
-        return "exact"
+        # No gap was worked out: only a supported claim can be called a match.
+        # A contradicted one without a gap reads "The claim says X." beside the figure.
+        return "exact" if p.get("verdict") == V.SUPPORTED else ""
     return "within" if p.get("verdict") == V.SUPPORTED else "off"
 
 

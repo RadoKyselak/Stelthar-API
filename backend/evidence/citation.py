@@ -61,6 +61,7 @@ _AGENCY_NAMES = {
     "FBI": "Federal Bureau of Investigation",
     "CDC": "Centers for Disease Control and Prevention",
     "EIA": "U.S. Energy Information Administration",
+    "USDA": "U.S. Department of Agriculture",
 }
 
 # How an agency is referred to mid-sentence, where the full legal name would
@@ -81,6 +82,7 @@ _AGENCY_SHORT = {
     "FTC": "FTC",
     "WORLD BANK": "World Bank",
     "EIA": "EIA",
+    "USDA": "USDA",
     "FBI": "FBI",
     "CDC": "CDC",
 }
@@ -157,7 +159,8 @@ def when(period) -> str:
             return "as of " + _format_date(date.fromisoformat(period.record_date[:10]))
         except ValueError:
             return f"as of {period.record_date}"
-    return period.label()
+    # A food's nutrients have no period: say nothing rather than "period unknown".
+    return period.label() if period.is_known else ""
 
 
 def dataset_name(source: str, series_id: Optional[str], basis: str = "") -> str:
@@ -270,8 +273,8 @@ def render(dp: Datapoint, accessed: Optional[date] = None) -> Dict[str, str]:
     # "American Community Survey 1-year estimates, ... 2023 (ACS 1-year
     # estimate)" says the same thing twice.
     shown_basis = "" if basis.startswith("ACS 1-year") and "1-year" in dataset else basis
-    period = when(dp.observed) + (f" ({shown_basis})" if shown_basis else "")
-    body = " ".join(head) + f" {period}: {value}."
+    period = " ".join(x for x in (when(dp.observed), f"({shown_basis})" if shown_basis else "") if x)
+    body = (" ".join(head + [period]) if period else " ".join(head).rstrip(",")) + f": {value}."
     tail = f" (accessed {_format_date(accessed)})."
     note = body + (f" {url}" if url else "") + tail
     # The same note with a live link, for pasting into Docs, Word or email.

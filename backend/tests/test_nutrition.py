@@ -217,3 +217,17 @@ async def test_a_branded_item_and_a_round_number(fdc, claim, expected):
     assert v is not None, claim
     assert v.verdict == expected, v.headline
     assert "535 calories" in v.headline
+
+
+async def test_a_contradicted_food_card_does_not_say_it_matches(fdc):
+    # The card once read "Contradicted" over "The claim matches the official
+    # figure.", named the agency "Usda" and said "period unknown".
+    from services.presentation import build_display
+    r = await verify("A Big Mac has 1,000 calories.", allow_grounding=False)
+    [c] = build_display(r)["comparisons"]
+    assert c["verdict_key"] == "contradicted"
+    assert c["relation"] != "exact"
+    assert c["source"] == "USDA"
+    assert c["period"] == ""
+    assert "period unknown" not in c["citation"]
+    assert c["citation"].startswith("U.S. Department of Agriculture, ")
