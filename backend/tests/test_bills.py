@@ -239,3 +239,27 @@ async def test_state_bill_claims(legiscan_api, claim, expected, says):
 async def test_state_bills_need_a_legiscan_key(monkeypatch):
     monkeypatch.setattr(config, "LEGISCAN_API_KEY", None)
     assert await bills.check("Texas passed SB 17 in 2023.") is None
+
+
+@pytest.mark.parametrize("claim,bill", [
+    ("Obama signed Dodd-Frank in 2010.", (111, "hr", 4173)),
+    ("Bush signed the Patriot Act in 2001.", (107, "hr", 3162)),
+    ("Clinton signed NAFTA into law.", (103, "hr", 3450)),
+    ("The Senate passed the Americans with Disabilities Act.", (101, "s", 933)),
+    ("The For the People Act became law.", (117, "hr", 1)),
+    ("Congress passed the 1994 crime bill.", (103, "hr", 3355)),
+])
+def test_well_known_acts_are_read_by_name(claim, bill):
+    r = bills.read(claim)
+    assert r is not None, claim
+    assert (r.ref.congress, r.ref.kind, r.ref.number) == bill
+
+
+def test_every_named_act_is_one_bill():
+    import re
+    seen = {}
+    for pattern, flags, c, bill, canonical in bills._ACTS:
+        re.compile(pattern, flags)
+        kind, number = bill.split()
+        assert kind in bills._FED_SHOW and number.isdigit() and 93 <= c <= 130
+        assert seen.setdefault(canonical, (c, bill)) == (c, bill)

@@ -90,3 +90,10 @@ async def titles(congress: int, kind: str, number: int) -> List[Dict[str, str]]:
 async def cosponsors(congress: int, kind: str, number: int) -> List[Dict[str, Any]]:
     d = await _read(_path(congress, kind, number) + "/cosponsors", 6 * _HOUR, limit=250)
     return list((d or {}).get("cosponsors") or [])
+
+
+async def law_count(congress: int) -> Optional[int]:
+    """How many public laws a Congress enacted, as Congress.gov lists them."""
+    d = await _read(f"law/{congress}/pub", _HOUR, limit=1)
+    n = ((d or {}).get("pagination") or {}).get("count")
+    return n if isinstance(n, int) else None
