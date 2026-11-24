@@ -47,6 +47,18 @@ _OPINION_RE = re.compile(
     r"stupid|dumb|evil|disgrace(?:ful)?|disaster|i think|i believe|i feel|in my (?:opinion|view)|"
     r"favou?rite|tastes?|delicious|boring|exciting|corrupt|incompetent|genius|"
     r"the (?:only|real) (?:reason|problem))\b", re.I)
+# A bare value judgement as the whole point of the sentence: "Taxes are bad.",
+# "The tax code is too complicated." Only when the sentence ends on it:
+# "Cigarettes are bad for your health" goes on to a checkable claim.
+_VERDICT_WORDS = (r"bad|good|great|fine|okay|ok|wrong|right|fair|unfair|unjust|immoral|important|unimportant|"
+                  r"necessary|unnecessary|useless|pointless|ridiculous|crazy|insane|absurd|broken|failing|"
+                  r"a (?:joke|mess|scam|sham|failure|success|problem|mistake|good thing|bad thing|good idea|bad idea)|"
+                  r"too (?:high|low|much|little|big|small|complicated|expensive|harsh|lenient|weak|strong)|"
+                  r"not (?:good|fair|right|okay|ok|enough|working)")
+_BARE_VERDICT_RE = re.compile(
+    r"\b(?:is|are|was|were|has been|have been|seems?|feels?|looks?)\s+"
+    r"(?:(?:very|so|really|just|simply|always|never|still|all|pretty|quite|totally|completely|way)\s+)*"
+    r"(?:" + _VERDICT_WORDS + r")\s*[.!]*\s*$", re.I)
 # "Is the unemployment rate 4%?" asks about a statement, and is checked as one.
 _YES_NO_RE = re.compile(r"^\s*(?:is|are|was|were|did|does|do|has|have|had|can|could|will|"
                         r"would|should|isn't|aren't|wasn't|weren't|didn't|doesn't|don't|"
@@ -92,7 +104,7 @@ def gate(claim: str, names_a_metric: bool, question: bool = False) -> Optional[s
     if not _DIGIT_RE.search(text) and not names_a_metric:
         if len(_WORD_RE.findall(text)) < 3:
             return "That is too short to be a claim that can be checked."
-        if _OPINION_RE.search(text):
+        if _OPINION_RE.search(text) or _BARE_VERDICT_RE.search(text):
             return ("That reads as an opinion, with no figure or fact that can be checked "
                     "against published data.")
     return None

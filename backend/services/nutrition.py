@@ -51,7 +51,7 @@ _UNITS = {"g": 1.0, "gram": 1.0, "grams": 1.0, "mg": 1e-3, "milligram": 1e-3, "m
           "mcg": 1e-6, "µg": 1e-6, "ug": 1e-6, "microgram": 1e-6, "micrograms": 1e-6}
 _AMOUNT = re.compile(
     r"(?P<cmp>more than|over|at least|nearly|almost|about|around|roughly|approximately|only|just|under|"
-    r"less than|fewer than|~)?\s*(?P<n>\d+(?:\.\d+)?)\s*"
+    r"less than|fewer than|~)?\s*(?P<n>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*"
     r"(?P<u>kcals?|calories|cals?|g|grams?|mg|milligrams?|mcg|µg|ug|micrograms?)\b"
     r"(?:\s+of)?(?:\s+(?P<nut>[a-z][a-z0-9 -]{1,30}?))?(?=[\s,.;!?]|$)", re.I)
 _ADVICE = re.compile(r"\b(a day|per day|daily|each day|recommend\w*|you need|need(?:s)? about|should (?:eat|get|have)|"
@@ -162,7 +162,7 @@ def read(text: str) -> Optional[Read]:
     food = " ".join(words).strip(" -'").lower()
     if len(food) < 3:
         return None
-    return Read(food=food, nutrient=label, ids=ids, amount=float(m.group("n")), unit=unit,
+    return Read(food=food, nutrient=label, ids=ids, amount=float(m.group("n").replace(",", "")), unit=unit,
                 comparator=comparator, approximate=cmp_word in ("about", "around", "roughly", "approximately",
                                                                   "nearly", "almost", "~"),
                 count=count, size=size, portion_unit=punit, grams=grams, weight=weight,
@@ -295,7 +295,9 @@ def _portion(d: dict, r: Read) -> Optional[Tuple[float, str, bool]]:
                   and not re.search(r"\b(slices?|cups?|pieces?|oz|strips?|tbsp|tablespoons?|cubes?)\b", t)),
                  # "1 avocado, NS as to Florida or California", "1 fruit", "1 whole"
                  # "0.5 breast, bone and skin removed" is half of one: the weight is scaled to one
-                 lambda t: re.search(rf"^(?:[\d.]+\s+)?(?:{re.escape(item)}s?\b|fruit\b|whole\b|item\b|each\b)", t)]
+                 lambda t: re.search(rf"^(?:[\d.]+\s+)?(?:{re.escape(item)}s?\b|fruit\b|whole\b|item\b|each\b)", t),
+                 # "1 McDonald's Big Mac": the whole food by name, behind its brand
+                 lambda t: re.search(rf"^(?:[\d.]+\s+)?(?:[\w'’.]+\s+){{0,2}}{re.escape(r.food.lower())}s?$", t)]
         if serving:
             preds.insert(0, lambda t: "nlea serving" in t or "serving" in t)
         for pred in preds:
@@ -433,7 +435,9 @@ async def run(r: Read) -> Optional[Verdict]:
     else:
         from evidence.units import written_precision
         step = (written_precision(f"{r.amount:g}") or 0) * (claimed / r.amount if r.amount else 1)
-        if abs(rel) <= 0.10 or abs(claimed - official) <= step / 2:
+        # Rounding excuses a small miss ("6 grams" for 6.3), not a round number
+        # far from the truth ("1,000 calories" for 535).
+        if abs(rel) <= 0.10 or (abs(claimed - official) <= step / 2 and abs(rel) <= 0.25):
             outcome = SUPPORTED
         elif abs(rel) <= 0.25:
             outcome = MOSTLY_ACCURATE

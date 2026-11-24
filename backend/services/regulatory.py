@@ -1,6 +1,8 @@
 """Claims about what a regulator did: FDA approvals, labels, recalls and
 shortages (services/fda.py), FTC fraud data and rules (services/ftc.py), and
-what happened to a bill in Congress or a state legislature (services/bills.py).
+what happened to a bill in Congress or a state legislature (services/bills.py),
+how members voted and whom the Senate confirmed (services/votes.py), and
+executive orders and federal rules (services/register.py).
 
 These are facts, not figures: "Ozempic is approved for weight loss" is
 settled by the label FDA approved, "the FTC banned noncompetes" by the
@@ -96,6 +98,22 @@ _BILL_HINT = (
     "or \"passed the House 218-214, pending in the Senate\".")
 
 
+_VOTE_HINT = (
+    "The claim is about a recorded vote in Congress. Check the chamber's own roll call: "
+    "senate.gov (Legislation & Records, Roll Call Votes) for the Senate, clerk.house.gov/Votes "
+    "for the House, or the bill's Actions tab on Congress.gov, which links to each roll call. "
+    "Name the roll call number and date. A bill passed by voice vote or unanimous consent has "
+    "no recorded vote. In OFFICIAL_VALUE give the record, such as \"voted Nay, roll call 325, "
+    "August 7, 2022\" or \"confirmed 53-47, April 7, 2022\".")
+_REGISTER_HINT = (
+    "The claim is about an executive order or a federal rule. Check the Federal Register "
+    "(federalregister.gov): executive orders are listed by president and year with their "
+    "number and signing date; a rule is published as proposed, then final, with an effective "
+    "date, and can later be blocked by a court or withdrawn. In OFFICIAL_VALUE give the record, "
+    "such as \"Executive Order 14155, signed January 20, 2025\" or \"final rule published "
+    "April 26, 2024\", and say if it is no longer in force.")
+
+
 _FOOD_COST_TOPIC = re.compile(r"\b(thrifty food plan|food plans?|cost of food|SNAP|food stamps|"
                               r"EBT|WIC|school (?:lunch|meals?))\b", re.I)
 _FOOD_COST_HINT = (
@@ -115,9 +133,13 @@ def topic(text: str) -> str:
     """What a claim is about, for routing a miss to search: "bill", "fda", "ftc",
     "food_cost", "nutrition", "crime", "health" or ""."""
     t = text or ""
-    from services import bills
+    from services import bills, register, votes
+    if votes.topic(t):
+        return "vote"
     if bills.read(t) is not None:
         return "bill"
+    if register.topic(t):
+        return "register"
     if _FDA_TOPIC.search(t):
         return "fda"
     if _FTC_TOPIC.search(t):
@@ -137,7 +159,7 @@ def topic(text: str) -> str:
 def search_hint(text: str) -> str:
     """Where the web search should look, when the free check could not settle it."""
     from services import crime, health
-    return {"bill": _BILL_HINT, "fda": _FDA_HINT, "ftc": _FTC_HINT, "food_cost": _FOOD_COST_HINT,
+    return {"vote": _VOTE_HINT, "register": _REGISTER_HINT, "bill": _BILL_HINT, "fda": _FDA_HINT, "ftc": _FTC_HINT, "food_cost": _FOOD_COST_HINT,
             "nutrition": _NUTRITION_HINT, "crime": crime.SEARCH_HINT,
             "health": health.SEARCH_HINT}.get(topic(text), "")
 
@@ -145,12 +167,16 @@ def search_hint(text: str) -> str:
 async def check(text: str, parsed) -> Optional[Verdict]:
     """A claim checked against the publisher's own record (Congress.gov and
     state legislatures, FDA, FTC, USDA, FBI, CDC, World Bank), or None."""
-    from services import bills, crime, fda, ftc, health, nutrition, worldbank
-    v = await bills.check(text, parsed)
+    from services import bills, crime, fda, ftc, health, nutrition, register, votes, worldbank
+    v = await votes.check(text, parsed)
+    if v is None:
+        v = await bills.check(text, parsed)
     if v is None:
         v = await fda.check(text, parsed)
     if v is None:
         v = await ftc.check(text, parsed)
+    if v is None:
+        v = await register.check(text, parsed)
     if v is None:
         v = await nutrition.check(text, parsed)
     if v is None:

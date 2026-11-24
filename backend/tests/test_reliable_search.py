@@ -322,3 +322,23 @@ def test_a_change_to_the_rules_starts_a_fresh_cache(monkeypatch):
     before = ai_search._cache_key("A claim", "")
     monkeypatch.setattr(claude_search, "_SYSTEM", claude_search._SYSTEM + " One more rule.")
     assert ai_search._cache_key("A claim", "") != before
+
+
+@pytest.mark.parametrize("claim,searched", [
+    # A bare value judgement is declined before anything is spent...
+    ("Taxes are bad.", False),
+    ("The tax code is too complicated", False),
+    ("Congress is broken.", False),
+    ("The new law was a mistake!", False),
+    ("Government spending is way too high.", False),
+    # ...but a statement of fact with no number still goes to search,
+    ("The Supreme Court overturned Roe v. Wade.", True),
+    ("The EPA banned asbestos.", True),
+    ("Cigarettes are bad for your health.", True),
+    ("The president pardoned his son.", True),
+    # and a figure is checked whatever is said about it.
+    ("A 25% tariff is too high.", True),
+])
+def test_a_bare_value_judgement_is_not_searched(claim, searched):
+    from evidence.ai_search import gate
+    assert (gate(claim, False) is None) == searched, claim

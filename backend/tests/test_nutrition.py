@@ -198,3 +198,22 @@ async def test_no_preparation_named_is_not_contradicted_on_one_reading(fdc):
 async def test_wrong_at_every_size_is_still_contradicted(fdc):
     r = await verify("A banana has 200 calories.", allow_grounding=False)
     assert r.verdict == CONTRADICTED
+
+
+# A branded item is sold in one size; USDA names its portion behind the brand.
+FOODS[2706916] = {"fdcId": 2706916, "description": "Big Mac (McDonalds)", "dataType": "Survey (FNDDS)",
+                  "foodNutrients": [_n(1008, "Energy", "kcal", 261.0)],
+                  "foodPortions": [_p(None, 205.0, "1 McDonald's Big Mac"), _p(None, 340.0, "1 McDonald's Grand Mac")]}
+SEARCH["big mac"] = [2706916]
+
+
+@pytest.mark.parametrize("claim,expected", [
+    ("A Big Mac has 550 calories.", SUPPORTED),          # 205 g: 535
+    # A round number is not excused by its own roundness: 1,000 is not 535.
+    ("A Big Mac has 1,000 calories.", CONTRADICTED),
+])
+async def test_a_branded_item_and_a_round_number(fdc, claim, expected):
+    v = await nutrition.check(claim, None)
+    assert v is not None, claim
+    assert v.verdict == expected, v.headline
+    assert "535 calories" in v.headline
