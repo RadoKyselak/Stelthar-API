@@ -62,8 +62,12 @@ def figure_check(parsed, figure_text: str, dp: Datapoint, text: str, family: str
         comp = "greater than"
     elif re.search(r"\b(less than|under|below|fewer than|nearly|almost)\s*$", before):
         comp = "less than"
+    from claims import logic
+    if at >= 0 and logic.denied(text, at):
+        comp = logic.negate(comp)       # "did not approve more than 50": at most 50
     pc = replace(parsed, metric=None, year=dp.observed.year, month=None, quarter=None, geography=None,
-                 claimed_value=claimed, comparator=comp, all_values=[], all_years=[dp.observed.year])
+                 claimed_value=claimed, comparator=comp, all_values=[], all_years=[dp.observed.year],
+                 negated=False, claimed_upper=None, excluded_value=None)
     return assess(pc, [dp])
 
 

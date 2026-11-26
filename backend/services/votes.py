@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from claims import logic
 from claims.verdict import CONTRADICTED, MISLEADING, MOSTLY_ACCURATE, SUPPORTED, Verdict
 from config import logger
 from evidence.excerpt import row as ex_row
@@ -34,12 +35,15 @@ from services.regulatory import fact, figure_check, verdict
 ONLY_ROLL_CALL = "This reads the recorded vote, not the reasons for it or what the measure does."
 
 FOR, AGAINST, NOT_FOR, ABSENT = "for", "against", "not_for", "absent"
-ALL, NONE, COUNT = "all", "none", "count"
+ALL, NONE, COUNT, MOST = "all", "none", "count", "most"
 UPPER, LOWER = "Senate", "House"
 
 _NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
-              "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "a single": 1, "single": 1}
-_NUM = r"(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+              "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "a single": 1, "single": 1,
+              "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80,
+              "ninety": 90, "a dozen": 12, "dozen": 12, "two dozen": 24}
+_NUM = (r"(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+        r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|a dozen)")
 _TITLE = r"(?:Sen\.|Senator|Rep\.|Representative|Congressman|Congresswoman|Leader|Speaker)"
 _PERSON = r"[A-Z][\w'’.-]*(?:\s+(?:[A-Z][\w'’.-]*|de|del|la|van|von)){0,3}"
 _FOR = r"(?:for|in favou?r of|yes on|yea on|aye on|to pass|to approve|to advance|to confirm|to support)"
@@ -54,7 +58,11 @@ _PARTY_WORD = r"(?P<party>Republicans?|Democrats?|Democratic|GOP|independents?)"
 _ROLE = r"(?:senators?|representatives?|House members?|members(?: of Congress| of the House)?|lawmakers|" \
         r"congress(?:men|women|man|woman)|legislators)"
 _QUANT = re.compile(
-    r"\b(?P<q>every(?: single)?|all(?: of the)?(?:\s+\d{1,3})?|each|no|zero|none of the|not a single|not one|"
+    r"\b(?P<q>not (?:every(?: single)?|all(?: of the)?|each)|every(?: single)?|all(?: of the)?(?:\s+\d{1,3})?|each|"
+    r"(?:at least|no fewer than|no less than|more than|over|fewer than|less than|under|at most|no more than)\s+"
+    + _NUM + r"(?:\s+of(?: the)?)?|"
+    r"most(?: of the)?|(?:a|the) majority of(?: the)?|more than half(?: of the| of)?|"
+    r"no|zero|none of the|not a single|not one|"
     r"(?:only|just|exactly)\s+" + _NUM + r"|a single|" + _NUM + r")\s+"
     r"(?:(?P<ch1>House|Senate)\s+)?" + _PARTY_WORD + r"(?:\s+(?:in the\s+)?(?P<role>" + _ROLE + r"))?"
     r"(?:\s+in\s+the\s+(?P<ch2>House|Senate))?\b", re.I)
@@ -129,6 +137,8 @@ class Read:
     quantity: str = ""                # ALL, NONE, COUNT
     number: Optional[int] = None
     exact: bool = False               # "only three": no more than that
+    op: str = "eq"                    # COUNT: eq, ge ("at least"), gt, lt, le
+    negated: bool = False             # "not every": the quantifier is denied
     nominee: str = ""
     role_words: Tuple[str, ...] = ()
     confirmed: bool = True            # the claim says the Senate confirmed (False: rejected)
@@ -189,7 +199,18 @@ def _party_read(text: str, at: int) -> Optional[Read]:
     elif not chamber and (role.startswith(("representative", "house", "congress")) or "of the house" in role):
         chamber = LOWER
     r = Read(kind="party", party=_party(hit.group("party")), chamber=chamber.title())
-    if q.startswith(("every", "all", "each", "unanimously")):
+    if q.startswith("not ") and not q.startswith(("not a single", "not one")):
+        r.negated, q = True, q[4:]
+    bound = re.match(r"(at least|no fewer than|no less than|more than|over|fewer than|less than|under|at most|"
+                     r"no more than)\s+(.*)", q)
+    if q.startswith(("most", "a majority", "the majority", "more than half")):
+        r.quantity = MOST
+    elif bound and _number(bound.group(2)) is not None:
+        r.quantity, r.number = COUNT, _number(bound.group(2))
+        r.op = {"at least": "ge", "no fewer than": "ge", "no less than": "ge", "more than": "gt", "over": "gt",
+                "fewer than": "lt", "less than": "lt", "under": "lt", "at most": "le",
+                "no more than": "le"}[bound.group(1)]
+    elif q.startswith(("every", "all", "each", "unanimously")):
         r.quantity = ALL
         r.number = _number(q) if re.search(r"\d", q) else None
     elif q in ("no", "zero", "none of the", "not a single", "not one"):
@@ -263,6 +284,64 @@ def read(text: str, bill_span: Optional[Tuple[int, int]] = None) -> Optional[Rea
                     r.tally = (a, b)
             return r
     return None
+
+
+_AND = re.compile(r"^\s*(?:,\s*)?(?:and|but|while|whereas|,)\s", re.I)
+
+
+def read_all(text: str, bill_span: Optional[Tuple[int, int]] = None) -> List[Read]:
+    """Every vote a claim states about one bill: "every Republican voted
+    against it and every Democrat voted for it" is two, both to be checked."""
+    first = read(text, bill_span)
+    if first is None or first.kind not in ("member", "party") or bill_span is None:
+        return [first] if first is not None else []
+    t = " ".join((text or "").split())
+    rest = t[:bill_span[0]] + "BILL" + t[bill_span[1]:]
+    found = list(_VOTED.finditer(rest))
+    out = [first]
+    for prev, m in zip(found, found[1:]):
+        seg = rest[prev.end():m.start()]
+        joint = re.search(r"\b(?:and|but|while|whereas)\b|,", seg)
+        if not joint:
+            continue
+        sub = seg[joint.end():]
+        r = _party_read(sub, len(sub))
+        if r is None:
+            who = _member_before(sub, len(sub))
+            if who is None:
+                out.append(None)        # a vote this cannot read: the whole is unknown unless a part is false
+                continue
+            r = Read(kind="member", name=who[0], chamber=who[1])
+        r.direction, r.year = _direction(m), first.year
+        r.chamber = r.chamber or (first.chamber if r.kind == "party" else "")
+        out.append(r)
+    return out
+
+
+def judge_all(reads: List[Optional[Read]], votes_: List[dict], subject: str) -> Optional[Verdict]:
+    """Each stated vote judged on its own; the claim is their conjunction."""
+    parts = []
+    for r in reads:
+        if r is None:
+            parts.append(None)
+            continue
+        mine = [v for v in votes_ if not r.chamber or r.kind != "party" or v["chamber"] == r.chamber]
+        parts.append(_judge_member(r, mine, subject) if r.kind == "member" else _judge_party(r, mine, subject))
+    if len(parts) == 1:
+        return parts[0]
+    outcome = logic.conjunction(p.verdict if p is not None else None for p in parts)
+    if outcome is None:
+        return None
+    known = [p for p in parts if p is not None]
+    if outcome == CONTRADICTED:
+        known = [p for p in known if p.verdict == CONTRADICTED] + [p for p in known if p.verdict != CONTRADICTED]
+    dps, caveats = [], []
+    for p in known:
+        dps += [d for d in p.evidence if d not in dps]
+        caveats += [c for c in p.caveats if c not in caveats]
+    if None in parts:
+        caveats.append("Part of the claim could not be read against the roll call; the part that was is wrong.")
+    return verdict(outcome, " ".join(p.headline for p in known), dps, caveats=caveats)
 
 
 # ------------------------------------------------------------------ records
@@ -408,8 +487,13 @@ def _judge_party(r: Read, votes: List[dict], subject: str) -> Optional[Verdict]:
             ok = other == 0 and side > 0
         elif r.quantity == NONE:
             ok = side == 0
+        elif r.quantity == MOST:
+            ok = side > (yea + nay + away) / 2          # more than half of the party's members
         else:
-            ok = side == r.number
+            ok = {"eq": side == r.number, "ge": side >= (r.number or 0), "gt": side > (r.number or 0),
+                  "lt": side < (r.number or 0), "le": side <= (r.number or 0)}[r.op]
+        if r.negated:
+            ok = not ok
         outcomes.append(ok)
         sides.append(side)
         away_note = f", and {away} did not vote" if away else ""
@@ -425,11 +509,12 @@ def _judge_party(r: Read, votes: List[dict], subject: str) -> Optional[Verdict]:
     caveats = [ONLY_ROLL_CALL]
     if not r.chamber and len(outcomes) > 1:
         caveats.append("The claim names no chamber; both chambers' votes are shown.")
-    if good and r.quantity == ALL and r.number is not None and len(sides) == 1 and sides[0] != r.number:
+    if good and r.quantity == ALL and not r.negated and r.number is not None and len(sides) == 1 \
+            and sides[0] != r.number:
         caveats.append(f"The claim says all {r.number}; {sides[0]} are recorded on that side. Members who did "
                        f"not vote, and independents who sit with a party, are counted separately.")
         return verdict(MOSTLY_ACCURATE, " ".join(lines), dps, caveats=caveats)
-    if good is False and any(outcomes) and r.quantity != COUNT:
+    if good is False and any(outcomes) and r.quantity != COUNT and not r.negated:
         return verdict(MISLEADING, " ".join(lines), dps, caveats=caveats)
     return verdict(SUPPORTED if good else CONTRADICTED, " ".join(lines), dps, caveats=caveats)
 
@@ -440,7 +525,8 @@ async def _bill_votes(text: str) -> Optional[Tuple[Read, List[dict], str]]:
     ref = bills._ref(t)
     if ref is None or ref.level != "federal":
         return None
-    r = read(t, ref.span)
+    reads = read_all(t, ref.span)
+    r = reads[0] if reads else None
     if r is None or r.kind not in ("member", "party"):
         return None
     if ref.congress is None and r.year and not ref.name:
@@ -450,7 +536,9 @@ async def _bill_votes(text: str) -> Optional[Tuple[Read, List[dict], str]]:
         return None
     acts = await congress.actions(ref.congress, ref.kind, ref.number)
     files = _passage_votes(acts)
-    wanted = [r.chamber] if r.chamber and r.kind == "party" else [UPPER, LOWER]
+    known = [x for x in reads if x is not None]
+    wanted = [r.chamber] if all(x.chamber and x.kind == "party" and x.chamber == r.chamber for x in known) \
+        else [UPPER, LOWER]
     votes = [v for v in await asyncio.gather(*(rollcall.vote(files[ch]) for ch in wanted if ch in files)) if v]
     if not votes:
         return None
@@ -458,8 +546,9 @@ async def _bill_votes(text: str) -> Optional[Tuple[Read, List[dict], str]]:
     # A vote in a year the bill did not name is the bill's own date; drop it
     # as a claim about when, since the year was used to pick the Congress.
     if ref.congress_from == "year":
-        r.year = None
-    return r, votes, subject
+        for x in known:
+            x.year = None
+    return reads, votes, subject
 
 
 # ------------------------------------------------------------------ nominations
@@ -588,8 +677,8 @@ async def check(text: str, parsed=None) -> Optional[Verdict]:
             return await _check_laws(loose, t, parsed)
         got = await _bill_votes(t)
         if got is not None:
-            r, votes, subject = got
-            return _judge_member(r, votes, subject) if r.kind == "member" else _judge_party(r, votes, subject)
+            reads, votes_, subject = got
+            return judge_all(reads, votes_, subject)
         if loose is not None and (loose.kind == "confirm" or loose.nominee):
             return await _check_confirm(loose)
     except SourceUnavailable as e:

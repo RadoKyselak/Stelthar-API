@@ -166,6 +166,9 @@ def _note(p: Dict[str, Any]) -> str:
     official, claim = p.get("official") or "", p.get("claim") or ""
     if not claim:
         return ""
+    if comparator == "not equal":
+        # "3.6% is not 5%." / the denied figure is the official one.
+        return f"{official} is {claim}." if verdict == V.SUPPORTED else f"The official figure is {official}."
     if comparator != "equals":
         # "$6.75 trillion is not more than $7 trillion."
         return f"{official} is {'' if verdict == V.SUPPORTED else 'not '}{claim}."
