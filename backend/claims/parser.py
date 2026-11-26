@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from claims import logic
 from claims.geography import resolve_geography
 from claims.metrics import BY_METRIC, VARIANTS, MetricSpec, match_metric, match_metrics
 from evidence.datapoint import Geography
@@ -32,7 +33,7 @@ import evidence.units as _units
 # Comparators, longest first so "at least" beats "least".
 _COMPARATORS = [
     ("greater than", (" more than ", " greater than ", " over ", " above ",
-                      " exceeded ", " exceeds ", " higher than ", " north of ",
+                      " exceeded ", " exceeds ", " exceed ", " higher than ", " north of ",
                       " passed ", " surpassed ", " topped ", " crossed ")),
     ("at least", (" at least ", " no less than ", " or more",)),
     ("less than", (" less than ", " under ", " below ", " fewer than ",
@@ -653,6 +654,13 @@ class ParsedClaim:
     present: bool = False
     # Part of the claim the lookup does not check, said so on the answer.
     aside: str = ""
+    # The claim denies its figure ("wasn't 3.6%"); comparator is already the
+    # negated one, so "not above 5%" reads "at most 5%". See claims/logic.py.
+    negated: bool = False
+    # "between 3% and 4%": claimed_value is the low end, this the high end.
+    claimed_upper: Optional[Quantity] = None
+    # "3.6%, not 5%": the figure the claim rules out.
+    excluded_value: Optional[Quantity] = None
 
     @property
     def is_actionable(self) -> bool:
@@ -844,6 +852,18 @@ def _subject_place(raw: str):
     return Geography(name=name, level="place")
 
 
+def _figure_at(raw: str, claimed: Optional[Quantity]) -> int:
+    """Where the claim's figure starts in its text (its first digit)."""
+    if claimed is None:
+        return len(raw)
+    digits = re.search(r"\d[\d,]*(?:\.\d+)?", claimed.raw or "")
+    if digits:
+        m = re.search(r"(?<![\d.,])" + re.escape(digits.group(0)) + r"(?![\d])", raw)
+        if m:
+            return m.start()
+    return len(raw)
+
+
 def parse_claim(text: str) -> ParsedClaim:
     """Parse a claim into a lookup request. Never raises."""
     raw = (text or "").strip()
@@ -916,6 +936,25 @@ def parse_claim(text: str) -> ParsedClaim:
     value_text = _POINT_CHANGE_RE.sub(" ", value_text)
     # "Q2" must not be read as the number 2.
     value_text = _QUARTER_TOKEN_RE.sub(" ", value_text)
+    # "between 3% and 4%" is one claim with two ends; "3.6%, not 5%" one
+    # figure and one ruled out. Neither is a second point in time.
+    upper = excluded = None
+    span = logic.between(value_text)
+    if span:
+        lo_q, hi_q = parse_quantity(span[0]), parse_quantity(span[1])
+        if lo_q is not None and hi_q is not None and lo_q.magnitude < hi_q.magnitude:
+            if lo_q.family == "unknown":
+                lo_q = Quantity(magnitude=lo_q.magnitude, family=hi_q.family, approximate=lo_q.approximate,
+                                raw=lo_q.raw, precision=lo_q.precision)
+            upper = hi_q
+            a, b = span[2]
+            value_text = value_text[:a] + " " + lo_q.raw + " " + value_text[b:]
+    ruled_out = logic.contrast(value_text)
+    if ruled_out and not span:
+        excluded = parse_quantity(ruled_out[0])
+        if excluded is not None:
+            a, b = ruled_out[1]
+            value_text = value_text[:a] + " " + value_text[b:]
     claimed = parse_quantity(value_text)
     spec = _select_variant(raw, _choose_metric(raw, claimed))
     # "rose 0.3% to 4.2%", "increased by 339,000 to 4.8 million": for a level,
@@ -994,6 +1033,20 @@ def parse_claim(text: str) -> ParsedClaim:
     if spec is None:
         reason = "no wired-up series matches this claim"
 
+    comparator = "between" if upper is not None else _extract_comparator(raw)
+    if excluded is not None and excluded.family == "unknown" and claimed is not None:
+        excluded = Quantity(magnitude=excluded.magnitude, family=claimed.family, approximate=excluded.approximate,
+                            raw=excluded.raw, precision=excluded.precision)
+    figure_at = _figure_at(raw, claimed)
+    negated = claimed is not None and logic.denied(raw, figure_at)
+    logic_blocker = ""
+    if negated:
+        if comparator == "between" or excluded is not None:
+            logic_blocker = "the claim denies a range or a pair of figures; that is not read here"
+        comparator = logic.negate(comparator)
+    if claimed is not None and logic.every_point(raw, figure_at):
+        logic_blocker = "the claim is about every point in the period (never, always); one figure for it cannot settle that"
+
     return ParsedClaim(
         text=raw,
         present=present,
@@ -1004,13 +1057,16 @@ def parse_claim(text: str) -> ParsedClaim:
         month=month,
         geography=geography,
         claimed_value=claimed,
-        comparator=_extract_comparator(raw),
+        comparator=comparator,
+        negated=negated,
+        claimed_upper=upper,
+        excluded_value=excluded,
         year_is_future=year_is_future,
         all_years=years,
         all_values=all_values,
         has_unresolved_period=has_unresolved,
         unparsed_reason=reason,
-        structured_blocker=structured_blocker(raw, spec, quarter, claimed),
+        structured_blocker=structured_blocker(raw, spec, quarter, claimed) or (logic_blocker if spec else ""),
         quarter=quarter,
         fiscal_year_assumed=fiscal_assumed,
     )

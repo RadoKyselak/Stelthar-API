@@ -130,6 +130,8 @@ def _satisfies_comparator(
         return official < claimed
     if comparator == "at most":
         return official <= claimed
+    if comparator == "not equal":
+        return not _satisfies_comparator(claimed, official, "equals", tol_abs, relative_fallback)
 
     diff = abs(claimed - official)
     if tol_abs is not None:
@@ -183,6 +185,7 @@ def _phrase_for(comparator: str) -> str:
     return {
         "greater than": "more than", "at least": "at least",
         "less than": "less than", "at most": "at most",
+        "not equal": "not", "between": "between",
     }.get(comparator, "")
 
 
@@ -295,12 +298,24 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
     if official.extra and official.extra.get("caveat"):
         caveats.append(official.extra["caveat"])
 
-    agrees = _satisfies_comparator(
-        claimed.magnitude, official.quantity.magnitude, parsed.comparator,
-        tolerance,
-    )
+    upper = getattr(parsed, "claimed_upper", None)
+    if parsed.comparator == "between" and upper is not None:
+        agrees = claimed.magnitude <= official.quantity.magnitude <= upper.magnitude
+    else:
+        agrees = _satisfies_comparator(
+            claimed.magnitude, official.quantity.magnitude, parsed.comparator,
+            tolerance,
+        )
+    # "3.6%, not 5%": the figure ruled out must not be the official one.
+    ruled_out = getattr(parsed, "excluded_value", None)
+    if agrees and ruled_out is not None and _satisfies_comparator(
+            ruled_out.magnitude, official.quantity.magnitude, "equals", ruled_out.tolerance()):
+        agrees = False
 
     claimed_display = humanize_claim(claimed.magnitude, official.quantity.family, claimed.precision)
+    if parsed.comparator == "between" and upper is not None:
+        claimed_display = (f"{claimed_display} and "
+                           f"{humanize_claim(upper.magnitude, official.quantity.family, upper.precision)}")
     delta = official.quantity.magnitude - claimed.magnitude
     denom = abs(official.quantity.magnitude)
     rel = (delta / denom) if denom > 1e-12 else None
@@ -350,6 +365,10 @@ def assess(parsed: ParsedClaim, evidence: List[Datapoint]) -> Verdict:
             relative_delta=rel, evidence=usable, caveats=caveats,
         )
 
+    if parsed.comparator == "not equal" and agrees and _is_near_miss(
+            claimed.magnitude, official.quantity.magnitude, claimed.precision, tolerance):
+        # "wasn't 3.7%" against 3.6%: literally right, but only just.
+        caveats.append(f"The claim's figure is close: off by {_gap_phrase(delta, official.quantity.family)}.")
     if agrees:
         outcome = SUPPORTED
     elif loose or parsed.comparator == "equals" and _is_near_miss(
